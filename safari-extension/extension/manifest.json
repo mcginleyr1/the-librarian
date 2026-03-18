@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "The Librarian",
+  "version": "1.0",
+  "description": "Save pages to The Librarian vault",
+  "permissions": ["activeTab", "scripting", "tabs", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Save to Librarian",
+    "default_icon": {
+      "16": "icon-16.png",
+      "48": "icon-48.png"
+    }
+  }
+}

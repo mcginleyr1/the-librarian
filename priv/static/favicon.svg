@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#f97316"/>
+  <!-- spine -->
+  <rect x="14" y="6" width="2" height="20" fill="#fff" opacity="0.9"/>
+  <!-- left cover -->
+  <rect x="6" y="6" width="9" height="20" rx="1" fill="#fff" opacity="0.85"/>
+  <!-- right cover -->
+  <rect x="15" y="6" width="9" height="20" rx="1" fill="#fff" opacity="0.7"/>
+  <!-- left page lines -->
+  <rect x="8" y="10" width="5" height="1.5" rx="0.75" fill="#f97316" opacity="0.5"/>
+  <rect x="8" y="13" width="5" height="1.5" rx="0.75" fill="#f97316" opacity="0.5"/>
+  <rect x="8" y="16" width="5" height="1.5" rx="0.75" fill="#f97316" opacity="0.5"/>
+  <rect x="8" y="19" width="3" height="1.5" rx="0.75" fill="#f97316" opacity="0.5"/>
+</svg>

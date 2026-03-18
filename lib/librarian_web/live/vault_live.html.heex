@@ -1,0 +1,225 @@
+<Layouts.vault flash={@flash}>
+  <div class="flex flex-1 overflow-hidden h-full">
+    <%!-- SIDEBAR: Notebooks --%>
+    <aside class="w-56 shrink-0 bg-base-200 flex flex-col overflow-hidden border-r border-base-300">
+      <div class="p-3 border-b border-base-300 flex items-center justify-between">
+        <span class="font-bold text-base">Vault</span>
+        <a href="/reader" class="btn btn-ghost btn-xs">Reader</a>
+      </div>
+      <div class="flex-1 overflow-y-auto p-2 space-y-0.5">
+        <.link
+          patch="/vault"
+          class={"flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-base-300 #{if is_nil(@selected_notebook_id), do: "bg-primary text-primary-content font-medium", else: ""}"}
+        >
+          <span class="flex items-center gap-2">
+            <.icon name="hero-archive-box" class="w-4 h-4 shrink-0" /> All Notes
+          </span>
+          <span class="badge badge-sm">{Enum.sum(Map.values(@note_counts))}</span>
+        </.link>
+        <.link
+          :for={notebook <- @notebooks}
+          patch={"/vault/notebook/#{notebook.id}"}
+          class={"flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-base-300 #{if @selected_notebook_id == notebook.id, do: "bg-primary text-primary-content font-medium", else: ""}"}
+        >
+          <span class="flex items-center gap-2 min-w-0">
+            <.icon name="hero-book-open" class="w-4 h-4 shrink-0" />
+            <span class="truncate">{notebook.name}</span>
+          </span>
+          <span class="badge badge-sm shrink-0">{Map.get(@note_counts, notebook.id, 0)}</span>
+        </.link>
+      </div>
+      <div class="p-2 border-t border-base-300 space-y-2">
+        <form phx-submit="create_notebook" class="flex gap-1">
+          <input
+            name="name"
+            type="text"
+            placeholder="New notebook..."
+            class="input input-bordered input-xs flex-1 min-w-0"
+          />
+          <button type="submit" class="btn btn-primary btn-xs">+</button>
+        </form>
+        <a href="/settings" class="btn btn-ghost btn-xs w-full gap-1">
+          <.icon name="hero-cog-6-tooth" class="w-3 h-3" /> Settings
+        </a>
+      </div>
+    </aside>
+
+    <%!-- MIDDLE: Note List --%>
+    <div class="w-72 shrink-0 flex flex-col border-r border-base-300 bg-base-100 overflow-hidden">
+      <div class="px-3 py-2 border-b border-base-300 flex gap-2">
+        <input
+          type="text"
+          name="q"
+          value={@search_query}
+          placeholder="Search notes..."
+          class="input input-bordered input-xs flex-1 min-w-0"
+          phx-change="search"
+          phx-debounce="300"
+        />
+        <button phx-click="new_note" class="btn btn-primary btn-xs" title="New note">
+          <.icon name="hero-plus" class="w-3 h-3" />
+        </button>
+      </div>
+      <div
+        id="notes-list"
+        class="flex-1 overflow-y-auto divide-y divide-base-200"
+        phx-update="stream"
+      >
+        <div
+          :for={{dom_id, note} <- @streams.notes}
+          id={dom_id}
+          phx-click="select_note"
+          phx-value-id={note.id}
+          class={"cursor-pointer px-3 py-2.5 hover:bg-base-200 transition-colors #{if @selected_note && @selected_note.id == note.id, do: "bg-base-200 border-l-2 border-l-primary pl-[10px]", else: ""}"}
+        >
+          <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
+          <p class="text-xs text-base-content/50 mt-0.5">
+            <span :if={note.notebook}>{note.notebook.name}  · </span>
+            {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
+          </p>
+          <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
+            <span :for={tag <- Enum.take(note.tags, 3)} class="badge badge-xs badge-ghost">
+              {tag.name}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <%!-- RIGHT: Note Viewer / Editor --%>
+    <main class="flex-1 overflow-y-auto bg-base-100">
+      <div
+        :if={is_nil(@selected_note) && !@editing}
+        class="flex items-center justify-center h-full text-base-content/25"
+      >
+        <div class="text-center select-none">
+          <div class="text-6xl mb-4">*</div>
+          <p class="text-xl">Select a note or create a new one</p>
+        </div>
+      </div>
+
+      <%!-- Editor --%>
+      <div :if={@editing} class="max-w-2xl mx-auto px-8 py-10">
+        <h2 class="text-xl font-bold mb-6">
+          {if @selected_note, do: "Edit Note", else: "New Note"}
+        </h2>
+        <form phx-submit="save_note" class="space-y-4">
+          <div>
+            <label class="label"><span class="label-text font-medium">Title</span></label>
+            <input
+              type="text"
+              name="note[title]"
+              value={if @selected_note, do: @selected_note.title, else: ""}
+              placeholder="Note title..."
+              class="input input-bordered w-full"
+            />
+          </div>
+          <div>
+            <label class="label"><span class="label-text font-medium">Source URL</span></label>
+            <input
+              type="text"
+              name="note[source_url]"
+              value={if @selected_note, do: @selected_note.source_url, else: ""}
+              placeholder="https://..."
+              class="input input-bordered w-full"
+            />
+          </div>
+          <div>
+            <label class="label"><span class="label-text font-medium">Notebook</span></label>
+            <select name="note[notebook_id]" class="select select-bordered w-full">
+              <option value="">— no notebook —</option>
+              <option
+                :for={nb <- @notebooks}
+                value={nb.id}
+                selected={@selected_note && @selected_note.notebook_id == nb.id}
+              >
+                {nb.name}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="label">
+              <span class="label-text font-medium">
+                Tags <span class="font-normal text-base-content/50">(comma-separated)</span>
+              </span>
+            </label>
+            <input
+              type="text"
+              name="tags_input"
+              value={@tags_input}
+              placeholder="elixir, distributed, papers"
+              class="input input-bordered w-full"
+            />
+          </div>
+          <div>
+            <label class="label"><span class="label-text font-medium">Content</span></label>
+            <textarea
+              name="note[body]"
+              class="textarea textarea-bordered w-full h-64 font-mono text-sm leading-relaxed"
+              placeholder="Note content..."
+            >{if @selected_note, do: @selected_note.body, else: ""}</textarea>
+          </div>
+          <div class="flex gap-2 pt-2">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="button" phx-click="cancel_edit" class="btn btn-ghost">Cancel</button>
+            <button
+              :if={@selected_note}
+              type="button"
+              phx-click="delete_note"
+              data-confirm="Delete this note permanently?"
+              class="btn btn-error btn-outline ml-auto"
+            >
+              <.icon name="hero-trash" class="w-4 h-4" /> Delete
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <%!-- Note Viewer --%>
+      <div :if={@selected_note && !@editing} class="max-w-2xl mx-auto px-8 py-10">
+        <div class="flex items-start justify-between mb-1 gap-4">
+          <h1 class="text-2xl font-bold leading-tight flex-1">
+            {@selected_note.title || "(Untitled)"}
+          </h1>
+          <button phx-click="edit_note" class="btn btn-ghost btn-sm gap-1.5 shrink-0">
+            <.icon name="hero-pencil" class="w-4 h-4" /> Edit
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 text-sm text-base-content/50 mb-3">
+          <span :if={@selected_note.notebook} class="badge badge-ghost badge-sm">
+            {@selected_note.notebook.name}
+          </span>
+          <span>{Calendar.strftime(@selected_note.inserted_at, "%B %-d, %Y")}</span>
+          <a
+            :if={@selected_note.source_url}
+            href={@selected_note.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="link link-primary text-xs flex items-center gap-1"
+          >
+            <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
+            {URI.parse(@selected_note.source_url || "").host}
+          </a>
+        </div>
+        <div :if={@selected_note.tags != []} class="flex flex-wrap gap-1.5 mb-6">
+          <span :for={tag <- @selected_note.tags} class="badge badge-outline badge-sm">
+            {tag.name}
+          </span>
+        </div>
+        <div :if={@selected_note.storage_key} class="mb-6">
+          <a
+            href={"/vault/files/#{@selected_note.storage_key}"}
+            class="btn btn-outline btn-sm gap-1.5"
+          >
+            <.icon name="hero-paper-clip" class="w-4 h-4" /> View attachment
+          </a>
+        </div>
+        <div class="note-body prose-like text-base leading-relaxed">
+          {Phoenix.HTML.raw(
+            @selected_note.body || "<p class='text-base-content/40 italic'>No content</p>"
+          )}
+        </div>
+      </div>
+    </main>
+  </div>
+</Layouts.vault>

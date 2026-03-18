@@ -1,0 +1,240 @@
+<Layouts.reader flash={@flash}>
+  <div class="flex flex-1 overflow-hidden h-full">
+    <%!-- LEFT SIDEBAR --%>
+    <aside class="w-64 shrink-0 bg-base-200 flex flex-col overflow-hidden border-r border-base-300">
+      <div class="p-3 border-b border-base-300 flex items-center justify-between">
+        <span class="font-bold text-base">The Librarian</span>
+        <a href="/vault" class="btn btn-ghost btn-xs">Vault</a>
+      </div>
+      <div class="px-2 pt-2">
+        <.link
+          patch="/reader"
+          class={"flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-base-300 #{if is_nil(@selected_feed_id), do: "bg-primary text-primary-content font-medium", else: ""}"}
+        >
+          <.icon name="hero-inbox" class="w-4 h-4 shrink-0" />
+          <span class="flex-1">All Unread</span>
+          <span class="badge badge-sm">{Enum.sum(Map.values(@unread_counts))}</span>
+        </.link>
+      </div>
+      <div class="flex-1 overflow-y-auto px-2 py-2 space-y-3">
+        <%= for {category, feeds} <- @feeds_by_category do %>
+          <% category_key = category || "uncategorized" %>
+          <% collapsed = MapSet.member?(@collapsed_categories, category_key) %>
+          <% category_count =
+            Enum.reduce(feeds, 0, fn feed, acc -> acc + Map.get(@unread_counts, feed.id, 0) end) %>
+          <div>
+            <div class="flex items-center gap-1 px-2 mb-1 group">
+              <.link
+                patch={"/reader/category/#{URI.encode(category_key, &URI.char_unreserved?/1)}"}
+                class={[
+                  "flex-1 text-xs font-semibold uppercase tracking-wider transition-colors truncate",
+                  if(@selected_category == category_key,
+                    do: "text-primary",
+                    else: "text-base-content/40 hover:text-base-content/70"
+                  )
+                ]}
+              >
+                {category || "Uncategorized"}
+              </.link>
+              <span :if={category_count > 0} class="text-xs text-base-content/30 shrink-0">
+                {category_count}
+              </span>
+              <button
+                phx-click="toggle_category"
+                phx-value-category={category_key}
+                class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-base-300 shrink-0"
+                title={if collapsed, do: "Expand", else: "Collapse"}
+              >
+                <.icon
+                  name={if collapsed, do: "hero-chevron-right", else: "hero-chevron-down"}
+                  class="w-3 h-3 text-base-content/40"
+                />
+              </button>
+            </div>
+            <div :if={!collapsed} class="space-y-0.5">
+              <.link
+                :for={feed <- feeds}
+                patch={"/reader/feed/#{feed.id}"}
+                class={[
+                  "flex items-center gap-2 px-2 py-1 rounded text-sm hover:bg-base-300",
+                  if(@selected_feed_id == feed.id,
+                    do: "bg-primary text-primary-content font-medium",
+                    else: ""
+                  )
+                ]}
+              >
+                <span class="flex-1 truncate">{feed.title}</span>
+                <span
+                  :if={Map.get(@unread_counts, feed.id, 0) > 0}
+                  class="badge badge-xs shrink-0"
+                >
+                  {Map.get(@unread_counts, feed.id)}
+                </span>
+              </.link>
+            </div>
+          </div>
+        <% end %>
+      </div>
+      <div class="p-2 border-t border-base-300 flex gap-1">
+        <a href="/search" class="btn btn-ghost btn-xs flex-1 gap-1">
+          <.icon name="hero-magnifying-glass" class="w-3 h-3" /> Search
+        </a>
+        <a href="/vault" class="btn btn-ghost btn-xs flex-1 gap-1">
+          <.icon name="hero-archive-box" class="w-3 h-3" /> Vault
+        </a>
+        <a href="/settings" class="btn btn-ghost btn-xs flex-1 gap-1">
+          <.icon name="hero-cog-6-tooth" class="w-3 h-3" /> Settings
+        </a>
+      </div>
+    </aside>
+
+    <%!-- MIDDLE: Article List --%>
+    <div class="w-80 shrink-0 flex flex-col border-r border-base-300 bg-base-100 overflow-hidden">
+      <div class="px-3 py-2 border-b border-base-300 flex items-center gap-1">
+        <button
+          phx-click="set_filter"
+          phx-value-filter="unread"
+          class={"btn btn-xs #{if @filter == :unread, do: "btn-primary", else: "btn-ghost"}"}
+        >
+          Unread
+        </button>
+        <button
+          phx-click="set_filter"
+          phx-value-filter="all"
+          class={"btn btn-xs #{if @filter == :all, do: "btn-primary", else: "btn-ghost"}"}
+        >
+          All
+        </button>
+        <button
+          phx-click="set_filter"
+          phx-value-filter="starred"
+          class={"btn btn-xs #{if @filter == :starred, do: "btn-primary", else: "btn-ghost"}"}
+        >
+          Starred
+        </button>
+        <button
+          phx-click="mark_all_read"
+          class="btn btn-ghost btn-xs ml-auto"
+          title="Mark all read"
+        >
+          <.icon name="hero-check-circle" class="w-4 h-4" />
+        </button>
+      </div>
+      <div
+        id="article-list"
+        class="flex-1 overflow-y-auto divide-y divide-base-200"
+        phx-update="stream"
+      >
+        <div
+          :for={{dom_id, article} <- @streams.articles}
+          id={dom_id}
+          phx-click="select_article"
+          phx-value-id={article.id}
+          class={"cursor-pointer px-3 py-2.5 hover:bg-base-200 transition-colors #{if @selected_article && @selected_article.id == article.id, do: "bg-base-200 border-l-2 border-l-primary pl-[10px]", else: ""}"}
+        >
+          <div class="flex items-start gap-1.5">
+            <div class="flex-1 min-w-0">
+              <p class={"text-sm leading-snug line-clamp-2 #{if article.read_state && article.read_state.read_at, do: "text-base-content/50", else: "font-medium text-base-content"}"}>
+                {article.title || article.url || "(no title)"}
+              </p>
+              <p class="text-xs text-base-content/40 mt-0.5 truncate">
+                {article.feed && article.feed.title}
+                <span :if={article.published_at}>
+                   ·  {Calendar.strftime(article.published_at, "%b %d")}
+                </span>
+              </p>
+            </div>
+            <.icon
+              :if={article.read_state && article.read_state.starred}
+              name="hero-star-solid"
+              class="w-3 h-3 shrink-0 text-warning mt-0.5"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <%!-- RIGHT: Article Content --%>
+    <main id="article-reader" class="flex-1 overflow-y-auto" phx-hook=".KeyNav">
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".KeyNav">
+        export default {
+          mounted() {
+            this._keyHandler = (e) => {
+              if (["j","k","r","s","o"].includes(e.key) &&
+                  !e.target.matches("input,textarea,select,[contenteditable]")) {
+                e.preventDefault()
+                this.pushEvent("key_nav", {key: e.key})
+              }
+            }
+            window.addEventListener("keydown", this._keyHandler)
+            this.handleEvent("open_url", ({url}) => {
+              if (url) window.open(url, "_blank", "noopener,noreferrer")
+            })
+          },
+          destroyed() {
+            window.removeEventListener("keydown", this._keyHandler)
+          }
+        }
+      </script>
+
+      <div
+        :if={is_nil(@selected_article)}
+        class="flex items-center justify-center h-full text-base-content/25"
+      >
+        <div class="text-center select-none">
+          <div class="text-6xl mb-4">*</div>
+          <p class="text-xl">Select an article to read</p>
+          <p class="text-sm mt-2 opacity-60">j/k navigate · s star · o open original</p>
+        </div>
+      </div>
+
+      <div :if={@selected_article} class="max-w-[680px] mx-auto px-8 py-10">
+        <div class="text-sm text-base-content/50 mb-3 flex items-center gap-2 flex-wrap">
+          <span class="font-medium">
+            {@selected_article.feed && @selected_article.feed.title}
+          </span>
+          <span :if={@selected_article.author}>by {@selected_article.author}</span>
+          <span :if={@selected_article.published_at}>
+            · {Calendar.strftime(@selected_article.published_at, "%B %-d, %Y")}
+          </span>
+        </div>
+        <h1 class="text-2xl font-bold leading-tight mb-4 text-base-content">
+          {@selected_article.title}
+        </h1>
+        <div class="flex items-center gap-2 mb-8">
+          <a
+            href={@selected_article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-sm btn-ghost gap-1.5"
+          >
+            <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> Open original
+          </a>
+          <button
+            phx-click="toggle_star"
+            phx-value-id={@selected_article.id}
+            class={"btn btn-sm btn-ghost gap-1.5 #{if @selected_article.read_state && @selected_article.read_state.starred, do: "text-warning", else: ""}"}
+          >
+            <.icon
+              name={
+                if @selected_article.read_state && @selected_article.read_state.starred,
+                  do: "hero-star-solid",
+                  else: "hero-star"
+              }
+              class="w-4 h-4"
+            />
+            {if @selected_article.read_state && @selected_article.read_state.starred,
+              do: "Starred",
+              else: "Star"}
+          </button>
+        </div>
+        <div class="article-body text-base leading-relaxed">
+          {Phoenix.HTML.raw(
+            @selected_article.content || @selected_article.summary ||
+              "<p class='text-base-content/50 italic'>No content available. Open original to read.</p>"
+          )}
+        </div>
+      </div>
+    </main>
+  </div>
+</Layouts.reader>

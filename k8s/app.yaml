@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: librarian
+  namespace: librarian
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: librarian
+  template:
+    metadata:
+      labels:
+        app: librarian
+    spec:
+      initContainers:
+        - name: migrate
+          image: registry.tailf742b.ts.net:5000/the-librarian:latest
+          imagePullPolicy: Always
+          command: ["/app/bin/librarian", "eval", "Librarian.Release.migrate()"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: librarian-secrets
+                  key: database-url
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: librarian-secrets
+                  key: secret-key-base
+          envFrom:
+            - configMapRef:
+                name: librarian-config
+      containers:
+        - name: librarian
+          image: registry.tailf742b.ts.net:5000/the-librarian:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4000
+              name: http
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: librarian-secrets
+                  key: database-url
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: librarian-secrets
+                  key: secret-key-base
+          envFrom:
+            - configMapRef:
+                name: librarian-config
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: librarian-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: librarian-data
+  namespace: librarian
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: librarian
+  namespace: librarian
+spec:
+  selector:
+    app: librarian
+  ports:
+    - port: 80
+      targetPort: 4000
+      name: http

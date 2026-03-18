@@ -1,0 +1,28 @@
+# Tailscale Ingress with TLS termination
+# Accessible at: https://librarian.tailf742b.ts.net
+#
+# Tailscale operator provisions a Let's Encrypt cert automatically.
+# Requires HTTPS Certificates enabled in Tailscale admin:
+#   https://login.tailscale.com/admin/dns → HTTPS Certificates → Enable
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: librarian-tailscale
+  namespace: librarian
+  annotations:
+    tailscale.com/funnel: "false"
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - librarian
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: librarian
+                port:
+                  number: 80

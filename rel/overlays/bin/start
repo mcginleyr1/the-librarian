@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+echo "Running migrations..."
+/app/bin/librarian eval "Librarian.Release.migrate()"
+
+echo "Starting server..."
+exec /app/bin/librarian start
