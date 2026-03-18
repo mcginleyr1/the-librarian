@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE en-export SYSTEM "http://xml.evernote.com/pub/evernote-export4.dtd">
+<en-export export-date="20240101T000000Z" application="Evernote">
+  <note>
+    <title>Test Note One</title>
+    <created>20240101T120000Z</created>
+    <updated>20240101T130000Z</updated>
+    <tag>elixir</tag>
+    <tag>testing</tag>
+    <note-attributes><source-url>https://example.com</source-url></note-attributes>
+    <content><![CDATA[<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd"><en-note>Hello world</en-note>]]></content>
+  </note>
+  <note>
+    <title>Test Note Two</title>
+    <created>20240102T100000Z</created>
+    <updated>20240102T110000Z</updated>
+    <content><![CDATA[<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd"><en-note>Second note content</en-note>]]></content>
+  </note>
+</en-export>

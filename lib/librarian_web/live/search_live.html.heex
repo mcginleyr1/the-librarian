@@ -1,0 +1,71 @@
+<Layouts.app flash={@flash}>
+  <div class="max-w-2xl mx-auto py-10 px-4">
+    <div class="flex items-center gap-3 mb-8">
+      <a href="/reader" class="btn btn-ghost btn-sm gap-1">
+        <.icon name="hero-arrow-left" class="w-4 h-4" /> Back
+      </a>
+      <h1 class="text-2xl font-bold">Search</h1>
+    </div>
+    <input
+      type="text"
+      value={@query}
+      phx-keyup="search"
+      phx-debounce="200"
+      name="q"
+      placeholder="Search articles and notes..."
+      class="input input-bordered w-full text-lg mb-4"
+      autofocus
+    />
+    <div class="flex gap-2 mb-8">
+      <button
+        phx-click="set_filter"
+        phx-value-filter="all"
+        class={"btn btn-sm #{if @filter == :all, do: "btn-primary", else: "btn-ghost"}"}
+      >
+        All
+      </button>
+      <button
+        phx-click="set_filter"
+        phx-value-filter="articles"
+        class={"btn btn-sm #{if @filter == :articles, do: "btn-primary", else: "btn-ghost"}"}
+      >
+        Articles
+      </button>
+      <button
+        phx-click="set_filter"
+        phx-value-filter="notes"
+        class={"btn btn-sm #{if @filter == :notes, do: "btn-primary", else: "btn-ghost"}"}
+      >
+        Notes
+      </button>
+    </div>
+    <p :if={@query != "" && @results == []} class="text-center text-base-content/40 py-16">
+      No results for "<strong>{@query}</strong>"
+    </p>
+    <div class="space-y-3">
+      <a
+        :for={result <- @results}
+        href={result.url || if result.type == "note", do: "/vault", else: "/reader"}
+        class="card bg-base-200 card-compact block hover:bg-base-300 transition-colors"
+      >
+        <div class="card-body">
+          <div class="flex items-start gap-3">
+            <span class={"badge shrink-0 #{if result.type == "article", do: "badge-primary", else: "badge-secondary"}"}>
+              {result.type}
+            </span>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold line-clamp-1">{result.title}</p>
+              <p :if={result.subtitle} class="text-sm text-base-content/50">{result.subtitle}</p>
+              <p
+                :if={result.preview && result.preview != ""}
+                class="text-sm text-base-content/70 mt-1 line-clamp-2"
+              >
+                {result.preview}
+              </p>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+  </div>
+</Layouts.app>

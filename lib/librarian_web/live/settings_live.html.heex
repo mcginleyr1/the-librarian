@@ -1,0 +1,467 @@
+<Layouts.app flash={@flash}>
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <%!-- Header with back nav --%>
+    <div class="flex items-center gap-3 mb-6">
+      <a href="/reader" class="btn btn-ghost btn-sm gap-1">
+        <.icon name="hero-arrow-left" class="w-4 h-4" /> Reader
+      </a>
+      <a href="/vault" class="btn btn-ghost btn-sm gap-1">
+        <.icon name="hero-archive-box" class="w-4 h-4" /> Vault
+      </a>
+      <h1 class="text-2xl font-bold ml-2">Settings</h1>
+    </div>
+
+    <%!-- Tabs --%>
+    <div class="tabs tabs-bordered mb-6">
+      <.link patch="/settings?tab=import" class={tab_class(@tab, :import)}>
+        <.icon name="hero-arrow-up-tray" class="w-4 h-4 mr-1" /> Import
+      </.link>
+      <.link patch="/settings?tab=feeds" class={tab_class(@tab, :feeds)}>
+        <.icon name="hero-rss" class="w-4 h-4 mr-1" /> Feeds
+        <span class="badge badge-sm ml-1">{length(@feeds)}</span>
+      </.link>
+      <.link patch="/settings?tab=notebooks" class={tab_class(@tab, :notebooks)}>
+        <.icon name="hero-book-open" class="w-4 h-4 mr-1" /> Notebooks
+        <span class="badge badge-sm ml-1">{length(@notebooks)}</span>
+      </.link>
+    </div>
+
+    <%!-- ── IMPORT TAB ── --%>
+    <div :if={@tab == :import} class="space-y-8">
+      <%!-- Result banner --%>
+      <div :if={@import_result} class="alert alert-success">
+        <.icon name="hero-check-circle" class="w-5 h-5" />
+        <span>
+          <%= case @import_result do %>
+            <% {:opml, stats} -> %>
+              Imported <strong>{stats.imported}</strong>
+              feeds across <strong>{stats.categories}</strong>
+              categories
+              (<strong>{stats.skipped}</strong> duplicates skipped).
+            <% {:enex, stats} -> %>
+              Imported <strong>{stats.notes_count}</strong>
+              notes and <strong>{stats.attachments_count}</strong>
+              attachments
+              (<strong>{stats.errors}</strong> errors).
+          <% end %>
+        </span>
+        <button phx-click="clear_result" class="btn btn-sm btn-ghost ml-auto">Dismiss</button>
+      </div>
+
+      <%!-- OPML Upload --%>
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <h2 class="card-title text-lg">
+            <.icon name="hero-rss" class="w-5 h-5" /> Import Feeds (OPML)
+          </h2>
+          <p class="text-sm text-base-content/60">
+            Upload an OPML file from Feedly, Inoreader, or any RSS reader. Existing feeds are preserved.
+          </p>
+          <form phx-submit="import_opml" phx-change="validate_opml" class="mt-4 space-y-3">
+            <div
+              class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center"
+              phx-drop-target={@uploads.opml.ref}
+            >
+              <.live_file_input upload={@uploads.opml} class="hidden" />
+              <.icon
+                name="hero-document-arrow-up"
+                class="w-10 h-10 mx-auto text-base-content/30 mb-2"
+              />
+              <%= if @uploads.opml.entries == [] do %>
+                <p class="text-base-content/50">
+                  Drop an OPML file here or
+                  <label class="link link-primary cursor-pointer" for={@uploads.opml.ref}>
+                    browse
+                  </label>
+                </p>
+              <% else %>
+                <div
+                  :for={entry <- @uploads.opml.entries}
+                  class="flex items-center justify-center gap-2"
+                >
+                  <.icon name="hero-document" class="w-5 h-5 text-primary" />
+                  <span class="font-medium">{entry.client_name}</span>
+                  <span class="text-base-content/50 text-sm">
+                    ({Float.round(entry.client_size / 1024, 1)} KB)
+                  </span>
+                  <button
+                    type="button"
+                    phx-click="cancel_opml"
+                    phx-value-ref={entry.ref}
+                    class="btn btn-xs btn-ghost text-error"
+                  >
+                    &#x2715;
+                  </button>
+                </div>
+              <% end %>
+            </div>
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                class="btn btn-primary gap-2"
+                disabled={@uploads.opml.entries == []}
+              >
+                <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Import Feeds
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <%!-- ENEX Upload --%>
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <h2 class="card-title text-lg">
+            <.icon name="hero-document-text" class="w-5 h-5" /> Import Notes (Evernote ENEX)
+          </h2>
+          <p class="text-sm text-base-content/60">
+            Export from Evernote: File &rarr; Export All Notes &rarr; ENEX format. Notes are imported into a notebook.
+          </p>
+          <form phx-submit="import_enex" phx-change="validate_enex" class="mt-4 space-y-3">
+            <div>
+              <label class="label">
+                <span class="label-text font-medium">Notebook name</span>
+                <span class="label-text-alt text-base-content/40">defaults to filename</span>
+              </label>
+              <input
+                type="text"
+                name="notebook"
+                value={@enex_notebook}
+                placeholder="e.g. Research, Personal, Work"
+                class="input input-bordered w-full"
+              />
+            </div>
+            <div
+              class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center"
+              phx-drop-target={@uploads.enex.ref}
+            >
+              <.live_file_input upload={@uploads.enex} class="hidden" />
+              <.icon
+                name="hero-document-arrow-up"
+                class="w-10 h-10 mx-auto text-base-content/30 mb-2"
+              />
+              <%= if @uploads.enex.entries == [] do %>
+                <p class="text-base-content/50">
+                  Drop an ENEX file here or
+                  <label class="link link-primary cursor-pointer" for={@uploads.enex.ref}>
+                    browse
+                  </label>
+                </p>
+                <p class="text-xs text-base-content/30 mt-1">
+                  Large exports (100MB+) are supported
+                </p>
+              <% else %>
+                <div
+                  :for={entry <- @uploads.enex.entries}
+                  class="flex items-center justify-center gap-2"
+                >
+                  <.icon name="hero-document" class="w-5 h-5 text-primary" />
+                  <span class="font-medium">{entry.client_name}</span>
+                  <span class="text-base-content/50 text-sm">
+                    ({Float.round(entry.client_size / 1_048_576, 1)} MB)
+                  </span>
+                  <button
+                    type="button"
+                    phx-click="cancel_enex"
+                    phx-value-ref={entry.ref}
+                    class="btn btn-xs btn-ghost text-error"
+                  >
+                    &#x2715;
+                  </button>
+                </div>
+              <% end %>
+            </div>
+            <div class="flex items-center justify-end gap-3">
+              <span
+                :if={@importing_enex}
+                class="text-sm text-base-content/60 flex items-center gap-2"
+              >
+                <span class="loading loading-spinner loading-sm"></span>
+                Importing... this may take a while for large exports
+              </span>
+              <button
+                type="submit"
+                class="btn btn-primary gap-2"
+                disabled={@uploads.enex.entries == [] || @importing_enex}
+              >
+                <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Import Notes
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <%!-- ── FEEDS TAB ── --%>
+    <div :if={@tab == :feeds} class="space-y-6">
+      <%!-- Feed Discovery --%>
+      <div class="card bg-base-200">
+        <div class="card-body pb-4">
+          <h2 class="card-title text-base mb-1">Find a Feed</h2>
+          <p class="text-sm text-base-content/50 mb-3">
+            Enter any website URL and we'll find its RSS/Atom feed.
+          </p>
+          <form phx-submit="discover_feed" class="flex gap-2">
+            <input
+              type="text"
+              name="url"
+              placeholder="https://io9.com"
+              class="input input-bordered input-sm flex-1"
+              disabled={@discovering}
+            />
+            <button type="submit" class="btn btn-primary btn-sm gap-1" disabled={@discovering}>
+              <%= if @discovering do %>
+                <span class="loading loading-spinner loading-xs"></span> Searching…
+              <% else %>
+                <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Find Feed
+              <% end %>
+            </button>
+          </form>
+
+          <%!-- Error --%>
+          <div :if={@discover_error} class="alert alert-warning mt-3 py-2 text-sm">
+            <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
+            {@discover_error}
+            <button phx-click="clear_discovery" class="btn btn-xs btn-ghost ml-auto">Dismiss</button>
+          </div>
+
+          <%!-- Results --%>
+          <div :if={@discovered_feeds} class="mt-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <p class="text-sm font-medium">
+                {length(@discovered_feeds)} feed{if length(@discovered_feeds) != 1, do: "s"} found
+              </p>
+              <button phx-click="clear_discovery" class="btn btn-xs btn-ghost">Clear</button>
+            </div>
+            <%= for feed <- @discovered_feeds do %>
+              <form phx-submit="add_discovered" class="flex gap-2 items-center bg-base-100 rounded-lg px-3 py-2 flex-wrap">
+                <input type="hidden" name="feed_url" value={feed.url} />
+                <div class="flex-1 min-w-0">
+                  <input
+                    type="text"
+                    name="title"
+                    value={feed.title}
+                    class="input input-bordered input-xs w-full font-medium"
+                    required
+                  />
+                  <p class="text-xs text-base-content/40 mt-0.5 truncate">{feed.url}</p>
+                </div>
+                <input
+                  type="text"
+                  name="category"
+                  placeholder="Category"
+                  list="categories-list"
+                  class="input input-bordered input-xs w-32"
+                />
+                <button type="submit" class="btn btn-primary btn-xs gap-1">
+                  <.icon name="hero-plus" class="w-3 h-3" /> Add
+                </button>
+              </form>
+            <% end %>
+          </div>
+        </div>
+      </div>
+
+      <%!-- Add new feed (direct URL) --%>
+      <div class="card bg-base-200">
+        <div class="card-body pb-4">
+          <h2 class="card-title text-base mb-3">Add Feed</h2>
+          <form phx-submit="add_feed" class="flex gap-2 flex-wrap">
+            <input
+              type="text"
+              name="title"
+              placeholder="Feed name"
+              class="input input-bordered input-sm flex-1 min-w-32"
+              required
+            />
+            <input
+              type="url"
+              name="feed_url"
+              placeholder="https://example.com/feed.xml"
+              class="input input-bordered input-sm flex-1 min-w-64"
+              required
+            />
+            <input
+              type="text"
+              name="category"
+              placeholder="Category"
+              list="categories-list"
+              class="input input-bordered input-sm w-36"
+            />
+            <datalist id="categories-list">
+              <option :for={cat <- @categories} value={cat}>{cat}</option>
+            </datalist>
+            <button type="submit" class="btn btn-primary btn-sm gap-1">
+              <.icon name="hero-plus" class="w-4 h-4" /> Add
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <%!-- Feeds table --%>
+      <div class="overflow-x-auto">
+        <table class="table table-sm w-full">
+          <thead>
+            <tr class="text-base-content/50">
+              <th>Feed</th>
+              <th>Category</th>
+              <th class="w-20 text-center">Active</th>
+              <th class="w-24"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={feed <- @feeds} class="hover">
+              <td :if={@editing_feed_id != feed.id} colspan="4">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class={"font-medium truncate #{unless feed.active, do: "line-through text-base-content/40"}"}>
+                      {feed.title}
+                    </p>
+                    <p class="text-xs text-base-content/40 truncate">{feed.feed_url}</p>
+                    <p :if={feed.fetch_error} class="text-xs text-error mt-0.5">
+                      &#x26A0; {feed.fetch_error}
+                    </p>
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <span class="badge badge-ghost badge-sm">{feed.category || "—"}</span>
+                    <button
+                      phx-click="edit_feed"
+                      phx-value-id={feed.id}
+                      class="btn btn-ghost btn-xs"
+                    >
+                      <.icon name="hero-pencil" class="w-3 h-3" />
+                    </button>
+                    <input
+                      type="checkbox"
+                      class="toggle toggle-xs toggle-primary"
+                      checked={feed.active}
+                      phx-click="toggle_feed_active"
+                      phx-value-id={feed.id}
+                    />
+                    <button
+                      phx-click="delete_feed"
+                      phx-value-id={feed.id}
+                      data-confirm={"Delete #{feed.title}? This removes all its articles."}
+                      class="btn btn-ghost btn-xs text-error"
+                    >
+                      <.icon name="hero-trash" class="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </td>
+
+              <%!-- Inline edit row --%>
+              <td :if={@editing_feed_id == feed.id} colspan="4">
+                <.form
+                  for={@feed_form}
+                  phx-submit="save_feed"
+                  class="flex gap-2 flex-wrap items-end py-1"
+                >
+                  <div class="flex-1 min-w-48">
+                    <label class="label py-0">
+                      <span class="label-text text-xs">Title</span>
+                    </label>
+                    <.input field={@feed_form[:title]} type="text" class="input-sm" />
+                  </div>
+                  <div class="w-40">
+                    <label class="label py-0">
+                      <span class="label-text text-xs">Category</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="feed[category]"
+                      value={Phoenix.HTML.Form.input_value(@feed_form, :category)}
+                      list="categories-list"
+                      class="input input-bordered input-sm w-full"
+                      placeholder="Category"
+                    />
+                  </div>
+                  <div class="flex gap-1">
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    <button
+                      type="button"
+                      phx-click="cancel_edit_feed"
+                      class="btn btn-ghost btn-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </.form>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <%!-- ── NOTEBOOKS TAB ── --%>
+    <div :if={@tab == :notebooks} class="space-y-4">
+      <p class="text-sm text-base-content/50">
+        Notes whose notebook is deleted will be unassigned (not deleted).
+      </p>
+      <div class="overflow-x-auto">
+        <table class="table table-sm w-full">
+          <thead>
+            <tr class="text-base-content/50">
+              <th>Notebook</th>
+              <th class="w-24 text-right">Notes</th>
+              <th class="w-24"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={nb <- @notebooks} class="hover">
+              <td :if={@editing_notebook_id != nb.id}>
+                <span class="font-medium">{nb.name}</span>
+              </td>
+              <td :if={@editing_notebook_id == nb.id}>
+                <form phx-submit="save_notebook" class="flex gap-2">
+                  <input type="hidden" name="notebook_id" value={nb.id} />
+                  <input
+                    type="text"
+                    name="name"
+                    value={nb.name}
+                    class="input input-bordered input-sm flex-1"
+                    required
+                    autofocus
+                  />
+                  <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                  <button
+                    type="button"
+                    phx-click="cancel_edit_notebook"
+                    class="btn btn-ghost btn-sm"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              </td>
+              <td :if={@editing_notebook_id != nb.id} class="text-right text-base-content/50">
+                {Map.get(@note_counts, nb.id, 0)}
+              </td>
+              <td :if={@editing_notebook_id == nb.id}></td>
+              <td :if={@editing_notebook_id != nb.id} class="text-right">
+                <div class="flex gap-1 justify-end">
+                  <button
+                    phx-click="edit_notebook"
+                    phx-value-id={nb.id}
+                    class="btn btn-ghost btn-xs"
+                  >
+                    <.icon name="hero-pencil" class="w-3 h-3" />
+                  </button>
+                  <button
+                    phx-click="delete_notebook"
+                    phx-value-id={nb.id}
+                    data-confirm={"Delete notebook #{nb.name}? Notes will be unassigned."}
+                    class="btn btn-ghost btn-xs text-error"
+                  >
+                    <.icon name="hero-trash" class="w-3 h-3" />
+                  </button>
+                </div>
+              </td>
+              <td :if={@editing_notebook_id == nb.id}></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</Layouts.app>

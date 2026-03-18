@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: librarian_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: ecto://postgres:postgres@postgres/librarian_dev
+      SECRET_KEY_BASE: peLd1YPfCPPv3RhGD2FCY08OM8NlWEQgOIv3S3xwUslDN+nhHHoqcnGhYarJeqHO
+      PHX_HOST: localhost
+      STORAGE_PATH: /data/librarian
+      PORT: "4000"
+      PHX_SERVER: "true"
+    volumes:
+      - app_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - full
+
+volumes:
+  postgres_data:
+  app_data:
