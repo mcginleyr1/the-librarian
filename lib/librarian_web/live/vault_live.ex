@@ -124,11 +124,13 @@ defmodule LibrarianWeb.VaultLive do
   end
 
   def handle_event("search", %{"q" => q}, socket) do
+    nb_id = socket.assigns.selected_notebook_id
+
     notes =
       if String.trim(q) == "" do
         reload_notes(socket)
       else
-        Vault.search(q)
+        Vault.search(q, notebook_id: nb_id)
       end
 
     {:noreply, socket |> assign(search_query: q) |> stream(:notes, notes, reset: true)}

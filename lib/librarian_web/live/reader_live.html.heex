@@ -9,7 +9,7 @@
       <div class="px-2 pt-2">
         <.link
           patch="/reader"
-          class={"flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-base-300 #{if is_nil(@selected_feed_id), do: "bg-primary text-primary-content font-medium", else: ""}"}
+          class={"flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-base-300 #{if is_nil(@selected_feed_id) and is_nil(@selected_category), do: "bg-primary text-primary-content font-medium", else: ""}"}
         >
           <.icon name="hero-inbox" class="w-4 h-4 shrink-0" />
           <span class="flex-1">All Unread</span>
