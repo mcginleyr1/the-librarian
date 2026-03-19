@@ -298,6 +298,13 @@
         </div>
       </div>
 
+      <%!-- Fetch all --%>
+      <div class="flex justify-end">
+        <button phx-click="fetch_all_feeds" class="btn btn-sm btn-outline gap-2">
+          <.icon name="hero-arrow-path" class="w-4 h-4" /> Fetch All Now
+        </button>
+      </div>
+
       <%!-- Feeds table --%>
       <div class="overflow-x-auto">
         <table class="table table-sm w-full">
@@ -324,6 +331,14 @@
                   </div>
                   <div class="flex items-center gap-1 shrink-0">
                     <span class="badge badge-ghost badge-sm">{feed.category || "—"}</span>
+                    <button
+                      phx-click="fetch_feed"
+                      phx-value-id={feed.id}
+                      class="btn btn-ghost btn-xs"
+                      title="Fetch now"
+                    >
+                      <.icon name="hero-arrow-path" class="w-3 h-3" />
+                    </button>
                     <button
                       phx-click="edit_feed"
                       phx-value-id={feed.id}

@@ -11,7 +11,14 @@ defmodule Librarian.Reader.FeedFetcher do
   def fetch(%Feed{} = feed) do
     headers = conditional_headers(feed)
 
-    case Req.get(feed.feed_url, headers: headers, redirect: true, receive_timeout: 15_000) do
+    result =
+      try do
+        Req.get(feed.feed_url, headers: headers, redirect: true, receive_timeout: 30_000)
+      rescue
+        e -> {:error, e}
+      end
+
+    case result do
       {:ok, %{status: 304}} ->
         :ok
 
@@ -41,7 +48,7 @@ defmodule Librarian.Reader.FeedFetcher do
         record_error(feed, "HTTP #{status}")
 
       {:error, reason} ->
-        record_error(feed, inspect(reason))
+        record_error(feed, Exception.message(reason))
     end
   end
 
