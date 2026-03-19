@@ -80,9 +80,10 @@ defmodule Librarian.Vault do
   def delete_note(%Note{} = note), do: Repo.delete(note)
 
   def search(query_str, opts \\ []) when is_binary(query_str) do
-    limit = Keyword.get(opts, :limit, 20)
+    limit = Keyword.get(opts, :limit, 50)
+    notebook_id = Keyword.get(opts, :notebook_id)
 
-    Repo.all(
+    query =
       from n in Note,
         where: fragment("search_vector @@ plainto_tsquery('english', ?)", ^query_str),
         order_by: [
@@ -90,7 +91,15 @@ defmodule Librarian.Vault do
         ],
         limit: ^limit,
         preload: [:notebook, :tags]
-    )
+
+    query =
+      if notebook_id do
+        from n in query, where: n.notebook_id == ^notebook_id
+      else
+        query
+      end
+
+    Repo.all(query)
   end
 
   def count_notes_by_notebook do

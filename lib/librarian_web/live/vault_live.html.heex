@@ -47,16 +47,17 @@
     <%!-- MIDDLE: Note List --%>
     <div class="w-72 shrink-0 flex flex-col border-r border-base-300 bg-base-100 overflow-hidden">
       <div class="px-3 py-2 border-b border-base-300 flex gap-2">
-        <input
-          type="text"
-          name="q"
-          value={@search_query}
-          placeholder="Search notes..."
-          class="input input-bordered input-xs flex-1 min-w-0"
-          phx-change="search"
-          phx-debounce="300"
-        />
-        <button phx-click="new_note" class="btn btn-primary btn-xs" title="New note">
+        <form phx-change="search" class="flex-1 min-w-0">
+          <input
+            type="text"
+            name="q"
+            value={@search_query}
+            placeholder="Search notes..."
+            class="input input-bordered input-xs w-full"
+            phx-debounce="300"
+          />
+        </form>
+        <button type="button" phx-click="new_note" class="btn btn-primary btn-xs" title="New note">
           <.icon name="hero-plus" class="w-3 h-3" />
         </button>
       </div>
