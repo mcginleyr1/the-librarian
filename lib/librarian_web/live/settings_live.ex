@@ -3,6 +3,7 @@ defmodule LibrarianWeb.SettingsLive do
 
   alias Librarian.{Reader, Vault}
   alias Librarian.Reader.{Feed, FeedDiscoverer}
+  alias Librarian.Workers.FetchFeedWorker
   alias Librarian.Repo
 
   @impl true
@@ -151,6 +152,28 @@ defmodule LibrarianWeb.SettingsLive do
   end
 
   # --- Feeds tab ---
+
+  def handle_event("fetch_all_feeds", _params, socket) do
+    count =
+      Reader.list_active_feeds()
+      |> Enum.reduce(0, fn feed, acc ->
+        %{feed_id: feed.id}
+        |> FetchFeedWorker.new()
+        |> Oban.insert()
+
+        acc + 1
+      end)
+
+    {:noreply, put_flash(socket, :info, "Queued #{count} feeds for refresh")}
+  end
+
+  def handle_event("fetch_feed", %{"id" => id}, socket) do
+    %{feed_id: String.to_integer(id)}
+    |> FetchFeedWorker.new()
+    |> Oban.insert()
+
+    {:noreply, put_flash(socket, :info, "Feed queued for refresh")}
+  end
 
   def handle_event("edit_feed", %{"id" => id}, socket) do
     feed = Repo.get!(Feed, String.to_integer(id))
