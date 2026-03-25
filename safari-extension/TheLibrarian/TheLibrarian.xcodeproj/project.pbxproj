@@ -7,27 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		25ED404B2F6B07E7005FFB17 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ED404A2F6B07E7005FFB17 /* AppDelegate.swift */; };
-		25ED404D2F6B07E7005FFB17 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ED404C2F6B07E7005FFB17 /* SceneDelegate.swift */; };
-		25ED40502F6B07E7005FFB17 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 25ED404E2F6B07E7005FFB17 /* LaunchScreen.storyboard */; };
-		25ED40532F6B07E7005FFB17 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40512F6B07E7005FFB17 /* Main.storyboard */; };
 		25ED405C2F6B07E7005FFB17 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ED405B2F6B07E7005FFB17 /* AppDelegate.swift */; };
 		25ED405F2F6B07E7005FFB17 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 25ED405D2F6B07E7005FFB17 /* Main.storyboard */; };
-		25ED40662F6B07E7005FFB17 /* TheLibrarian Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 25ED40652F6B07E7005FFB17 /* TheLibrarian Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		25ED40702F6B07E7005FFB17 /* TheLibrarian Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 25ED406F2F6B07E7005FFB17 /* TheLibrarian Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		25ED40752F6B07E7005FFB17 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 25ED403A2F6B07E7005FFB17 /* Main.html */; };
 		25ED40762F6B07E7005FFB17 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 25ED403A2F6B07E7005FFB17 /* Main.html */; };
-		25ED40772F6B07E7005FFB17 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 25ED403C2F6B07E7005FFB17 /* Icon.png */; };
 		25ED40782F6B07E7005FFB17 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 25ED403C2F6B07E7005FFB17 /* Icon.png */; };
-		25ED40792F6B07E7005FFB17 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 25ED403D2F6B07E7005FFB17 /* Style.css */; };
 		25ED407A2F6B07E7005FFB17 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 25ED403D2F6B07E7005FFB17 /* Style.css */; };
-		25ED407B2F6B07E7005FFB17 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 25ED403E2F6B07E7005FFB17 /* Script.js */; };
 		25ED407C2F6B07E7005FFB17 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 25ED403E2F6B07E7005FFB17 /* Script.js */; };
-		25ED407D2F6B07E7005FFB17 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ED403F2F6B07E7005FFB17 /* ViewController.swift */; };
 		25ED407E2F6B07E7005FFB17 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ED403F2F6B07E7005FFB17 /* ViewController.swift */; };
-		25ED407F2F6B07E7005FFB17 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40402F6B07E7005FFB17 /* Assets.xcassets */; };
 		25ED40802F6B07E7005FFB17 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40402F6B07E7005FFB17 /* Assets.xcassets */; };
-		25ED40812F6B07E7005FFB17 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ED40422F6B07E7005FFB17 /* SafariWebExtensionHandler.swift */; };
 		25ED40822F6B07E7005FFB17 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ED40422F6B07E7005FFB17 /* SafariWebExtensionHandler.swift */; };
 		25ED409B2F6B07E8005FFB17 /* icon-16.png in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40942F6B07E8005FFB17 /* icon-16.png */; };
 		25ED409C2F6B07E8005FFB17 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40952F6B07E8005FFB17 /* popup.js */; };
@@ -36,23 +24,9 @@
 		25ED409F2F6B07E8005FFB17 /* icon-48.png in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40982F6B07E8005FFB17 /* icon-48.png */; };
 		25ED40A02F6B07E8005FFB17 /* Readability.js in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40992F6B07E8005FFB17 /* Readability.js */; };
 		25ED40A12F6B07E8005FFB17 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 25ED409A2F6B07E8005FFB17 /* manifest.json */; };
-		25ED40A22F6B07E8005FFB17 /* icon-16.png in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40942F6B07E8005FFB17 /* icon-16.png */; };
-		25ED40A32F6B07E8005FFB17 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40952F6B07E8005FFB17 /* popup.js */; };
-		25ED40A42F6B07E8005FFB17 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40962F6B07E8005FFB17 /* background.js */; };
-		25ED40A52F6B07E8005FFB17 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40972F6B07E8005FFB17 /* popup.html */; };
-		25ED40A62F6B07E8005FFB17 /* icon-48.png in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40982F6B07E8005FFB17 /* icon-48.png */; };
-		25ED40A72F6B07E8005FFB17 /* Readability.js in Resources */ = {isa = PBXBuildFile; fileRef = 25ED40992F6B07E8005FFB17 /* Readability.js */; };
-		25ED40A82F6B07E8005FFB17 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 25ED409A2F6B07E8005FFB17 /* manifest.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		25ED40672F6B07E7005FFB17 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 25ED40342F6B07E7005FFB17 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 25ED40642F6B07E7005FFB17;
-			remoteInfo = "TheLibrarian Extension (iOS)";
-		};
 		25ED40712F6B07E7005FFB17 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 25ED40342F6B07E7005FFB17 /* Project object */;
@@ -63,17 +37,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		25ED40882F6B07E7005FFB17 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				25ED40662F6B07E7005FFB17 /* TheLibrarian Extension.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		25ED408F2F6B07E7005FFB17 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -95,7 +58,6 @@
 		25ED403F2F6B07E7005FFB17 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		25ED40402F6B07E7005FFB17 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		25ED40422F6B07E7005FFB17 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
-		25ED40472F6B07E7005FFB17 /* TheLibrarian.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TheLibrarian.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		25ED404A2F6B07E7005FFB17 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		25ED404C2F6B07E7005FFB17 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		25ED404F2F6B07E7005FFB17 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -105,7 +67,6 @@
 		25ED405B2F6B07E7005FFB17 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		25ED405E2F6B07E7005FFB17 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		25ED40602F6B07E7005FFB17 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		25ED40652F6B07E7005FFB17 /* TheLibrarian Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "TheLibrarian Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		25ED406A2F6B07E7005FFB17 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		25ED406F2F6B07E7005FFB17 /* TheLibrarian Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "TheLibrarian Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		25ED40742F6B07E7005FFB17 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -119,21 +80,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		25ED40442F6B07E7005FFB17 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		25ED40562F6B07E7005FFB17 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		25ED40622F6B07E7005FFB17 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -196,9 +143,7 @@
 		25ED40482F6B07E7005FFB17 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				25ED40472F6B07E7005FFB17 /* TheLibrarian.app */,
 				25ED40592F6B07E7005FFB17 /* TheLibrarian.app */,
-				25ED40652F6B07E7005FFB17 /* TheLibrarian Extension.appex */,
 				25ED406F2F6B07E7005FFB17 /* TheLibrarian Extension.appex */,
 			);
 			name = Products;
@@ -260,27 +205,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		25ED40462F6B07E7005FFB17 /* TheLibrarian (iOS) */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 25ED40892F6B07E7005FFB17 /* Build configuration list for PBXNativeTarget "TheLibrarian (iOS)" */;
-			buildPhases = (
-				25ED40432F6B07E7005FFB17 /* Sources */,
-				25ED40442F6B07E7005FFB17 /* Frameworks */,
-				25ED40452F6B07E7005FFB17 /* Resources */,
-				25ED40882F6B07E7005FFB17 /* Embed Foundation Extensions */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				25ED40682F6B07E7005FFB17 /* PBXTargetDependency */,
-			);
-			name = "TheLibrarian (iOS)";
-			packageProductDependencies = (
-			);
-			productName = "TheLibrarian (iOS)";
-			productReference = 25ED40472F6B07E7005FFB17 /* TheLibrarian.app */;
-			productType = "com.apple.product-type.application";
-		};
 		25ED40582F6B07E7005FFB17 /* TheLibrarian (macOS) */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 25ED40902F6B07E7005FFB17 /* Build configuration list for PBXNativeTarget "TheLibrarian (macOS)" */;
@@ -301,25 +225,6 @@
 			productName = "TheLibrarian (macOS)";
 			productReference = 25ED40592F6B07E7005FFB17 /* TheLibrarian.app */;
 			productType = "com.apple.product-type.application";
-		};
-		25ED40642F6B07E7005FFB17 /* TheLibrarian Extension (iOS) */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 25ED40852F6B07E7005FFB17 /* Build configuration list for PBXNativeTarget "TheLibrarian Extension (iOS)" */;
-			buildPhases = (
-				25ED40612F6B07E7005FFB17 /* Sources */,
-				25ED40622F6B07E7005FFB17 /* Frameworks */,
-				25ED40632F6B07E7005FFB17 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = "TheLibrarian Extension (iOS)";
-			packageProductDependencies = (
-			);
-			productName = "TheLibrarian Extension (iOS)";
-			productReference = 25ED40652F6B07E7005FFB17 /* TheLibrarian Extension.appex */;
-			productType = "com.apple.product-type.app-extension";
 		};
 		25ED406E2F6B07E7005FFB17 /* TheLibrarian Extension (macOS) */ = {
 			isa = PBXNativeTarget;
@@ -350,13 +255,7 @@
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
-					25ED40462F6B07E7005FFB17 = {
-						CreatedOnToolsVersion = 26.0;
-					};
 					25ED40582F6B07E7005FFB17 = {
-						CreatedOnToolsVersion = 26.0;
-					};
-					25ED40642F6B07E7005FFB17 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 					25ED406E2F6B07E7005FFB17 = {
@@ -378,29 +277,13 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				25ED40462F6B07E7005FFB17 /* TheLibrarian (iOS) */,
 				25ED40582F6B07E7005FFB17 /* TheLibrarian (macOS) */,
-				25ED40642F6B07E7005FFB17 /* TheLibrarian Extension (iOS) */,
 				25ED406E2F6B07E7005FFB17 /* TheLibrarian Extension (macOS) */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		25ED40452F6B07E7005FFB17 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				25ED40772F6B07E7005FFB17 /* Icon.png in Resources */,
-				25ED40502F6B07E7005FFB17 /* LaunchScreen.storyboard in Resources */,
-				25ED40752F6B07E7005FFB17 /* Main.html in Resources */,
-				25ED407B2F6B07E7005FFB17 /* Script.js in Resources */,
-				25ED407F2F6B07E7005FFB17 /* Assets.xcassets in Resources */,
-				25ED40532F6B07E7005FFB17 /* Main.storyboard in Resources */,
-				25ED40792F6B07E7005FFB17 /* Style.css in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		25ED40572F6B07E7005FFB17 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -411,20 +294,6 @@
 				25ED407C2F6B07E7005FFB17 /* Script.js in Resources */,
 				25ED40802F6B07E7005FFB17 /* Assets.xcassets in Resources */,
 				25ED40762F6B07E7005FFB17 /* Main.html in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		25ED40632F6B07E7005FFB17 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				25ED40A62F6B07E8005FFB17 /* icon-48.png in Resources */,
-				25ED40A82F6B07E8005FFB17 /* manifest.json in Resources */,
-				25ED40A72F6B07E8005FFB17 /* Readability.js in Resources */,
-				25ED40A22F6B07E8005FFB17 /* icon-16.png in Resources */,
-				25ED40A52F6B07E8005FFB17 /* popup.html in Resources */,
-				25ED40A42F6B07E8005FFB17 /* background.js in Resources */,
-				25ED40A32F6B07E8005FFB17 /* popup.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -445,30 +314,12 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		25ED40432F6B07E7005FFB17 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				25ED407D2F6B07E7005FFB17 /* ViewController.swift in Sources */,
-				25ED404B2F6B07E7005FFB17 /* AppDelegate.swift in Sources */,
-				25ED404D2F6B07E7005FFB17 /* SceneDelegate.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		25ED40552F6B07E7005FFB17 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				25ED407E2F6B07E7005FFB17 /* ViewController.swift in Sources */,
 				25ED405C2F6B07E7005FFB17 /* AppDelegate.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		25ED40612F6B07E7005FFB17 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				25ED40812F6B07E7005FFB17 /* SafariWebExtensionHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -483,11 +334,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		25ED40682F6B07E7005FFB17 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 25ED40642F6B07E7005FFB17 /* TheLibrarian Extension (iOS) */;
-			targetProxy = 25ED40672F6B07E7005FFB17 /* PBXContainerItemProxy */;
-		};
 		25ED40722F6B07E7005FFB17 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 25ED406E2F6B07E7005FFB17 /* TheLibrarian Extension (macOS) */;
@@ -645,161 +491,24 @@
 			};
 			name = Release;
 		};
-		25ED40862F6B07E7005FFB17 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "TheLibrarian Extension";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				OTHER_LDFLAGS = (
-					"-framework",
-					SafariServices,
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mcginleyr1.the-librarian.Extension";
-				PRODUCT_NAME = "TheLibrarian Extension";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		25ED40872F6B07E7005FFB17 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "TheLibrarian Extension";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				OTHER_LDFLAGS = (
-					"-framework",
-					SafariServices,
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mcginleyr1.the-librarian.Extension";
-				PRODUCT_NAME = "TheLibrarian Extension";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		25ED408A2F6B07E7005FFB17 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "iOS (App)/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = TheLibrarian;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIMainStoryboardFile = Main;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				OTHER_LDFLAGS = (
-					"-framework",
-					SafariServices,
-					"-framework",
-					WebKit,
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mcginleyr1.the-librarian";
-				PRODUCT_NAME = TheLibrarian;
-				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		25ED408B2F6B07E7005FFB17 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "iOS (App)/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = TheLibrarian;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIMainStoryboardFile = Main;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				OTHER_LDFLAGS = (
-					"-framework",
-					SafariServices,
-					"-framework",
-					WebKit,
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mcginleyr1.the-librarian";
-				PRODUCT_NAME = TheLibrarian;
-				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
 		25ED408D2F6B07E7005FFB17 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3KSC5YWCZ6;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "macOS (Extension)/Info.plist";
@@ -833,8 +542,19 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3KSC5YWCZ6;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "macOS (Extension)/Info.plist";
@@ -870,6 +590,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3KSC5YWCZ6;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -911,6 +632,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3KSC5YWCZ6;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -953,24 +675,6 @@
 			buildConfigurations = (
 				25ED40832F6B07E7005FFB17 /* Debug */,
 				25ED40842F6B07E7005FFB17 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		25ED40852F6B07E7005FFB17 /* Build configuration list for PBXNativeTarget "TheLibrarian Extension (iOS)" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				25ED40862F6B07E7005FFB17 /* Debug */,
-				25ED40872F6B07E7005FFB17 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		25ED40892F6B07E7005FFB17 /* Build configuration list for PBXNativeTarget "TheLibrarian (iOS)" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				25ED408A2F6B07E7005FFB17 /* Debug */,
-				25ED408B2F6B07E7005FFB17 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
