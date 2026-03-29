@@ -5,17 +5,20 @@ defmodule Librarian.Backup do
   alias Librarian.Vault.Note
 
   def run(settings) do
-    Repo.transaction(
-      fn ->
-        from(n in Note, preload: [:notebook, :tags])
-        |> Repo.stream()
-        |> Stream.each(&backup_note(&1, settings))
-        |> Stream.run()
-      end,
-      timeout: :infinity
-    )
-
-    :ok
+    case Repo.transaction(
+           fn ->
+             from(n in Note, preload: [:notebook, :tags])
+             |> Repo.stream()
+             |> Stream.each(&backup_note(&1, settings))
+             |> Stream.run()
+           end,
+           timeout: :infinity
+         ) do
+      {:ok, _} -> :ok
+      {:error, reason} ->
+        Logger.error("Backup: transaction failed: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   def note_key(note, notebook_name) do
@@ -41,7 +44,7 @@ defmodule Librarian.Backup do
         if(tags != [], do: "tags: [#{Enum.join(tags, ", ")}]"),
         if(note.source_url, do: "source_url: #{note.source_url}"),
         if(note.clip_mode, do: "clip_mode: #{note.clip_mode}"),
-        "created_at: #{DateTime.to_iso8601(created_at)}",
+        if(created_at, do: "created_at: #{DateTime.to_iso8601(created_at)}"),
         "---",
         "",
         note.body || ""
@@ -114,7 +117,7 @@ defmodule Librarian.Backup do
 
       {:error, reason} ->
         Logger.warning("Backup: upload failed for #{key}: #{inspect(reason)}")
-        {:error, reason}
+        :ok
     end
   end
 

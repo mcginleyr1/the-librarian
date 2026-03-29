@@ -60,10 +60,11 @@ config :librarian, Oban,
     Oban.Plugins.Lifeline,
     {Oban.Plugins.Cron,
      crontab: [
-       {"0 */2 * * *", Librarian.Workers.ScheduleFeedsWorker}
+       {"0 */2 * * *", Librarian.Workers.ScheduleFeedsWorker},
+       {"0 2 * * *", Librarian.Workers.BackupWorker}
      ]}
   ],
-  queues: [feeds: 5, vault: 2]
+  queues: [feeds: 5, vault: 2, backup: 1]
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
