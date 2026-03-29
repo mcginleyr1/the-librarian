@@ -143,7 +143,12 @@ defmodule Librarian.Reader do
 
   def mark_all_read do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
-    article_ids = Repo.all(from a in Article, join: f in assoc(a, :feed), where: f.active == true, select: a.id)
+
+    article_ids =
+      Repo.all(
+        from a in Article, join: f in assoc(a, :feed), where: f.active == true, select: a.id
+      )
+
     bulk_mark_read(article_ids, now)
   end
 
@@ -177,7 +182,11 @@ defmodule Librarian.Reader do
   end
 
   defp bulk_mark_read(article_ids, now) do
-    entries = Enum.map(article_ids, &%{article_id: &1, read_at: now, starred: false, inserted_at: now, updated_at: now})
+    entries =
+      Enum.map(
+        article_ids,
+        &%{article_id: &1, read_at: now, starred: false, inserted_at: now, updated_at: now}
+      )
 
     Repo.insert_all(ReadState, entries,
       on_conflict: [set: [read_at: now, updated_at: now]],

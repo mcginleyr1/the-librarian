@@ -14,7 +14,9 @@ defmodule Librarian.Backup do
            end,
            timeout: :infinity
          ) do
-      {:ok, _} -> :ok
+      {:ok, _} ->
+        :ok
+
       {:error, reason} ->
         Logger.error("Backup: transaction failed: #{inspect(reason)}")
         {:error, reason}
@@ -84,7 +86,9 @@ defmodule Librarian.Backup do
               b2_put(att_key, data, "application/octet-stream", settings)
 
             {:error, reason} ->
-              Logger.warning("Backup: could not read attachment for note #{note.id}: #{inspect(reason)}")
+              Logger.warning(
+                "Backup: could not read attachment for note #{note.id}: #{inspect(reason)}"
+              )
           end
         end
       end
