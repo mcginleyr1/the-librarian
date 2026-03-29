@@ -66,10 +66,10 @@ defmodule Librarian.BackupTest do
 
       result = Backup.render_markdown(note, "Research")
 
-      assert result =~ "title: Test Note"
-      assert result =~ "notebook: Research"
-      assert result =~ "tags: [elixir, phoenix]"
-      assert result =~ "source_url: https://example.com"
+      assert result =~ ~s(title: "Test Note")
+      assert result =~ ~s(notebook: "Research")
+      assert result =~ ~s(tags: ["elixir", "phoenix"])
+      assert result =~ ~s(source_url: "https://example.com")
       assert result =~ "clip_mode: full_article"
       assert result =~ "created_at: 2026-01-14"
       assert result =~ "Hello world"
@@ -93,7 +93,7 @@ defmodule Librarian.BackupTest do
       refute result =~ "source_url"
       refute result =~ "clip_mode"
       refute result =~ "tags"
-      assert result =~ "title: Simple"
+      assert result =~ ~s(title: "Simple")
       assert result =~ "Content"
     end
 
@@ -111,7 +111,7 @@ defmodule Librarian.BackupTest do
       }
 
       result = Backup.render_markdown(note, nil)
-      assert result =~ "title: Empty"
+      assert result =~ ~s(title: "Empty")
       assert result =~ "---"
     end
   end
