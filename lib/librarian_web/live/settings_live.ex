@@ -1,9 +1,9 @@
 defmodule LibrarianWeb.SettingsLive do
   use LibrarianWeb, :live_view
 
-  alias Librarian.{Reader, Vault}
+  alias Librarian.{Reader, Vault, Settings}
   alias Librarian.Reader.{Feed, FeedDiscoverer}
-  alias Librarian.Workers.FetchFeedWorker
+  alias Librarian.Workers.{FetchFeedWorker, BackupWorker}
   alias Librarian.Repo
 
   @impl true
@@ -30,7 +30,9 @@ defmodule LibrarianWeb.SettingsLive do
        # Notebooks tab
        notebooks: Vault.list_notebooks(),
        note_counts: Vault.count_notes_by_notebook(),
-       editing_notebook_id: nil
+       editing_notebook_id: nil,
+       # Backup tab
+       backup_form: backup_settings_form()
      )
      |> allow_upload(:opml,
        accept: :any,
@@ -129,8 +131,16 @@ defmodule LibrarianWeb.SettingsLive do
     {:noreply, assign(socket, discover_error: "Please enter a URL")}
   end
 
-  def handle_event("add_discovered", %{"feed_url" => url, "title" => title, "category" => cat}, socket) do
-    case Reader.create_feed(%{title: title, feed_url: url, category: if(cat == "", do: nil, else: cat)}) do
+  def handle_event(
+        "add_discovered",
+        %{"feed_url" => url, "title" => title, "category" => cat},
+        socket
+      ) do
+    case Reader.create_feed(%{
+           title: title,
+           feed_url: url,
+           category: if(cat == "", do: nil, else: cat)
+         }) do
       {:ok, _} ->
         {:noreply,
          socket
@@ -269,6 +279,29 @@ defmodule LibrarianWeb.SettingsLive do
      )}
   end
 
+  # --- Backup tab ---
+
+  def handle_event("save_backup", %{"settings" => params}, socket) do
+    case Settings.save_settings(params) do
+      {:ok, _settings} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Backup settings saved")
+         |> assign(backup_form: backup_settings_form())}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, backup_form: to_form(changeset))}
+    end
+  end
+
+  def handle_event("run_backup", _params, socket) do
+    %{}
+    |> BackupWorker.new()
+    |> Oban.insert()
+
+    {:noreply, put_flash(socket, :info, "Backup queued — running in background")}
+  end
+
   @impl true
   def handle_info({:discovery_result, {:ok, []}}, socket) do
     {:noreply, assign(socket, discovering: false, discover_error: "No feeds found at that URL")}
@@ -279,7 +312,8 @@ defmodule LibrarianWeb.SettingsLive do
   end
 
   def handle_info({:discovery_result, {:error, reason}}, socket) do
-    {:noreply, assign(socket, discovering: false, discover_error: "Could not reach URL: #{reason}")}
+    {:noreply,
+     assign(socket, discovering: false, discover_error: "Could not reach URL: #{reason}")}
   end
 
   def handle_info({:enex_done, result}, socket) do
@@ -295,5 +329,10 @@ defmodule LibrarianWeb.SettingsLive do
 
   defp tab_class(current, tab) do
     if current == tab, do: "tab tab-active", else: "tab"
+  end
+
+  defp backup_settings_form do
+    settings = Settings.get_settings() || %Settings{id: 1}
+    settings |> Settings.changeset(%{}) |> to_form()
   end
 end
