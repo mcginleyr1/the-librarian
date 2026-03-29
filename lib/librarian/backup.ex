@@ -1,26 +1,19 @@
 defmodule Librarian.Backup do
   require Logger
-  import Ecto.Query
   alias Librarian.{Repo, Storage}
   alias Librarian.Vault.Note
 
   def run(settings) do
-    case Repo.transaction(
-           fn ->
-             from(n in Note, preload: [:notebook, :tags])
-             |> Repo.stream()
-             |> Stream.each(&backup_note(&1, settings))
-             |> Stream.run()
-           end,
-           timeout: :infinity
-         ) do
-      {:ok, _} ->
-        :ok
+    import Ecto.Query
+    ids = Repo.all(from n in Note, select: n.id, order_by: n.id)
 
-      {:error, reason} ->
-        Logger.error("Backup: transaction failed: #{inspect(reason)}")
-        {:error, reason}
-    end
+    Enum.each(ids, fn id ->
+      note = Repo.get!(Note, id) |> Repo.preload([:notebook, :tags])
+      backup_note(note, settings)
+      :erlang.garbage_collect()
+    end)
+
+    :ok
   end
 
   def note_key(note, notebook_name) do
@@ -98,44 +91,83 @@ defmodule Librarian.Backup do
     rescue
       e ->
         Logger.warning("Backup: failed to back up note #{note.id}: #{inspect(e)}")
+    after
+      :erlang.garbage_collect()
     end
   end
 
   defp b2_exists?(key, settings) do
-    case ExAws.S3.head_object(settings.b2_bucket_name, key)
-         |> ExAws.request(ex_aws_config(settings)) do
-      {:ok, _} ->
-        true
+    url = b2_url(key, settings)
+    config = b2_auth_config(settings)
+    empty_hash = sha256_hex("")
+    headers = [{"x-amz-content-sha256", empty_hash}]
 
-      {:error, {:http_error, 404, _}} ->
-        false
+    case ExAws.Auth.headers(:head, url, :s3, config, headers, "") do
+      {:ok, signed_headers} ->
+        case Req.head(url, headers: signed_headers) do
+          {:ok, %{status: 200}} -> true
+          {:ok, %{status: 404}} -> false
+          {:ok, %{status: status}} ->
+            Logger.warning("Backup: unexpected HEAD status #{status} for #{key}")
+            false
+          {:error, reason} ->
+            Logger.warning("Backup: HEAD request failed for #{key}: #{inspect(reason)}")
+            false
+        end
 
       {:error, reason} ->
-        Logger.warning("Backup: HEAD check failed for #{key}: #{inspect(reason)}")
+        Logger.warning("Backup: signing failed for #{key}: #{inspect(reason)}")
         false
     end
   end
 
   defp b2_put(key, data, content_type, settings) do
-    case ExAws.S3.put_object(settings.b2_bucket_name, key, data, content_type: content_type)
-         |> ExAws.request(ex_aws_config(settings)) do
-      {:ok, _} ->
-        :ok
+    url = b2_url(key, settings)
+    config = b2_auth_config(settings)
+    payload_hash = sha256_hex(data)
+
+    headers = [
+      {"content-type", content_type},
+      {"x-amz-content-sha256", payload_hash}
+    ]
+
+    case ExAws.Auth.headers(:put, url, :s3, config, headers, data) do
+      {:ok, signed_headers} ->
+        case Req.put(url, headers: signed_headers, body: data) do
+          {:ok, %{status: status}} when status in 200..299 ->
+            :ok
+
+          {:ok, %{status: status, body: body}} ->
+            Logger.warning("Backup: upload failed for #{key} (#{status}): #{inspect(body)}")
+            :ok
+
+          {:error, reason} ->
+            Logger.warning("Backup: upload request failed for #{key}: #{inspect(reason)}")
+            :ok
+        end
 
       {:error, reason} ->
-        Logger.warning("Backup: upload failed for #{key}: #{inspect(reason)}")
+        Logger.warning("Backup: signing failed for #{key}: #{inspect(reason)}")
         :ok
     end
   end
 
-  defp ex_aws_config(settings) do
-    [
+  defp sha256_hex(data) do
+    :crypto.hash(:sha256, data) |> Base.encode16(case: :lower)
+  end
+
+  defp b2_url(key, settings) do
+    encoded_key = key |> String.split("/") |> Enum.map(&URI.encode/1) |> Enum.join("/")
+    "https://#{settings.b2_endpoint}/#{settings.b2_bucket_name}/#{encoded_key}"
+  end
+
+  defp b2_auth_config(settings) do
+    %{
       access_key_id: settings.b2_key_id,
       secret_access_key: settings.b2_application_key,
-      host: settings.b2_endpoint,
-      scheme: "https://",
-      region: region_from_endpoint(settings.b2_endpoint)
-    ]
+      region: region_from_endpoint(settings.b2_endpoint),
+      host: settings.b2_endpoint
+    }
   end
 
   defp region_from_endpoint(endpoint) do
