@@ -41,10 +41,10 @@ defmodule Librarian.Backup do
     lines =
       [
         "---",
-        "title: #{note.title || ""}",
-        if(notebook_name, do: "notebook: #{notebook_name}"),
-        if(tags != [], do: "tags: [#{Enum.join(tags, ", ")}]"),
-        if(note.source_url, do: "source_url: #{note.source_url}"),
+        "title: #{yaml_value(note.title || "")}",
+        if(notebook_name, do: "notebook: #{yaml_value(notebook_name)}"),
+        if(tags != [], do: "tags: [#{Enum.map(tags, &yaml_value/1) |> Enum.join(", ")}]"),
+        if(note.source_url, do: "source_url: #{yaml_value(note.source_url)}"),
         if(note.clip_mode, do: "clip_mode: #{note.clip_mode}"),
         if(created_at, do: "created_at: #{DateTime.to_iso8601(created_at)}"),
         "---",
@@ -55,6 +55,9 @@ defmodule Librarian.Backup do
 
     Enum.join(lines, "\n")
   end
+
+  defp yaml_value(nil), do: nil
+  defp yaml_value(str) when is_binary(str), do: ~s("#{String.replace(str, ~s("), ~s(\\"))}")
 
   def slugify(nil), do: "untitled"
 
