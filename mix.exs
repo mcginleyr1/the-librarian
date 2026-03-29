@@ -70,7 +70,11 @@ defmodule Librarian.MixProject do
       # Background jobs
       {:oban, "~> 2.19"},
       # HTML to text for full-text content
-      {:html_sanitize_ex, "~> 1.4"}
+      {:html_sanitize_ex, "~> 1.4"},
+      # B2 / S3 backup
+      {:ex_aws, "~> 2.5"},
+      {:ex_aws_s3, "~> 2.5"},
+      {:sweet_xml, "~> 0.7"}
     ]
   end
 
