@@ -146,7 +146,12 @@ defmodule Librarian.Reader do
 
     article_ids =
       Repo.all(
-        from a in Article, join: f in assoc(a, :feed), where: f.active == true, select: a.id
+        from a in Article,
+          join: f in assoc(a, :feed),
+          left_join: rs in ReadState,
+          on: rs.article_id == a.id,
+          where: f.active == true and (is_nil(rs.id) or is_nil(rs.read_at)),
+          select: a.id
       )
 
     bulk_mark_read(article_ids, now)
@@ -154,44 +159,56 @@ defmodule Librarian.Reader do
 
   def mark_all_read_for_feed(feed_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
-    article_ids = Repo.all(from a in Article, where: a.feed_id == ^feed_id, select: a.id)
+
+    article_ids =
+      Repo.all(
+        from a in Article,
+          left_join: rs in ReadState,
+          on: rs.article_id == a.id,
+          where: a.feed_id == ^feed_id and (is_nil(rs.id) or is_nil(rs.read_at)),
+          select: a.id
+      )
+
     bulk_mark_read(article_ids, now)
   end
 
   def mark_all_read_for_category(category) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    article_ids =
+    query =
       if is_nil(category) do
-        Repo.all(
-          from a in Article,
-            join: f in assoc(a, :feed),
-            where: is_nil(f.category) and f.active == true,
-            select: a.id
-        )
+        from a in Article,
+          join: f in assoc(a, :feed),
+          left_join: rs in ReadState,
+          on: rs.article_id == a.id,
+          where:
+            is_nil(f.category) and f.active == true and (is_nil(rs.id) or is_nil(rs.read_at)),
+          select: a.id
       else
-        Repo.all(
-          from a in Article,
-            join: f in assoc(a, :feed),
-            where: f.category == ^category and f.active == true,
-            select: a.id
-        )
+        from a in Article,
+          join: f in assoc(a, :feed),
+          left_join: rs in ReadState,
+          on: rs.article_id == a.id,
+          where:
+            f.category == ^category and f.active == true and (is_nil(rs.id) or is_nil(rs.read_at)),
+          select: a.id
       end
 
-    bulk_mark_read(article_ids, now)
+    bulk_mark_read(Repo.all(query), now)
   end
 
   defp bulk_mark_read(article_ids, now) do
-    entries =
-      Enum.map(
-        article_ids,
-        &%{article_id: &1, read_at: now, starred: false, inserted_at: now, updated_at: now}
-      )
-
-    Repo.insert_all(ReadState, entries,
-      on_conflict: [set: [read_at: now, updated_at: now]],
-      conflict_target: :article_id
+    article_ids
+    |> Enum.map(
+      &%{article_id: &1, read_at: now, starred: false, inserted_at: now, updated_at: now}
     )
+    |> Enum.chunk_every(10_000)
+    |> Enum.each(fn chunk ->
+      Repo.insert_all(ReadState, chunk,
+        on_conflict: [set: [read_at: now, updated_at: now]],
+        conflict_target: :article_id
+      )
+    end)
   end
 
   def mark_read(article_id) do
@@ -212,6 +229,20 @@ defmodule Librarian.Reader do
       on_conflict: [set: [starred: starred]],
       conflict_target: :article_id
     )
+  end
+
+  def delete_stale_read_articles(days_old \\ 30) do
+    cutoff = DateTime.utc_now() |> DateTime.add(-days_old, :day) |> DateTime.truncate(:second)
+
+    {count, _} =
+      Repo.delete_all(
+        from a in Article,
+          join: rs in ReadState,
+          on: rs.article_id == a.id,
+          where: not is_nil(rs.read_at) and rs.starred != true and a.published_at < ^cutoff
+      )
+
+    count
   end
 
   def list_all_feeds do

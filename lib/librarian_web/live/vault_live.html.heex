@@ -75,7 +75,7 @@
         >
           <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
           <p class="text-xs text-base-content/50 mt-0.5">
-            <span :if={note.notebook}>{note.notebook.name}    · </span>
+            <span :if={note.notebook}>{note.notebook.name}     · </span>
             {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
           </p>
           <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
