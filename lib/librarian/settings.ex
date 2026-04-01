@@ -9,6 +9,7 @@ defmodule Librarian.Settings do
     field :b2_application_key, :string
     field :b2_bucket_name, :string
     field :b2_endpoint, :string
+    field :last_backup_at, :utc_datetime
 
     timestamps(type: :utc_datetime)
   end
