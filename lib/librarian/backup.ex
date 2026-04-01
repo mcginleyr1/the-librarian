@@ -5,13 +5,28 @@ defmodule Librarian.Backup do
 
   def run(settings) do
     import Ecto.Query
-    ids = Repo.all(from n in Note, select: n.id, order_by: n.id)
+
+    query =
+      case settings.last_backup_at do
+        nil ->
+          from n in Note, select: n.id, order_by: n.id
+
+        since ->
+          from n in Note, where: n.updated_at > ^since, select: n.id, order_by: n.id
+      end
+
+    ids = Repo.all(query)
+    started_at = DateTime.utc_now()
 
     Enum.each(ids, fn id ->
       note = Repo.get!(Note, id) |> Repo.preload([:notebook, :tags])
       backup_note(note, settings)
       :erlang.garbage_collect()
     end)
+
+    settings
+    |> Ecto.Changeset.change(last_backup_at: DateTime.truncate(started_at, :second))
+    |> Repo.update()
 
     :ok
   end
@@ -67,25 +82,20 @@ defmodule Librarian.Backup do
 
     try do
       index_key = note_key(note, notebook_name)
-
-      unless b2_exists?(index_key, settings) do
-        markdown = render_markdown(note, notebook_name)
-        b2_put(index_key, markdown, "text/markdown; charset=utf-8", settings)
-      end
+      markdown = render_markdown(note, notebook_name)
+      b2_put(index_key, markdown, "text/markdown; charset=utf-8", settings)
 
       if note.storage_key && Storage.exists?(note.storage_key) do
         att_key = attachment_key(note, notebook_name)
 
-        unless b2_exists?(att_key, settings) do
-          case Storage.get(note.storage_key) do
-            {:ok, data} ->
-              b2_put(att_key, data, "application/octet-stream", settings)
+        case Storage.get(note.storage_key) do
+          {:ok, data} ->
+            b2_put(att_key, data, "application/octet-stream", settings)
 
-            {:error, reason} ->
-              Logger.warning(
-                "Backup: could not read attachment for note #{note.id}: #{inspect(reason)}"
-              )
-          end
+          {:error, reason} ->
+            Logger.warning(
+              "Backup: could not read attachment for note #{note.id}: #{inspect(reason)}"
+            )
         end
       end
     rescue
@@ -93,36 +103,6 @@ defmodule Librarian.Backup do
         Logger.warning("Backup: failed to back up note #{note.id}: #{inspect(e)}")
     after
       :erlang.garbage_collect()
-    end
-  end
-
-  defp b2_exists?(key, settings) do
-    url = b2_url(key, settings)
-    config = b2_auth_config(settings)
-    empty_hash = sha256_hex("")
-    headers = [{"x-amz-content-sha256", empty_hash}]
-
-    case ExAws.Auth.headers(:head, url, :s3, config, headers, "") do
-      {:ok, signed_headers} ->
-        case Req.head(url, headers: signed_headers) do
-          {:ok, %{status: 200}} ->
-            true
-
-          {:ok, %{status: 404}} ->
-            false
-
-          {:ok, %{status: status}} ->
-            Logger.warning("Backup: unexpected HEAD status #{status} for #{key}")
-            false
-
-          {:error, reason} ->
-            Logger.warning("Backup: HEAD request failed for #{key}: #{inspect(reason)}")
-            false
-        end
-
-      {:error, reason} ->
-        Logger.warning("Backup: signing failed for #{key}: #{inspect(reason)}")
-        false
     end
   end
 
