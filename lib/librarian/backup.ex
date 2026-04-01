@@ -105,11 +105,16 @@ defmodule Librarian.Backup do
     case ExAws.Auth.headers(:head, url, :s3, config, headers, "") do
       {:ok, signed_headers} ->
         case Req.head(url, headers: signed_headers) do
-          {:ok, %{status: 200}} -> true
-          {:ok, %{status: 404}} -> false
+          {:ok, %{status: 200}} ->
+            true
+
+          {:ok, %{status: 404}} ->
+            false
+
           {:ok, %{status: status}} ->
             Logger.warning("Backup: unexpected HEAD status #{status} for #{key}")
             false
+
           {:error, reason} ->
             Logger.warning("Backup: HEAD request failed for #{key}: #{inspect(reason)}")
             false

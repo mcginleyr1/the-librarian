@@ -61,7 +61,8 @@ config :librarian, Oban,
     {Oban.Plugins.Cron,
      crontab: [
        {"0 */2 * * *", Librarian.Workers.ScheduleFeedsWorker},
-       {"0 2 * * *", Librarian.Workers.BackupWorker}
+       {"0 2 * * *", Librarian.Workers.BackupWorker},
+       {"0 3 * * *", Librarian.Workers.CleanupWorker}
      ]}
   ],
   queues: [feeds: 5, vault: 2, backup: 1]

@@ -98,6 +98,131 @@ defmodule Librarian.ReaderTest do
     end
   end
 
+  describe "mark_all_read/0" do
+    setup do
+      {:ok, feed} = Reader.create_feed(feed_attrs())
+      {:ok, a1} = Repo.insert(Article.changeset(%Article{}, article_attrs(feed.id)))
+      {:ok, a2} = Repo.insert(Article.changeset(%Article{}, article_attrs(feed.id)))
+      {:ok, a3} = Repo.insert(Article.changeset(%Article{}, article_attrs(feed.id)))
+      %{feed: feed, a1: a1, a2: a2, a3: a3}
+    end
+
+    test "marks only unread articles", %{feed: feed, a1: a1} do
+      Reader.mark_read(a1.id)
+      assert Reader.unread_count(feed.id) == 2
+
+      Reader.mark_all_read()
+      assert Reader.unread_count(feed.id) == 0
+    end
+
+    test "does not touch already-read articles' starred state", %{a1: a1} do
+      Reader.mark_starred(a1.id, true)
+      Reader.mark_all_read()
+
+      article = Reader.get_article!(a1.id)
+      assert article.read_state.starred == true
+    end
+  end
+
+  describe "mark_all_read_for_feed/1" do
+    setup do
+      {:ok, f1} = Reader.create_feed(feed_attrs(%{feed_url: "https://a.com/feed"}))
+      {:ok, f2} = Reader.create_feed(feed_attrs(%{feed_url: "https://b.com/feed"}))
+      {:ok, a1} = Repo.insert(Article.changeset(%Article{}, article_attrs(f1.id)))
+      {:ok, a2} = Repo.insert(Article.changeset(%Article{}, article_attrs(f2.id)))
+      %{f1: f1, f2: f2, a1: a1, a2: a2}
+    end
+
+    test "only marks articles in the given feed", %{f1: f1, f2: f2} do
+      Reader.mark_all_read_for_feed(f1.id)
+      assert Reader.unread_count(f1.id) == 0
+      assert Reader.unread_count(f2.id) == 1
+    end
+  end
+
+  describe "mark_all_read_for_category/1" do
+    setup do
+      {:ok, f1} =
+        Reader.create_feed(feed_attrs(%{feed_url: "https://a.com/feed", category: "Tech"}))
+
+      {:ok, f2} =
+        Reader.create_feed(feed_attrs(%{feed_url: "https://b.com/feed", category: "News"}))
+
+      {:ok, _a1} = Repo.insert(Article.changeset(%Article{}, article_attrs(f1.id)))
+      {:ok, _a2} = Repo.insert(Article.changeset(%Article{}, article_attrs(f2.id)))
+      %{f1: f1, f2: f2}
+    end
+
+    test "only marks articles in the given category", %{f1: f1, f2: f2} do
+      Reader.mark_all_read_for_category("Tech")
+      assert Reader.unread_count(f1.id) == 0
+      assert Reader.unread_count(f2.id) == 1
+    end
+  end
+
+  describe "delete_stale_read_articles/1" do
+    setup do
+      {:ok, feed} = Reader.create_feed(feed_attrs())
+      old = DateTime.utc_now() |> DateTime.add(-60, :day) |> DateTime.truncate(:second)
+      recent = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      {:ok, old_read} =
+        Repo.insert(
+          Article.changeset(
+            %Article{},
+            article_attrs(feed.id, %{published_at: old, title: "Old Read"})
+          )
+        )
+
+      {:ok, old_starred} =
+        Repo.insert(
+          Article.changeset(
+            %Article{},
+            article_attrs(feed.id, %{published_at: old, title: "Old Starred"})
+          )
+        )
+
+      {:ok, old_unread} =
+        Repo.insert(
+          Article.changeset(
+            %Article{},
+            article_attrs(feed.id, %{published_at: old, title: "Old Unread"})
+          )
+        )
+
+      {:ok, recent_read} =
+        Repo.insert(
+          Article.changeset(
+            %Article{},
+            article_attrs(feed.id, %{published_at: recent, title: "Recent Read"})
+          )
+        )
+
+      Reader.mark_read(old_read.id)
+      Reader.mark_read(old_starred.id)
+      Reader.mark_starred(old_starred.id, true)
+      Reader.mark_read(recent_read.id)
+
+      %{
+        feed: feed,
+        old_read: old_read,
+        old_starred: old_starred,
+        old_unread: old_unread,
+        recent_read: recent_read
+      }
+    end
+
+    test "deletes only old, read, non-starred articles", ctx do
+      count = Reader.delete_stale_read_articles(30)
+      assert count == 1
+
+      assert Repo.get(Article, ctx.old_starred.id)
+      assert Repo.get(Article, ctx.old_unread.id)
+      assert Repo.get(Article, ctx.recent_read.id)
+      refute Repo.get(Article, ctx.old_read.id)
+    end
+  end
+
   describe "mark_starred/2" do
     setup do
       {:ok, feed} = Reader.create_feed(feed_attrs())
