@@ -231,7 +231,7 @@ defmodule Librarian.Reader do
     )
   end
 
-  def delete_stale_read_articles(days_old \\ 30) do
+  def delete_stale_read_articles(days_old \\ 365) do
     cutoff = DateTime.utc_now() |> DateTime.add(-days_old, :day) |> DateTime.truncate(:second)
 
     {count, _} =
