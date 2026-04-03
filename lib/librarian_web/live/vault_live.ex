@@ -112,6 +112,29 @@ defmodule LibrarianWeb.VaultLive do
     end
   end
 
+  def handle_event("move_note", %{"_target" => _, "move-notebook-select" => ""}, socket) do
+    note = socket.assigns.selected_note
+    {:ok, updated} = Vault.update_note(note, %{notebook_id: nil})
+    note = Vault.get_note!(updated.id)
+
+    {:noreply,
+     socket
+     |> assign(selected_note: note, note_counts: Vault.count_notes_by_notebook())
+     |> stream_insert(:notes, note)}
+  end
+
+  def handle_event("move_note", params, socket) do
+    nb_id = params["move-notebook-select"] || params["notebook_id"]
+    note = socket.assigns.selected_note
+    {:ok, updated} = Vault.update_note(note, %{notebook_id: nb_id})
+    note = Vault.get_note!(updated.id)
+
+    {:noreply,
+     socket
+     |> assign(selected_note: note, note_counts: Vault.count_notes_by_notebook())
+     |> stream_insert(:notes, note)}
+  end
+
   def handle_event("delete_note", _params, socket) do
     note = socket.assigns.selected_note
     {:ok, _} = Vault.delete_note(note)
