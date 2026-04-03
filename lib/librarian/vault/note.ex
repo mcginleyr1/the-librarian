@@ -2,7 +2,7 @@ defmodule Librarian.Vault.Note do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @clip_modes ~w(selection full_article full_page pdf screenshot)
+  @clip_modes ~w(selection full_article full_page pdf screenshot markdown)
 
   schema "notes" do
     field :title, :string

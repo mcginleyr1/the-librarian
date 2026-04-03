@@ -35,3 +35,6 @@ librarian-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Knowledge base — curated output is generated, not source
+/knowledge/curated/
+

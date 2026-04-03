@@ -157,4 +157,11 @@ defmodule LibrarianWeb.VaultLive do
 
   defp reload_notes(%{assigns: %{selected_notebook_id: id}}),
     do: Vault.list_notes_for_notebook(id)
+
+  defp render_note_body(%Note{clip_mode: "markdown", body: body}) when is_binary(body) do
+    MDEx.to_html!(body)
+  end
+
+  defp render_note_body(%Note{body: body}) when is_binary(body), do: body
+  defp render_note_body(_), do: "<p class='text-base-content/40 italic'>No content</p>"
 end
