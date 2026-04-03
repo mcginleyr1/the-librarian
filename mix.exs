@@ -74,7 +74,9 @@ defmodule Librarian.MixProject do
       # B2 / S3 backup
       {:ex_aws, "~> 2.5"},
       {:ex_aws_s3, "~> 2.5"},
-      {:sweet_xml, "~> 0.7"}
+      {:sweet_xml, "~> 0.7"},
+      # Markdown rendering for curated notes
+      {:mdex, "~> 0.2"}
     ]
   end
 

@@ -216,9 +216,7 @@
           </a>
         </div>
         <div class="note-body prose-like text-base leading-relaxed">
-          {Phoenix.HTML.raw(
-            @selected_note.body || "<p class='text-base-content/40 italic'>No content</p>"
-          )}
+          {Phoenix.HTML.raw(render_note_body(@selected_note))}
         </div>
       </div>
     </main>
