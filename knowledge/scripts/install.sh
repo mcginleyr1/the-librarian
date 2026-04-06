@@ -41,6 +41,8 @@ if launchctl list "$PLIST_NAME" &>/dev/null; then
   launchctl unload "$PLIST_DST" 2>/dev/null || true
 fi
 
+mkdir -p "$HOME/Library/LaunchAgents"
+
 # Generate plist with correct paths for this machine
 cat > "$PLIST_DST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
