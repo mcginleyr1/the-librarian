@@ -114,6 +114,17 @@ def core_idea(data):
 ## Why This Matters
 
 1-2 sentences connecting to the reader's existing interests.
+
+---
+
+## Original Content
+
+Include the full original article content below the divider. For articles fetched from
+the web, convert to clean markdown. For RSS content from the database, convert the HTML
+to markdown. Strip navigation, ads, sidebars — just the article body.
+
+This gives the reader both the quick summary for triage AND the full content for reading
+without leaving the vault.
 ```
 
 Insert the note with tags matching the relevant profiles:
