@@ -23,9 +23,10 @@ fi
 
 echo "[$DATE] Starting feed curation..."
 
+cd "$REPO_ROOT"
+
 claude --dangerously-skip-permissions \
   -p "Read all profiles in knowledge/profiles/, then follow the curation workflow in knowledge/CLAUDE.md to process today's feed articles. Write curated .md files to knowledge/curated/$DATE/. Be selective — aim for 5-15 high-signal articles." \
-  --cwd "$REPO_ROOT" \
   --model sonnet \
   --max-turns 30 \
   2>&1 | tee "$CURATED_DIR/agent.log"
