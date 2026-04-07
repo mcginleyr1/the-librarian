@@ -5,6 +5,9 @@ set -euo pipefail
 # Runs Claude Code against today's feed articles using interest profiles.
 # Schedule: daily, after the 2h feed fetch cycle (e.g., 5am via launchd)
 
+# launchd doesn't inherit shell PATH
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 KNOWLEDGE_DIR="$REPO_ROOT/knowledge"
 DATE=$(date +%Y-%m-%d)
