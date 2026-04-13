@@ -46,45 +46,101 @@
 
     <%!-- MIDDLE: Note List --%>
     <div class="w-72 shrink-0 flex flex-col border-r border-base-300 bg-base-100 overflow-hidden">
-      <div class="px-3 py-2 border-b border-base-300 flex gap-2">
-        <form phx-change="search" class="flex-1 min-w-0">
-          <input
-            type="text"
-            name="q"
-            value={@search_query}
-            placeholder="Search notes..."
-            class="input input-bordered input-xs w-full"
-            phx-debounce="300"
-          />
-        </form>
-        <button type="button" phx-click="new_note" class="btn btn-primary btn-xs" title="New note">
-          <.icon name="hero-plus" class="w-3 h-3" />
-        </button>
+      <div class="px-3 py-2 border-b border-base-300 flex gap-2 items-center">
+        <%= if @selection_mode do %>
+          <button
+            type="submit"
+            form="bulk-form"
+            class="btn btn-error btn-xs flex-1 gap-1"
+            data-confirm="Delete selected notes permanently?"
+          >
+            <.icon name="hero-trash" class="w-3 h-3" /> Delete Selected
+          </button>
+          <button
+            type="button"
+            phx-click="toggle_selection_mode"
+            class="btn btn-ghost btn-xs"
+          >
+            Cancel
+          </button>
+        <% else %>
+          <form phx-change="search" class="flex-1 min-w-0">
+            <input
+              type="text"
+              name="q"
+              value={@search_query}
+              placeholder="Search notes..."
+              class="input input-bordered input-xs w-full"
+              phx-debounce="300"
+            />
+          </form>
+          <button
+            type="button"
+            phx-click="toggle_selection_mode"
+            class="btn btn-ghost btn-xs"
+            title="Select multiple"
+          >
+            <.icon name="hero-check-circle" class="w-3 h-3" />
+          </button>
+          <button type="button" phx-click="new_note" class="btn btn-primary btn-xs" title="New note">
+            <.icon name="hero-plus" class="w-3 h-3" />
+          </button>
+        <% end %>
       </div>
-      <div
-        id="notes-list"
-        class="flex-1 overflow-y-auto divide-y divide-base-200"
-        phx-update="stream"
+      <form
+        id="bulk-form"
+        phx-submit="bulk_delete"
+        class="flex-1 overflow-hidden flex flex-col"
       >
         <div
-          :for={{dom_id, note} <- @streams.notes}
-          id={dom_id}
-          phx-click="select_note"
-          phx-value-id={note.id}
-          class={"cursor-pointer px-3 py-2.5 hover:bg-base-200 transition-colors #{if @selected_note && @selected_note.id == note.id, do: "bg-base-200 border-l-2 border-l-primary pl-[10px]", else: ""}"}
+          id="notes-list"
+          class="flex-1 overflow-y-auto divide-y divide-base-200"
+          phx-update="stream"
+          phx-viewport-bottom={@more_notes? && "load_more"}
         >
-          <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
-          <p class="text-xs text-base-content/50 mt-0.5">
-            <span :if={note.notebook}>{note.notebook.name}     · </span>
-            {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
-          </p>
-          <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
-            <span :for={tag <- Enum.take(note.tags, 3)} class="badge badge-xs badge-ghost">
-              {tag.name}
-            </span>
+          <div :for={{dom_id, note} <- @streams.notes} id={dom_id}>
+            <%= if @selection_mode do %>
+              <label class="flex items-start gap-2 cursor-pointer px-3 py-2.5 hover:bg-base-200 transition-colors">
+                <input
+                  type="checkbox"
+                  name="ids[]"
+                  value={note.id}
+                  class="checkbox checkbox-sm mt-0.5 shrink-0"
+                />
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
+                  <p class="text-xs text-base-content/50 mt-0.5">
+                    <span :if={note.notebook}>{note.notebook.name}     · </span>
+                    {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
+                  </p>
+                  <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
+                    <span :for={tag <- Enum.take(note.tags, 3)} class="badge badge-xs badge-ghost">
+                      {tag.name}
+                    </span>
+                  </div>
+                </div>
+              </label>
+            <% else %>
+              <div
+                phx-click="select_note"
+                phx-value-id={note.id}
+                class={"cursor-pointer px-3 py-2.5 hover:bg-base-200 transition-colors #{if @selected_note && @selected_note.id == note.id, do: "bg-base-200 border-l-2 border-l-primary pl-[10px]", else: ""}"}
+              >
+                <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
+                <p class="text-xs text-base-content/50 mt-0.5">
+                  <span :if={note.notebook}>{note.notebook.name}     · </span>
+                  {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
+                </p>
+                <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
+                  <span :for={tag <- Enum.take(note.tags, 3)} class="badge badge-xs badge-ghost">
+                    {tag.name}
+                  </span>
+                </div>
+              </div>
+            <% end %>
           </div>
         </div>
-      </div>
+      </form>
     </div>
 
     <%!-- RIGHT: Note Viewer / Editor --%>

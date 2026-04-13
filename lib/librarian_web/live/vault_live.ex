@@ -4,6 +4,8 @@ defmodule LibrarianWeb.VaultLive do
   alias Librarian.Vault
   alias Librarian.Vault.Note
 
+  @page_size 50
+
   @impl true
   def mount(_params, _session, socket) do
     notebooks = Vault.list_notebooks()
@@ -17,8 +19,11 @@ defmodule LibrarianWeb.VaultLive do
        selected_notebook_id: nil,
        selected_note: nil,
        editing: false,
+       selection_mode: false,
        search_query: "",
        tags_input: "",
+       note_offset: 0,
+       more_notes?: false,
        note_changeset: Note.changeset(%Note{}, %{})
      )
      |> stream(:notes, [])}
@@ -26,22 +31,27 @@ defmodule LibrarianWeb.VaultLive do
 
   @impl true
   def handle_params(%{"notebook_id" => nb_id}, _uri, socket) do
-    nb_id = String.to_integer(nb_id)
-    notes = Vault.list_notes_for_notebook(nb_id)
-
     {:noreply,
      socket
-     |> assign(selected_notebook_id: nb_id, selected_note: nil, editing: false)
-     |> stream(:notes, notes, reset: true)}
+     |> assign(
+       selected_notebook_id: String.to_integer(nb_id),
+       selected_note: nil,
+       editing: false,
+       search_query: ""
+     )
+     |> load_notes(reset: true)}
   end
 
   def handle_params(_params, _uri, socket) do
-    notes = Vault.list_all_notes(limit: 50)
-
     {:noreply,
      socket
-     |> assign(selected_notebook_id: nil, selected_note: nil, editing: false)
-     |> stream(:notes, notes, reset: true)}
+     |> assign(
+       selected_notebook_id: nil,
+       selected_note: nil,
+       editing: false,
+       search_query: ""
+     )
+     |> load_notes(reset: true)}
   end
 
   @impl true
@@ -146,17 +156,53 @@ defmodule LibrarianWeb.VaultLive do
      |> stream_delete(:notes, note)}
   end
 
+  def handle_event("load_more", _params, socket) do
+    if socket.assigns.more_notes? do
+      {:noreply, load_notes(socket, reset: false)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("toggle_selection_mode", _params, socket) do
+    new_mode = !socket.assigns.selection_mode
+
+    {:noreply,
+     socket
+     |> assign(selection_mode: new_mode, selected_note: nil, editing: false)
+     |> load_notes(reset: true)}
+  end
+
+  def handle_event("bulk_delete", %{"ids" => ids}, socket) when is_list(ids) and ids != [] do
+    {:ok, _count} = Vault.delete_notes(ids)
+    note_counts = Vault.count_notes_by_notebook()
+
+    {:noreply,
+     socket
+     |> assign(
+       selection_mode: false,
+       selected_note: nil,
+       editing: false,
+       note_counts: note_counts
+     )
+     |> load_notes(reset: true)}
+  end
+
+  def handle_event("bulk_delete", _params, socket) do
+    {:noreply, assign(socket, selection_mode: false)}
+  end
+
   def handle_event("search", %{"q" => q}, socket) do
-    nb_id = socket.assigns.selected_notebook_id
+    if String.trim(q) == "" do
+      {:noreply, socket |> assign(search_query: q) |> load_notes(reset: true)}
+    else
+      notes = Vault.search(q, notebook_id: socket.assigns.selected_notebook_id)
 
-    notes =
-      if String.trim(q) == "" do
-        reload_notes(socket)
-      else
-        Vault.search(q, notebook_id: nb_id)
-      end
-
-    {:noreply, socket |> assign(search_query: q) |> stream(:notes, notes, reset: true)}
+      {:noreply,
+       socket
+       |> assign(search_query: q, more_notes?: false)
+       |> stream(:notes, notes, reset: true)}
+    end
   end
 
   def handle_event("create_notebook", %{"name" => name}, socket) when name != "" do
@@ -176,10 +222,21 @@ defmodule LibrarianWeb.VaultLive do
   defp split_tags(s),
     do: s |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
 
-  defp reload_notes(%{assigns: %{selected_notebook_id: nil}}), do: Vault.list_all_notes(limit: 50)
+  defp load_notes(socket, opts) do
+    reset = Keyword.fetch!(opts, :reset)
+    offset = if reset, do: 0, else: socket.assigns.note_offset
 
-  defp reload_notes(%{assigns: %{selected_notebook_id: id}}),
-    do: Vault.list_notes_for_notebook(id)
+    notes =
+      Vault.list_notes(
+        notebook_id: socket.assigns.selected_notebook_id,
+        limit: @page_size,
+        offset: offset
+      )
+
+    socket
+    |> assign(note_offset: offset + length(notes), more_notes?: length(notes) == @page_size)
+    |> stream(:notes, notes, reset: reset)
+  end
 
   defp render_note_body(%Note{clip_mode: "markdown", body: body}) when is_binary(body) do
     MDEx.to_html!(body)

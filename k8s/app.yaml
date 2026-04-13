@@ -15,7 +15,7 @@ spec:
     spec:
       initContainers:
         - name: migrate
-          image: registry.<your-tailnet>.ts.net:5000/the-librarian:latest
+          image: mcginleyr1/the-librarian:latest
           imagePullPolicy: Always
           command: ["/app/bin/librarian", "eval", "Librarian.Release.migrate()"]
           env:
@@ -34,7 +34,7 @@ spec:
                 name: librarian-config
       containers:
         - name: librarian
-          image: registry.<your-tailnet>.ts.net:5000/the-librarian:latest
+          image: mcginleyr1/the-librarian:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 4000

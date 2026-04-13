@@ -1,7 +1,7 @@
 # The Librarian — task runner
 # Usage: just <recipe>
 
-REGISTRY := "registry.<your-tailnet>.ts.net:5000"
+REGISTRY := "mcginleyr1"
 IMAGE := "the-librarian"
 NAMESPACE := "librarian"
 
@@ -62,7 +62,7 @@ db-reset: db-up
 docker-build:
     docker build -t {{REGISTRY}}/{{IMAGE}}:latest .
 
-# Push to local Tailscale registry
+# Push to Docker Hub
 docker-push: docker-build
     docker push {{REGISTRY}}/{{IMAGE}}:latest
 

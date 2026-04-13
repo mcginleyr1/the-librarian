@@ -79,6 +79,23 @@ defmodule Librarian.Vault do
 
   def delete_note(%Note{} = note), do: Repo.delete(note)
 
+  def delete_notes(ids) when is_list(ids) do
+    int_ids =
+      ids
+      |> Enum.map(fn
+        id when is_integer(id) -> id
+        id when is_binary(id) ->
+          case Integer.parse(id) do
+            {n, ""} -> n
+            _ -> nil
+          end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    {count, _} = Repo.delete_all(from n in Note, where: n.id in ^int_ids)
+    {:ok, count}
+  end
+
   def search(query_str, opts \\ []) when is_binary(query_str) do
     limit = Keyword.get(opts, :limit, 50)
     notebook_id = Keyword.get(opts, :notebook_id)
@@ -109,29 +126,6 @@ defmodule Librarian.Vault do
         select: {n.notebook_id, count(n.id)}
     )
     |> Map.new()
-  end
-
-  def list_all_notes(opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
-
-    Repo.all(
-      from n in Note,
-        order_by: [desc: n.inserted_at],
-        limit: ^limit,
-        preload: [:notebook, :tags]
-    )
-  end
-
-  def list_notes_for_notebook(notebook_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
-
-    Repo.all(
-      from n in Note,
-        where: n.notebook_id == ^notebook_id,
-        order_by: [desc: n.inserted_at],
-        limit: ^limit,
-        preload: [:notebook, :tags]
-    )
   end
 
   def update_notebook(%Notebook{} = notebook, attrs) do
