@@ -80,6 +80,32 @@ defmodule Librarian.Discovery do
     Repo.all(query)
   end
 
+  @doc "Candidate counts grouped by status, e.g. %{\"pending\" => 4, \"accepted\" => 1}."
+  def candidate_status_counts do
+    Repo.all(from c in CandidateSource, group_by: c.status, select: {c.status, count(c.id)})
+    |> Map.new()
+  end
+
+  @doc "Feed pool health: counts of manual vs discovered (and active discovered) feeds."
+  def source_counts do
+    rows =
+      Repo.all(
+        from f in Feed,
+          group_by: [f.origin, f.active],
+          select: {f.origin, f.active, count(f.id)}
+      )
+
+    %{
+      manual: sum_where(rows, fn {o, _a, _n} -> o == "manual" end),
+      discovered: sum_where(rows, fn {o, _a, _n} -> o == "discovered" end),
+      discovered_active: sum_where(rows, fn {o, a, _n} -> o == "discovered" and a end)
+    }
+  end
+
+  defp sum_where(rows, pred) do
+    rows |> Enum.filter(pred) |> Enum.reduce(0, fn {_o, _a, n}, acc -> acc + n end)
+  end
+
   @doc """
   Vets a candidate: discover its feed and, if found, subscribe it as a discovered
   feed on probation. Returns `{:ok, :accepted | :rejected}`.

@@ -1,0 +1,120 @@
+<Layouts.reader flash={@flash}>
+  <div class="flex flex-col h-full overflow-hidden">
+    <header class="shrink-0 border-b border-base-300 bg-base-200 px-6 py-3 flex items-center gap-4">
+      <h1 class="text-lg font-bold flex items-center gap-2">
+        <.icon name="hero-chart-bar" class="w-5 h-5 text-primary" /> Feedback Dashboard
+      </h1>
+      <button id="rebuild-model" phx-click="rebuild" class="btn btn-xs btn-primary gap-1">
+        <.icon name="hero-arrow-path" class="w-3 h-3" /> Rebuild model
+      </button>
+      <nav class="ml-auto flex items-center gap-1">
+        <.link navigate="/foryou" class="btn btn-ghost btn-xs">For You</.link>
+        <.link navigate="/reader" class="btn btn-ghost btn-xs">Reader</.link>
+      </nav>
+    </header>
+
+    <div class="flex-1 overflow-y-auto">
+      <div class="max-w-4xl mx-auto px-6 py-6 space-y-6">
+        <%!-- SIGNAL STATS --%>
+        <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div
+            :for={
+              {label, key, icon} <- [
+                {"Likes", "like", "hero-hand-thumb-up"},
+                {"Saves", "save", "hero-bookmark"},
+                {"Dislikes", "dislike", "hero-hand-thumb-down"},
+                {"Opens", "open", "hero-eye"}
+              ]
+            }
+            class="rounded-lg border border-base-300 bg-base-100 p-4"
+          >
+            <div class="text-xs text-base-content/50 flex items-center gap-1">
+              <.icon name={icon} class="w-3.5 h-3.5" /> {label}
+            </div>
+            <div class="text-2xl font-bold mt-1">{Map.get(@summary, key, 0)}</div>
+          </div>
+        </section>
+
+        <div class="grid sm:grid-cols-2 gap-6">
+          <%!-- INTEREST CLUSTERS --%>
+          <section class="rounded-lg border border-base-300 bg-base-100 p-4">
+            <h2 class="font-semibold mb-3 flex items-center gap-2">
+              <.icon name="hero-squares-2x2" class="w-4 h-4" /> Interest clusters
+            </h2>
+            <p :if={@clusters == []} class="text-sm text-base-content/50">
+              No clusters yet — like or save a few articles, then Rebuild model.
+            </p>
+            <ul class="space-y-1.5">
+              <li :for={c <- @clusters} class="flex items-center justify-between text-sm">
+                <span>{c.label}</span>
+                <span class="badge badge-sm badge-ghost">{c.member_count} exemplars</span>
+              </li>
+            </ul>
+          </section>
+
+          <%!-- SOURCE HEALTH --%>
+          <section class="rounded-lg border border-base-300 bg-base-100 p-4">
+            <h2 class="font-semibold mb-3 flex items-center gap-2">
+              <.icon name="hero-rss" class="w-4 h-4" /> Source pool
+            </h2>
+            <dl class="text-sm space-y-1.5">
+              <div class="flex justify-between">
+                <dt class="text-base-content/60">Manual feeds</dt>
+                <dd>{@sources.manual}</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-base-content/60">Discovered feeds</dt>
+                <dd>{@sources.discovered_active} active / {@sources.discovered}</dd>
+              </div>
+              <div class="flex justify-between border-t border-base-200 pt-1.5 mt-1.5">
+                <dt class="text-base-content/60">Candidate domains</dt>
+                <dd>{Map.get(@candidate_counts, "pending", 0)} pending · {Map.get(@candidate_counts, "accepted", 0)} accepted</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+
+        <%!-- TOP TOPICS --%>
+        <section class="rounded-lg border border-base-300 bg-base-100 p-4">
+          <h2 class="font-semibold mb-3 flex items-center gap-2">
+            <.icon name="hero-hashtag" class="w-4 h-4" /> Top topics
+          </h2>
+          <p :if={@topics == []} class="text-sm text-base-content/50">No tagged articles yet.</p>
+          <div class="flex flex-wrap gap-1.5">
+            <span :for={{topic, n} <- @topics} class="badge badge-outline gap-1">
+              {topic} <span class="opacity-50">{n}</span>
+            </span>
+          </div>
+        </section>
+
+        <%!-- DISCOVERED CANDIDATES --%>
+        <section :if={@candidates != []} class="rounded-lg border border-base-300 bg-base-100 p-4">
+          <h2 class="font-semibold mb-3 flex items-center gap-2">
+            <.icon name="hero-magnifying-glass-circle" class="w-4 h-4" /> Candidate sources
+          </h2>
+          <table class="w-full text-sm">
+            <tbody>
+              <tr :for={c <- @candidates} class="border-b border-base-200 last:border-0">
+                <td class="py-1.5">{c.domain}</td>
+                <td class="py-1.5 text-base-content/50">{c.channel}</td>
+                <td class="py-1.5 text-right">
+                  <span class="badge badge-xs">{c.status}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <%!-- REGENERATED PROFILE --%>
+        <section class="rounded-lg border border-base-300 bg-base-100 p-4">
+          <h2 class="font-semibold mb-3 flex items-center gap-2">
+            <.icon name="hero-document-text" class="w-4 h-4" /> Learned profile
+          </h2>
+          <div class="prose prose-sm max-w-none">
+            {Phoenix.HTML.raw(@profile_html)}
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</Layouts.reader>

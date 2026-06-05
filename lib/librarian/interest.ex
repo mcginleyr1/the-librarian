@@ -51,6 +51,45 @@ defmodule Librarian.Interest do
 
   def centroids, do: Repo.all(from c in Centroid, order_by: [desc: c.member_count])
 
+  @doc "Topic frequencies across tagged articles, most common first."
+  def topic_frequencies do
+    Repo.all(from a in Article, where: a.topics != [], select: a.topics)
+    |> List.flatten()
+    |> Enum.frequencies()
+    |> Enum.sort_by(fn {_topic, n} -> -n end)
+  end
+
+  @doc """
+  Regenerates a human-readable interest profile from the learned model, so it
+  stays inspectable and hand-editable. Returns markdown.
+  """
+  def regenerate_profile_doc do
+    summary = Librarian.Stream.signal_summary()
+    clusters = centroids()
+    topics = topic_frequencies()
+
+    """
+    # Learned Interest Profile
+
+    _Regenerated from your behaviour — no longer hand-written._
+
+    ## Signal so far
+
+    - 👍 likes: #{Map.get(summary, "like", 0)}
+    - 💾 saves: #{Map.get(summary, "save", 0)}
+    - 👎 dislikes: #{Map.get(summary, "dislike", 0)}
+    - 👁 opens: #{Map.get(summary, "open", 0)}
+
+    ## Interest clusters (#{length(clusters)})
+
+    #{Enum.map_join(clusters, "\n", fn c -> "- **#{c.label}** — #{c.member_count} exemplars" end)}
+
+    ## Top topics
+
+    #{Enum.map_join(Enum.take(topics, 10), "\n", fn {t, n} -> "- #{t} (#{n})" end)}
+    """
+  end
+
   def centroid_vectors do
     Enum.map(centroids(), &Pgvector.to_list(&1.embedding))
   end
