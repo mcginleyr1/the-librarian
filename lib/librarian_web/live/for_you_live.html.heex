@@ -1,0 +1,103 @@
+<Layouts.reader flash={@flash}>
+  <div class="flex flex-col h-full overflow-hidden">
+    <%!-- TOP BAR --%>
+    <header class="shrink-0 border-b border-base-300 bg-base-200 px-6 py-3 flex items-center gap-4">
+      <h1 class="text-lg font-bold flex items-center gap-2">
+        <.icon name="hero-sparkles" class="w-5 h-5 text-primary" /> For You
+      </h1>
+      <div class="text-xs text-base-content/50 flex items-center gap-3">
+        <span>{@count} ranked</span>
+        <span>· {@centroid_count} interest clusters</span>
+        <span :if={Map.get(@summary, "like", 0) > 0}>· {Map.get(@summary, "like", 0)} likes</span>
+        <span :if={Map.get(@summary, "dislike", 0) > 0}>
+          · {Map.get(@summary, "dislike", 0)} dislikes
+        </span>
+      </div>
+      <nav class="ml-auto flex items-center gap-1">
+        <.link navigate="/reader" class="btn btn-ghost btn-xs">Reader</.link>
+        <.link navigate="/vault" class="btn btn-ghost btn-xs">Vault</.link>
+        <.link navigate="/dashboard" class="btn btn-ghost btn-xs">Dashboard</.link>
+      </nav>
+    </header>
+
+    <%!-- STREAM --%>
+    <div class="flex-1 overflow-y-auto">
+      <div class="max-w-2xl mx-auto px-4 py-6 space-y-3">
+        <div
+          :if={@empty?}
+          class="text-center text-base-content/50 py-20"
+        >
+          <div class="text-5xl mb-4">✺</div>
+          <p class="text-lg">Your stream is still learning.</p>
+          <p class="text-sm mt-2">
+            Like or save a few articles in the
+            <.link navigate="/reader" class="link link-primary">Reader</.link>
+            and they'll shape what shows up here.
+          </p>
+        </div>
+
+        <div id="for-you-stream" phx-update="stream" class="space-y-3">
+          <article
+            :for={{dom_id, entry} <- @streams.entries}
+            id={dom_id}
+            class="rounded-lg border border-base-300 bg-base-100 p-4 hover:border-base-content/20 transition-colors"
+          >
+            <div class="flex items-center gap-2 text-xs text-base-content/50 mb-1">
+              <span class="font-medium">{entry.article.feed && entry.article.feed.title}</span>
+              <span :if={entry.article.published_at}>
+                · {Calendar.strftime(entry.article.published_at, "%b %d")}
+              </span>
+              <span
+                :if={entry.exploration}
+                class="badge badge-xs badge-secondary gap-1"
+                title="Exploration slot"
+              >
+                <.icon name="hero-beaker" class="w-3 h-3" /> explore
+              </span>
+              <span class="badge badge-xs badge-ghost ml-auto" title="Predicted interest score">
+                {:erlang.float_to_binary(entry.score, decimals: 2)}
+              </span>
+            </div>
+
+            <h2 class="text-base font-semibold leading-snug mb-1">
+              <a href={entry.article.url} target="_blank" rel="noopener noreferrer" class="hover:text-primary">
+                {entry.article.title || entry.article.url || "(no title)"}
+              </a>
+            </h2>
+
+            <p class="text-xs text-base-content/40 italic mb-3 flex items-center gap-1">
+              <.icon name="hero-information-circle" class="w-3 h-3 shrink-0" /> {entry.why}
+            </p>
+
+            <div class="flex items-center gap-1">
+              <button
+                phx-click="feedback"
+                phx-value-id={entry.article.id}
+                phx-value-kind="like"
+                class="btn btn-xs btn-ghost gap-1 hover:text-success"
+              >
+                <.icon name="hero-hand-thumb-up" class="w-3.5 h-3.5" /> Like
+              </button>
+              <button
+                phx-click="feedback"
+                phx-value-id={entry.article.id}
+                phx-value-kind="dislike"
+                class="btn btn-xs btn-ghost gap-1 hover:text-error"
+              >
+                <.icon name="hero-hand-thumb-down" class="w-3.5 h-3.5" /> Dislike
+              </button>
+              <button
+                phx-click="feedback"
+                phx-value-id={entry.article.id}
+                phx-value-kind="save"
+                class="btn btn-xs btn-ghost gap-1 hover:text-primary"
+              >
+                <.icon name="hero-bookmark" class="w-3.5 h-3.5" /> Save
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layouts.reader>

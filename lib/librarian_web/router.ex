@@ -19,6 +19,8 @@ defmodule LibrarianWeb.Router do
 
     get "/", PageController, :home
 
+    live "/foryou", ForYouLive, :index
+
     live "/reader", ReaderLive, :index
     live "/reader/feed/:feed_id", ReaderLive, :feed
     live "/reader/category/:category", ReaderLive, :category
