@@ -16,7 +16,9 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: pgvector/pgvector:pg16
+          # Postgres 16 + pgvector on the same glibc-2.41 base as stock postgres:16
+          # (avoids a collation-version mismatch). Built from k8s/postgres-pgvector/Dockerfile.
+          image: registry.<your-tailnet>.ts.net:5000/postgres-pgvector:16
           env:
             - name: POSTGRES_DB
               value: librarian_prod
