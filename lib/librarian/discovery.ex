@@ -23,19 +23,55 @@ defmodule Librarian.Discovery do
 
   @prune_threshold 0.05
   @prune_min_opens 8
+  @aggregator_hosts ~w(news.ycombinator.com lobste.rs reddit.com slashdot.org)
 
-  @doc "Mines liked/saved articles for new outbound domains. Returns candidates upserted."
+  @doc "Mines liked/saved articles for new outbound domains (link-graph channel)."
   def harvest_link_graph do
-    existing = existing_domains()
-
     Stream.positive_article_ids()
     |> articles_with_content()
+    |> harvest_domains("link_graph")
+  end
+
+  @doc """
+  Mines aggregator feeds (HN/Lobsters/Reddit/Slashdot) for new outbound domains,
+  independent of what the user has reacted to (aggregator channel).
+  """
+  def harvest_aggregators(opts \\ []) do
+    limit = Keyword.get(opts, :per_feed, 50)
+
+    aggregator_articles(limit)
+    |> harvest_domains("aggregator")
+  end
+
+  defp harvest_domains(articles, channel) do
+    existing = existing_domains()
+
+    articles
     |> Enum.flat_map(fn a -> Enum.map(extract_domains(a.content), &{&1, a.id}) end)
     |> Enum.reject(fn {domain, _id} -> is_nil(domain) or MapSet.member?(existing, domain) end)
     |> Enum.group_by(fn {domain, _id} -> domain end)
     |> Enum.map(fn {domain, hits} ->
-      upsert_candidate(domain, "link_graph", elem(hd(hits), 1), length(hits))
+      upsert_candidate(domain, channel, elem(hd(hits), 1), length(hits))
     end)
+  end
+
+  defp aggregator_articles(limit) do
+    feed_ids =
+      Repo.all(
+        from f in Feed,
+          where:
+            f.category == "aggregators" or
+              fragment("split_part(?, '/', 3)", f.feed_url) in ^@aggregator_hosts,
+          select: f.id
+      )
+
+    Repo.all(
+      from a in Article,
+        where: a.feed_id in ^feed_ids and not is_nil(a.content),
+        order_by: [desc: a.published_at],
+        limit: ^limit,
+        select: %{id: a.id, content: a.content}
+    )
   end
 
   def list_candidates(status \\ nil) do

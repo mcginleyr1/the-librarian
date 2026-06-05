@@ -48,6 +48,20 @@ defmodule Librarian.DiscoveryTest do
     refute "news.ycombinator.com" in domains
   end
 
+  test "harvest_aggregators mines outbound domains from aggregator feeds without needing a like" do
+    _article =
+      article_with_links(~s(<a href="https://danluu.com/post">deep dive</a>))
+
+    # no interaction at all — aggregator mining is interaction-independent
+    Discovery.harvest_aggregators()
+
+    domains = Discovery.list_candidates() |> Enum.map(& &1.domain)
+    assert "danluu.com" in domains
+
+    candidate = Discovery.list_candidates() |> Enum.find(&(&1.domain == "danluu.com"))
+    assert candidate.channel == "aggregator"
+  end
+
   test "prune leaves engaged feeds alone" do
     article = article_with_links("<p>no links</p>")
     Stream.record_interaction(article.id, :like)

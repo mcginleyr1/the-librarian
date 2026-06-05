@@ -9,8 +9,12 @@ defmodule Librarian.Workers.DiscoverSourcesWorker do
 
   @impl Oban.Worker
   def perform(_job) do
-    candidates = Discovery.harvest_link_graph()
-    Logger.info("DiscoverSourcesWorker: #{length(candidates)} candidate domains")
+    link_graph = Discovery.harvest_link_graph()
+    aggregator = Discovery.harvest_aggregators()
+
+    Logger.info(
+      "DiscoverSourcesWorker: #{length(link_graph)} link-graph + #{length(aggregator)} aggregator candidates"
+    )
 
     Discovery.list_candidates("pending")
     |> Enum.each(fn c -> %{"id" => c.id} |> VetCandidateSourceWorker.new() |> Oban.insert() end)
