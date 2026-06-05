@@ -1,6 +1,10 @@
 # Postgres 16 + pgvector on the SAME base image the data was created with
 # (glibc 2.41), so there is no collation-version mismatch and no REINDEX needed.
-# Built and pushed to the local Tailscale registry; referenced by k8s/postgres.yaml.
+# Build + push to the internal registry, then the postgres StatefulSet pulls it.
+#
+#   docker build --platform linux/arm64 \
+#     -t registry.<your-tailnet>.ts.net:5000/postgres-pgvector:16 k8s/postgres-pgvector/
+#   docker push registry.<your-tailnet>.ts.net:5000/postgres-pgvector:16
 FROM postgres:16
 
 RUN apt-get update \
