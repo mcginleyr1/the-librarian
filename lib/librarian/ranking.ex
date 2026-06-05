@@ -22,26 +22,42 @@ defmodule Librarian.Ranking do
   """
   def rank_stream(opts \\ []) do
     limit = Keyword.get(opts, :limit, 30)
+    topic = Keyword.get(opts, :topic)
 
     centroids = Interest.centroid_vectors()
     negatives = Interest.negative_embeddings()
     disliked = MapSet.new(Stream.negative_article_ids())
 
-    candidates()
+    candidates(topic)
     |> Enum.reject(&MapSet.member?(disliked, &1.id))
     |> Enum.map(&score(&1, centroids, negatives))
     |> Enum.sort_by(& &1.score, :desc)
     |> with_exploration(limit)
   end
 
-  defp candidates do
+  @doc "Distinct topics present across current candidates, for topic-lens chips."
+  def available_topics do
     Repo.all(
+      from a in Article,
+        where: not is_nil(a.embedding) and a.topics != [],
+        select: a.topics
+    )
+    |> List.flatten()
+    |> Enum.frequencies()
+    |> Enum.sort_by(fn {_t, n} -> -n end)
+    |> Enum.map(&elem(&1, 0))
+  end
+
+  defp candidates(topic) do
+    base =
       from a in Article,
         where: not is_nil(a.embedding),
         order_by: [desc: a.published_at],
         limit: 200,
         preload: [:feed, :read_state]
-    )
+
+    query = if topic, do: from(a in base, where: ^topic in a.topics), else: base
+    Repo.all(query)
   end
 
   defp score(article, centroids, negatives) do
@@ -60,8 +76,11 @@ defmodule Librarian.Ranking do
     }
   end
 
-  defp why(_article, affinity, penalty) do
+  defp why(article, affinity, penalty) do
     cond do
+      article.topics && article.topics != [] ->
+        "Matches your interest in #{Enum.join(Enum.take(article.topics, 2), ", ")}"
+
       penalty > affinity ->
         "Similar to things you've passed on — shown to keep your stream broad"
 

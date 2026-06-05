@@ -13,6 +13,14 @@ defmodule Librarian.Reader.Article do
     field :fetched_at, :utc_datetime
     field :embedding, Pgvector.Ecto.Vector
 
+    # Structured tags (P3): written by the tagging pass / host judge agent
+    field :topics, {:array, :string}, default: []
+    field :entities, {:array, :map}, default: []
+    field :content_type, :string
+    field :depth_score, :float
+    field :judge_score, :float
+    field :tagged_at, :utc_datetime
+
     belongs_to :feed, Librarian.Reader.Feed
     has_one :read_state, Librarian.Reader.ReadState
 

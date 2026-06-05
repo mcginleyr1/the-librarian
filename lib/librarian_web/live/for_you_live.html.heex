@@ -20,6 +20,22 @@
       </nav>
     </header>
 
+    <%!-- TOPIC LENS CHIPS --%>
+    <div :if={@topics != []} class="shrink-0 border-b border-base-300 px-6 py-2 flex items-center gap-1.5 flex-wrap">
+      <span class="text-xs text-base-content/40 mr-1">Lenses:</span>
+      <button
+        :for={topic <- @topics}
+        phx-click="filter_topic"
+        phx-value-topic={topic}
+        class={[
+          "btn btn-xs",
+          if(@active_topic == topic, do: "btn-primary", else: "btn-ghost border border-base-300")
+        ]}
+      >
+        {topic}
+      </button>
+    </div>
+
     <%!-- STREAM --%>
     <div class="flex-1 overflow-y-auto">
       <div class="max-w-2xl mx-auto px-4 py-6 space-y-3">

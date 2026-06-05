@@ -7,7 +7,12 @@ defmodule LibrarianWeb.ForYouLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(summary: Stream.signal_summary(), centroid_count: length(Interest.centroids()))
+     |> assign(
+       summary: Stream.signal_summary(),
+       centroid_count: length(Interest.centroids()),
+       topics: Ranking.available_topics(),
+       active_topic: nil
+     )
      |> load_stream()}
   end
 
@@ -23,9 +28,14 @@ defmodule LibrarianWeb.ForYouLive do
      |> load_stream()}
   end
 
+  def handle_event("filter_topic", %{"topic" => topic}, socket) do
+    active = if socket.assigns.active_topic == topic, do: nil, else: topic
+    {:noreply, socket |> assign(active_topic: active) |> load_stream()}
+  end
+
   defp load_stream(socket) do
     entries =
-      Ranking.rank_stream(limit: 30)
+      Ranking.rank_stream(limit: 30, topic: socket.assigns.active_topic)
       |> Enum.map(&Map.put(&1, :id, &1.article.id))
 
     socket

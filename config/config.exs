@@ -70,10 +70,13 @@ config :librarian, Oban,
      crontab: [
        {"0 */2 * * *", Librarian.Workers.ScheduleFeedsWorker},
        {"30 5,17 * * *", Librarian.Workers.CurateFeedsWorker},
-       {"0 2 * * *", Librarian.Workers.BackupWorker}
+       {"0 2 * * *", Librarian.Workers.BackupWorker},
+       {"15 */2 * * *", Librarian.Workers.TagArticlesWorker},
+       {"45 3 * * *", Librarian.Workers.DiscoverSourcesWorker},
+       {"50 3 * * *", Librarian.Workers.PruneSourcesWorker}
      ]}
   ],
-  queues: [feeds: 5, vault: 2, backup: 1]
+  queues: [feeds: 5, vault: 2, backup: 1, stream: 3]
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
