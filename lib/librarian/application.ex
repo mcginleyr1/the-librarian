@@ -25,7 +25,14 @@ defmodule Librarian.Application do
 
   defp embedding_children do
     if Application.get_env(:librarian, :start_embedding_serving, false) do
-      [Librarian.Embeddings.child_spec([])]
+      try do
+        [Librarian.Embeddings.child_spec([])]
+      rescue
+        e ->
+          require Logger
+          Logger.error("Embedding serving disabled (model load failed): #{inspect(e)}")
+          []
+      end
     else
       []
     end

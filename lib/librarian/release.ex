@@ -14,6 +14,21 @@ defmodule Librarian.Release do
     {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))
   end
 
+  @doc "Seeds reviewable demo data when DEMO_SEED=true. Safe to run repeatedly."
+  def seed_demo do
+    if System.get_env("DEMO_SEED") == "true" do
+      load_app()
+
+      {:ok, result, _} =
+        Ecto.Migrator.with_repo(Librarian.Repo, fn _ -> Librarian.DemoSeed.run() end)
+
+      IO.puts("DemoSeed: #{inspect(result)}")
+      result
+    else
+      :skipped
+    end
+  end
+
   @doc """
   Import feeds from an OPML file. Safe to run multiple times (idempotent).
 

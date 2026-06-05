@@ -18,7 +18,8 @@ services:
   app:
     build: .
     ports:
-      - "4000:4000"
+      # host 4100 (4000 is commonly taken locally); app listens on 4000 inside
+      - "4100:4000"
     environment:
       DATABASE_URL: ecto://postgres:postgres@postgres/librarian_dev
       SECRET_KEY_BASE: peLd1YPfCPPv3RhGD2FCY08OM8NlWEQgOIv3S3xwUslDN+nhHHoqcnGhYarJeqHO
@@ -26,13 +27,15 @@ services:
       STORAGE_PATH: /data/librarian
       PORT: "4000"
       PHX_SERVER: "true"
+      # Demo review: seed baked data, skip the model load, keep Nx off EXLA at runtime
+      DEMO_SEED: "true"
+      START_EMBEDDING_SERVING: "false"
+      NX_BINARY_BACKEND: "true"
     volumes:
       - app_data:/data
     depends_on:
       postgres:
         condition: service_healthy
-    profiles:
-      - full
 
 volumes:
   postgres_data:

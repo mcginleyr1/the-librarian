@@ -41,6 +41,15 @@ if config_env() == :prod do
     # pool_count: 4,
     socket_options: maybe_ipv6
 
+  # Embedding serving and Nx backend are env-toggleable so a demo/review container
+  # can boot fast with no model load (baked embeddings) and no EXLA at runtime.
+  config :librarian,
+    start_embedding_serving: System.get_env("START_EMBEDDING_SERVING", "true") == "true"
+
+  if System.get_env("NX_BINARY_BACKEND") == "true" do
+    config :nx, default_backend: Nx.BinaryBackend
+  end
+
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
   # want to use a different value for prod and you most likely don't want

@@ -19,12 +19,14 @@ defmodule LibrarianWeb.ForYouLive do
   @impl true
   def handle_event("feedback", %{"id" => id, "kind" => kind}, socket) do
     Stream.record_interaction(String.to_integer(id), kind)
-    Interest.rebuild()
 
     {:noreply,
      socket
-     |> assign(summary: Stream.signal_summary(), centroid_count: length(Interest.centroids()))
-     |> put_flash(:info, "Tuned your stream — re-ranking.")
+     |> assign(summary: Stream.signal_summary())
+     |> put_flash(
+       :info,
+       "Got it — re-ranking. Rebuild the model from the Dashboard to fold this in."
+     )
      |> load_stream()}
   end
 

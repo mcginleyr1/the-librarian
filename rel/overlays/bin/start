@@ -4,5 +4,8 @@ set -e
 echo "Running migrations..."
 /app/bin/librarian eval "Librarian.Release.migrate()"
 
+echo "Seeding demo data (if DEMO_SEED=true)..."
+/app/bin/librarian eval "Librarian.Release.seed_demo()"
+
 echo "Starting server..."
 exec /app/bin/librarian start
