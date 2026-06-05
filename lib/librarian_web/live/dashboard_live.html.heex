@@ -1,15 +1,36 @@
 <Layouts.reader flash={@flash}>
-  <div class="flex flex-col h-full overflow-hidden">
-    <header class="shrink-0 border-b border-base-300 bg-base-200 px-6 py-3 flex items-center gap-4">
-      <h1 class="text-lg font-bold flex items-center gap-2">
-        <.icon name="hero-chart-bar" class="w-5 h-5 text-primary" /> Feedback Dashboard
-      </h1>
-      <button id="rebuild-model" phx-click="rebuild" class="btn btn-xs btn-primary gap-1">
-        <.icon name="hero-arrow-path" class="w-3 h-3" /> Rebuild model
+  <div class="flex flex-col h-full overflow-hidden bg-base-200/40">
+    <%!-- TOP BAR --%>
+    <header class="shrink-0 border-b border-base-300 bg-gradient-to-r from-primary/10 via-base-100 to-base-100 px-6 py-3 flex items-center gap-4">
+      <div class="flex items-center gap-2.5">
+        <div class="size-9 rounded-xl bg-primary/15 text-primary grid place-items-center">
+          <.icon name="hero-chart-bar" class="size-5" />
+        </div>
+        <h1 class="text-base font-bold tracking-tight">Feedback Dashboard</h1>
+      </div>
+      <button
+        id="rebuild-model"
+        phx-click="rebuild"
+        class="press btn btn-sm btn-primary gap-1.5 ml-2"
+      >
+        <.icon name="hero-arrow-path" class="size-4" /> Rebuild model
       </button>
-      <nav class="ml-auto flex items-center gap-1">
-        <.link navigate="/foryou" class="btn btn-ghost btn-xs">For You</.link>
-        <.link navigate="/reader" class="btn btn-ghost btn-xs">Reader</.link>
+      <nav class="ml-auto flex items-center gap-1 rounded-full bg-base-200 p-1">
+        <.link
+          navigate="/foryou"
+          class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
+        >
+          For You
+        </.link>
+        <.link
+          navigate="/reader"
+          class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
+        >
+          Reader
+        </.link>
+        <span class="rounded-full bg-base-100 shadow-sm px-3 py-1 text-xs font-semibold">
+          Dashboard
+        </span>
       </nav>
     </header>
 
@@ -19,86 +40,141 @@
         <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div
             :for={
-              {label, key, icon} <- [
-                {"Likes", "like", "hero-hand-thumb-up"},
-                {"Saves", "save", "hero-bookmark"},
-                {"Dislikes", "dislike", "hero-hand-thumb-down"},
-                {"Opens", "open", "hero-eye"}
+              {label, key, icon, ring, text} <- [
+                {"Likes", "like", "hero-hand-thumb-up", "bg-success", "text-success"},
+                {"Saves", "save", "hero-bookmark", "bg-primary", "text-primary"},
+                {"Dislikes", "dislike", "hero-hand-thumb-down", "bg-error", "text-error"},
+                {"Opens", "open", "hero-eye", "bg-info", "text-info"}
               ]
             }
-            class="rounded-lg border border-base-300 bg-base-100 p-4"
+            class="stat-card prism-in rounded-xl border border-base-300 bg-base-100 p-4 relative overflow-hidden"
           >
-            <div class="text-xs text-base-content/50 flex items-center gap-1">
-              <.icon name={icon} class="w-3.5 h-3.5" /> {label}
+            <div class={["absolute -right-3 -top-3 size-16 rounded-full opacity-10", ring]}></div>
+            <div class={["inline-flex items-center gap-1 text-xs font-medium", text]}>
+              <.icon name={icon} class="size-3.5" /> {label}
             </div>
-            <div class="text-2xl font-bold mt-1">{Map.get(@summary, key, 0)}</div>
+            <div class="text-3xl font-bold mt-1 tabular-nums">{Map.get(@summary, key, 0)}</div>
           </div>
         </section>
 
         <div class="grid sm:grid-cols-2 gap-6">
           <%!-- INTEREST CLUSTERS --%>
-          <section class="rounded-lg border border-base-300 bg-base-100 p-4">
-            <h2 class="font-semibold mb-3 flex items-center gap-2">
-              <.icon name="hero-squares-2x2" class="w-4 h-4" /> Interest clusters
+          <section class="rounded-xl border border-base-300 bg-base-100 p-5">
+            <h2 class="font-semibold mb-4 flex items-center gap-2">
+              <.icon name="hero-squares-2x2" class="size-4 text-primary" /> Interest clusters
             </h2>
             <p :if={@clusters == []} class="text-sm text-base-content/50">
               No clusters yet — like or save a few articles, then Rebuild model.
             </p>
-            <ul class="space-y-1.5">
-              <li :for={c <- @clusters} class="flex items-center justify-between text-sm">
-                <span>{c.label}</span>
-                <span class="badge badge-sm badge-ghost">{c.member_count} exemplars</span>
+            <% max_c = Enum.max([1 | Enum.map(@clusters, & &1.member_count)]) %>
+            <ul class="space-y-3">
+              <li :for={c <- @clusters}>
+                <div class="flex items-center justify-between text-sm mb-1">
+                  <span class="font-medium">{c.label}</span>
+                  <span class="text-xs text-base-content/50 tabular-nums">
+                    {c.member_count} exemplars
+                  </span>
+                </div>
+                <div class="h-2 rounded-full bg-base-200 overflow-hidden">
+                  <div
+                    class="h-full rounded-full bg-primary"
+                    style={"width: #{round(c.member_count / max_c * 100)}%"}
+                  >
+                  </div>
+                </div>
               </li>
             </ul>
           </section>
 
-          <%!-- SOURCE HEALTH --%>
-          <section class="rounded-lg border border-base-300 bg-base-100 p-4">
-            <h2 class="font-semibold mb-3 flex items-center gap-2">
-              <.icon name="hero-rss" class="w-4 h-4" /> Source pool
+          <%!-- SOURCE POOL --%>
+          <section class="rounded-xl border border-base-300 bg-base-100 p-5">
+            <h2 class="font-semibold mb-4 flex items-center gap-2">
+              <.icon name="hero-rss" class="size-4 text-primary" /> Source pool
             </h2>
-            <dl class="text-sm space-y-1.5">
-              <div class="flex justify-between">
-                <dt class="text-base-content/60">Manual feeds</dt>
-                <dd>{@sources.manual}</dd>
+            <% total_src = max(@sources.manual + @sources.discovered, 1) %>
+            <div class="h-3 rounded-full overflow-hidden flex mb-2">
+              <div
+                class="bg-neutral"
+                style={"width: #{round(@sources.manual / total_src * 100)}%"}
+              >
               </div>
-              <div class="flex justify-between">
-                <dt class="text-base-content/60">Discovered feeds</dt>
-                <dd>{@sources.discovered_active} active / {@sources.discovered}</dd>
+              <div
+                class="bg-accent"
+                style={"width: #{round(@sources.discovered / total_src * 100)}%"}
+              >
               </div>
-              <div class="flex justify-between border-t border-base-200 pt-1.5 mt-1.5">
-                <dt class="text-base-content/60">Candidate domains</dt>
-                <dd>{Map.get(@candidate_counts, "pending", 0)} pending · {Map.get(@candidate_counts, "accepted", 0)} accepted</dd>
-              </div>
-            </dl>
+            </div>
+            <div class="flex items-center gap-4 text-xs mb-4">
+              <span class="flex items-center gap-1.5">
+                <span class="size-2.5 rounded-sm bg-neutral"></span> {@sources.manual} manual
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="size-2.5 rounded-sm bg-accent"></span>
+                {@sources.discovered_active}/{@sources.discovered} discovered active
+              </span>
+            </div>
+            <div class="rounded-lg bg-base-200/60 p-3 text-sm flex items-center justify-between">
+              <span class="text-base-content/60 flex items-center gap-1.5">
+                <.icon name="hero-magnifying-glass-circle" class="size-4" /> Candidate domains
+              </span>
+              <span class="tabular-nums">
+                {Map.get(@candidate_counts, "pending", 0)} pending · {Map.get(
+                  @candidate_counts,
+                  "accepted",
+                  0
+                )} accepted
+              </span>
+            </div>
           </section>
         </div>
 
         <%!-- TOP TOPICS --%>
-        <section class="rounded-lg border border-base-300 bg-base-100 p-4">
-          <h2 class="font-semibold mb-3 flex items-center gap-2">
-            <.icon name="hero-hashtag" class="w-4 h-4" /> Top topics
+        <section class="rounded-xl border border-base-300 bg-base-100 p-5">
+          <h2 class="font-semibold mb-4 flex items-center gap-2">
+            <.icon name="hero-hashtag" class="size-4 text-primary" /> Top topics
           </h2>
           <p :if={@topics == []} class="text-sm text-base-content/50">No tagged articles yet.</p>
-          <div class="flex flex-wrap gap-1.5">
-            <span :for={{topic, n} <- @topics} class="badge badge-outline gap-1">
-              {topic} <span class="opacity-50">{n}</span>
+          <% max_t = Enum.max([1 | Enum.map(@topics, fn {_t, n} -> n end)]) %>
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              :for={{topic, n} <- @topics}
+              class="rounded-full bg-primary/10 text-primary px-3 py-1 font-medium"
+              style={"font-size: #{0.75 + n / max_t * 0.5}rem"}
+            >
+              {topic} <span class="opacity-50 text-xs align-top">{n}</span>
             </span>
           </div>
         </section>
 
         <%!-- DISCOVERED CANDIDATES --%>
-        <section :if={@candidates != []} class="rounded-lg border border-base-300 bg-base-100 p-4">
+        <section :if={@candidates != []} class="rounded-xl border border-base-300 bg-base-100 p-5">
           <h2 class="font-semibold mb-3 flex items-center gap-2">
-            <.icon name="hero-magnifying-glass-circle" class="w-4 h-4" /> Candidate sources
+            <.icon name="hero-magnifying-glass-circle" class="size-4 text-primary" />
+            Candidate sources
           </h2>
           <table class="w-full text-sm">
             <tbody>
-              <tr :for={c <- @candidates} class="border-b border-base-200 last:border-0">
-                <td class="py-1.5">{c.domain}</td>
-                <td class="py-1.5 text-base-content/50">{c.channel}</td>
-                <td class="py-1.5 text-right">
-                  <span class="badge badge-xs">{c.status}</span>
+              <tr
+                :for={c <- @candidates}
+                class="border-b border-base-200 last:border-0 hover:bg-base-200/40 transition"
+              >
+                <td class="py-2 font-medium">{c.domain}</td>
+                <td class="py-2 text-base-content/50">
+                  <span class="rounded bg-base-200 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                    {c.channel}
+                  </span>
+                </td>
+                <td class="py-2 text-right">
+                  <span class={[
+                    "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                    case c.status do
+                      "accepted" -> "bg-success/15 text-success"
+                      "rejected" -> "bg-error/15 text-error"
+                      _ -> "bg-warning/15 text-warning"
+                    end
+                  ]}>
+                    {c.status}
+                  </span>
                 </td>
               </tr>
             </tbody>
@@ -106,11 +182,14 @@
         </section>
 
         <%!-- REGENERATED PROFILE --%>
-        <section class="rounded-lg border border-base-300 bg-base-100 p-4">
+        <section class="rounded-xl border border-base-300 bg-base-100 p-5">
           <h2 class="font-semibold mb-3 flex items-center gap-2">
-            <.icon name="hero-document-text" class="w-4 h-4" /> Learned profile
+            <.icon name="hero-document-text" class="size-4 text-primary" /> Learned profile
+            <span class="text-[11px] font-normal text-base-content/40">
+              regenerated from behaviour
+            </span>
           </h2>
-          <div class="prose prose-sm max-w-none">
+          <div class="prose prose-sm max-w-none prose-headings:font-semibold">
             {Phoenix.HTML.raw(@profile_html)}
           </div>
         </section>

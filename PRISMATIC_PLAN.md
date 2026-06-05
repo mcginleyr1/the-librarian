@@ -131,11 +131,13 @@ seed vector → initial centroids. Assign positives to nearest seed. Working mod
   - Dev/test DB moved to host port **5433** (5432 is held by an unrelated `trace-db` container). `docker compose up -d postgres` runs it.
   - **Verified end-to-end:** real MiniLM embeddings stored + read back at 384-dim; cosine query "supervising BEAM processes that crash" correctly ranked an OTP article above a Postgres one. Tests 96/97 (the 1 failure — `cleanup_worker_test` — is a pre-existing 60d-vs-365d cutoff mismatch, unrelated).
   - **Backfill** runs against whatever DB the app points at; the real vault lives in prod, so `mix librarian.embed_backfill` is run there (not via `just deploy`).
-- **P1** — `interactions` log + 👍/👎 UI. Start collecting signal before it's needed.
-- **P2** — `Interest` model seeded from the vault; "For You" stream alongside the existing reader.
-- **P3** — reframed agent: structured tags + judge score; topic-lens chips; "why am I seeing this."
-- **P4** — discovery: link-graph channel, auto-vet, probation/prune.
-- **P5** — aggregator-mining channel.
+- **P1** ✅ — `interactions` event log + 👍/👎 reader UI; `Librarian.Stream` signal capture.
+- **P2** ✅ — `Interest` model (k-means clusters from signals + vault embeddings) + `Ranking` (affinity/penalty/recency + exploration) + `ForYouLive` at `/foryou`.
+- **P3** ✅ — `Librarian.Tagging` (heuristic topics/content-type; `judge/1` seam for the host agent); topic-lens chips; topic-aware "why". `TagArticlesWorker`.
+- **P4** ✅ — `Librarian.Discovery`: link-graph harvest, vetting via `FeedDiscoverer`, like-rate/prune. candidate_sources + feeds.origin/trust_score/like_rate. Discover/Vet/Prune workers.
+- **P5** ✅ — aggregator-mining channel (`harvest_aggregators`, HN/Lobsters/Reddit/Slashdot).
+- **P6** ✅ — `DashboardLive` at `/dashboard`: signal stats, clusters, source pool, top topics, candidates, regenerated profile (MDEx). `Interest.regenerate_profile_doc`.
+- **Demo/review** — `priv/repo/gen_demo_seed.exs` bakes embeddings+centroids into JSON; `Librarian.DemoSeed` seeds on boot (`DEMO_SEED=true`); `docker compose up --build` serves on host **:4100** (serving off + Nx binary backend so no model/EXLA needed at runtime).
 - **P6** — refinement, feedback dashboard, profile-doc regeneration.
 
 ## Open risks

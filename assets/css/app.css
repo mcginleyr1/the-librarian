@@ -127,3 +127,25 @@
 /* Note body */
 .note-body p { margin-bottom: 0.75em; line-height: 1.6; }
 .note-body a { text-decoration: underline; }
+
+/* Prismatic — stream & dashboard micro-interactions */
+.stream-card { transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+.stream-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px -14px oklch(0% 0 0 / 0.28);
+  border-color: oklch(var(--color-primary) / 0.35);
+}
+.stat-card { transition: transform .15s ease, box-shadow .15s ease; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -14px oklch(0% 0 0 / 0.22); }
+.press { transition: transform .1s ease; }
+.press:active { transform: scale(.94); }
+
+@keyframes prism-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.prism-in { animation: prism-in .22s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .prism-in { animation: none; }
+  .stream-card:hover, .stat-card:hover { transform: none; }
+}

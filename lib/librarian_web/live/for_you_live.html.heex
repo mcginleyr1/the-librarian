@@ -1,51 +1,100 @@
 <Layouts.reader flash={@flash}>
-  <div class="flex flex-col h-full overflow-hidden">
+  <div class="flex flex-col h-full overflow-hidden bg-base-200/40">
     <%!-- TOP BAR --%>
-    <header class="shrink-0 border-b border-base-300 bg-base-200 px-6 py-3 flex items-center gap-4">
-      <h1 class="text-lg font-bold flex items-center gap-2">
-        <.icon name="hero-sparkles" class="w-5 h-5 text-primary" /> For You
-      </h1>
-      <div class="text-xs text-base-content/50 flex items-center gap-3">
-        <span>{@count} ranked</span>
-        <span>· {@centroid_count} interest clusters</span>
-        <span :if={Map.get(@summary, "like", 0) > 0}>· {Map.get(@summary, "like", 0)} likes</span>
-        <span :if={Map.get(@summary, "dislike", 0) > 0}>
-          · {Map.get(@summary, "dislike", 0)} dislikes
-        </span>
-      </div>
-      <nav class="ml-auto flex items-center gap-1">
-        <.link navigate="/reader" class="btn btn-ghost btn-xs">Reader</.link>
-        <.link navigate="/vault" class="btn btn-ghost btn-xs">Vault</.link>
-        <.link navigate="/dashboard" class="btn btn-ghost btn-xs">Dashboard</.link>
-      </nav>
-    </header>
+    <header class="shrink-0 border-b border-base-300 bg-gradient-to-r from-primary/10 via-base-100 to-base-100 backdrop-blur">
+      <div class="px-6 py-3 flex items-center gap-4">
+        <div class="flex items-center gap-2.5">
+          <div class="size-9 rounded-xl bg-primary/15 text-primary grid place-items-center">
+            <.icon name="hero-sparkles" class="size-5" />
+          </div>
+          <div class="leading-tight">
+            <h1 class="text-base font-bold tracking-tight">For You</h1>
+            <p class="text-[11px] text-base-content/50">
+              {@count} ranked · {@centroid_count} interest clusters
+            </p>
+          </div>
+        </div>
 
-    <%!-- TOPIC LENS CHIPS --%>
-    <div :if={@topics != []} class="shrink-0 border-b border-base-300 px-6 py-2 flex items-center gap-1.5 flex-wrap">
-      <span class="text-xs text-base-content/40 mr-1">Lenses:</span>
-      <button
-        :for={topic <- @topics}
-        phx-click="filter_topic"
-        phx-value-topic={topic}
-        class={[
-          "btn btn-xs",
-          if(@active_topic == topic, do: "btn-primary", else: "btn-ghost border border-base-300")
-        ]}
-      >
-        {topic}
-      </button>
-    </div>
+        <div class="hidden sm:flex items-center gap-1.5 ml-2">
+          <span class="inline-flex items-center gap-1 rounded-full bg-success/10 text-success px-2 py-0.5 text-xs font-medium">
+            <.icon name="hero-hand-thumb-up-solid" class="size-3" /> {Map.get(@summary, "like", 0)}
+          </span>
+          <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">
+            <.icon name="hero-bookmark-solid" class="size-3" /> {Map.get(@summary, "save", 0)}
+          </span>
+          <span class="inline-flex items-center gap-1 rounded-full bg-error/10 text-error px-2 py-0.5 text-xs font-medium">
+            <.icon name="hero-hand-thumb-down-solid" class="size-3" /> {Map.get(
+              @summary,
+              "dislike",
+              0
+            )}
+          </span>
+        </div>
+
+        <nav class="ml-auto flex items-center gap-1 rounded-full bg-base-200 p-1">
+          <span class="rounded-full bg-base-100 shadow-sm px-3 py-1 text-xs font-semibold">
+            For You
+          </span>
+          <.link
+            navigate="/reader"
+            class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
+          >
+            Reader
+          </.link>
+          <.link
+            navigate="/vault"
+            class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
+          >
+            Vault
+          </.link>
+          <.link
+            navigate="/dashboard"
+            class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
+          >
+            Dashboard
+          </.link>
+        </nav>
+      </div>
+
+      <%!-- TOPIC LENS CHIPS --%>
+      <div :if={@topics != []} class="px-6 pb-3 flex items-center gap-1.5 flex-wrap">
+        <span class="text-[11px] uppercase tracking-wider text-base-content/40 mr-1">Lenses</span>
+        <button
+          :for={topic <- @topics}
+          phx-click="filter_topic"
+          phx-value-topic={topic}
+          class={[
+            "press rounded-full px-3 py-1 text-xs font-medium transition",
+            if(@active_topic == topic,
+              do: "bg-primary text-primary-content shadow-sm",
+              else:
+                "bg-base-100 border border-base-300 text-base-content/70 hover:border-primary/40 hover:text-base-content"
+            )
+          ]}
+        >
+          {topic}
+        </button>
+        <button
+          :if={@active_topic}
+          phx-click="filter_topic"
+          phx-value-topic={@active_topic}
+          class="press rounded-full px-2 py-1 text-xs text-base-content/40 hover:text-error transition"
+          title="Clear lens"
+        >
+          <.icon name="hero-x-mark" class="size-3.5" />
+        </button>
+      </div>
+    </header>
 
     <%!-- STREAM --%>
     <div class="flex-1 overflow-y-auto">
       <div class="max-w-2xl mx-auto px-4 py-6 space-y-3">
-        <div
-          :if={@empty?}
-          class="text-center text-base-content/50 py-20"
-        >
-          <div class="text-5xl mb-4">✺</div>
-          <p class="text-lg">Your stream is still learning.</p>
-          <p class="text-sm mt-2">
+        <div :if={@empty?} class="text-center text-base-content/50 py-24 prism-in">
+          <div class="size-16 mx-auto rounded-2xl bg-primary/10 text-primary grid place-items-center mb-5">
+            <.icon name="hero-sparkles" class="size-8" />
+          </div>
+          <p class="text-lg font-medium text-base-content/70">Your stream is still learning</p>
+          <p class="text-sm mt-2 max-w-sm mx-auto">
             Like or save a few articles in the
             <.link navigate="/reader" class="link link-primary">Reader</.link>
             and they'll shape what shows up here.
@@ -56,60 +105,146 @@
           <article
             :for={{dom_id, entry} <- @streams.entries}
             id={dom_id}
-            class="rounded-lg border border-base-300 bg-base-100 p-4 hover:border-base-content/20 transition-colors"
+            class={[
+              "stream-card prism-in group rounded-xl bg-base-100 border overflow-hidden flex",
+              if(entry.exploration,
+                do: "border-dashed border-secondary/40",
+                else: "border-base-300"
+              )
+            ]}
           >
-            <div class="flex items-center gap-2 text-xs text-base-content/50 mb-1">
-              <span class="font-medium">{entry.article.feed && entry.article.feed.title}</span>
-              <span :if={entry.article.published_at}>
-                · {Calendar.strftime(entry.article.published_at, "%b %d")}
-              </span>
-              <span
-                :if={entry.exploration}
-                class="badge badge-xs badge-secondary gap-1"
-                title="Exploration slot"
-              >
-                <.icon name="hero-beaker" class="w-3 h-3" /> explore
-              </span>
-              <span class="badge badge-xs badge-ghost ml-auto" title="Predicted interest score">
-                {:erlang.float_to_binary(entry.score, decimals: 2)}
-              </span>
-            </div>
+            <% {bar, pill} =
+              cond do
+                entry.score >= 0.6 -> {"bg-success", "bg-success/15"}
+                entry.score >= 0.35 -> {"bg-primary", "bg-primary/15"}
+                true -> {"bg-base-300", "bg-base-200"}
+              end %>
+            <div class={["w-1 shrink-0", bar]}></div>
 
-            <h2 class="text-base font-semibold leading-snug mb-1">
-              <a href={entry.article.url} target="_blank" rel="noopener noreferrer" class="hover:text-primary">
-                {entry.article.title || entry.article.url || "(no title)"}
+            <div class="flex-1 p-4">
+              <div class="flex items-center gap-2 text-xs text-base-content/50 mb-1.5">
+                <span class="inline-flex items-center gap-1.5 font-medium text-base-content/70">
+                  <span class={["size-1.5 rounded-full", bar]}></span>
+                  {entry.article.feed && entry.article.feed.title}
+                </span>
+                <span
+                  :if={entry.article.content_type}
+                  class="rounded bg-base-200 px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+                >
+                  {entry.article.content_type}
+                </span>
+                <span :if={entry.article.published_at} class="text-base-content/40">
+                  {Calendar.strftime(entry.article.published_at, "%b %d")}
+                </span>
+                <div class="ml-auto flex items-center gap-1.5">
+                  <span
+                    :if={entry.exploration}
+                    class="inline-flex items-center gap-1 rounded-full bg-secondary/15 text-secondary px-2 py-0.5 text-[10px] font-semibold"
+                  >
+                    <.icon name="hero-beaker" class="size-3" /> explore
+                  </span>
+                  <span class={[
+                    "rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums text-base-content/70",
+                    pill
+                  ]}>
+                    {:erlang.float_to_binary(entry.score, decimals: 2)}
+                  </span>
+                </div>
+              </div>
+
+              <h2 class="text-[15px] font-semibold leading-snug mb-2">
+                <a
+                  href={entry.article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="hover:text-primary transition-colors"
+                >
+                  {entry.article.title || entry.article.url || "(no title)"}
+                </a>
+              </h2>
+
+              <div :if={entry.article.topics != []} class="flex flex-wrap gap-1 mb-2">
+                <span
+                  :for={topic <- entry.article.topics}
+                  class="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-medium"
+                >
+                  {topic}
+                </span>
+              </div>
+
+              <%!-- LINK PREVIEW / GRAPH CARD (rendered only when metadata exists) --%>
+              <a
+                :if={entry.preview}
+                href={entry.article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="press block rounded-lg border border-base-300 overflow-hidden mb-3 hover:border-primary/40 transition-colors"
+              >
+                <img
+                  :if={entry.preview.image}
+                  src={entry.preview.image}
+                  alt=""
+                  loading="lazy"
+                  class="w-full h-40 object-cover bg-base-200"
+                />
+                <div class="flex items-start gap-2.5 p-3 bg-base-200/40">
+                  <img
+                    :if={entry.preview.favicon}
+                    src={entry.preview.favicon}
+                    alt=""
+                    loading="lazy"
+                    class="size-5 rounded shrink-0 mt-0.5"
+                  />
+                  <div class="min-w-0">
+                    <div class="text-[11px] uppercase tracking-wide text-base-content/45 truncate">
+                      {entry.preview.site_name || entry.preview.domain}
+                      <span
+                        :if={entry.preview.site_name && entry.preview.domain}
+                        class="opacity-60"
+                      >
+                        · {entry.preview.domain}
+                      </span>
+                    </div>
+                    <p
+                      :if={entry.preview.description}
+                      class="text-xs text-base-content/65 leading-snug line-clamp-2 mt-0.5"
+                    >
+                      {entry.preview.description}
+                    </p>
+                  </div>
+                </div>
               </a>
-            </h2>
 
-            <p class="text-xs text-base-content/40 italic mb-3 flex items-center gap-1">
-              <.icon name="hero-information-circle" class="w-3 h-3 shrink-0" /> {entry.why}
-            </p>
+              <p class="text-xs text-base-content/45 mb-3 flex items-center gap-1.5">
+                <.icon name="hero-information-circle" class="size-3.5 shrink-0" /> {entry.why}
+              </p>
 
-            <div class="flex items-center gap-1">
-              <button
-                phx-click="feedback"
-                phx-value-id={entry.article.id}
-                phx-value-kind="like"
-                class="btn btn-xs btn-ghost gap-1 hover:text-success"
-              >
-                <.icon name="hero-hand-thumb-up" class="w-3.5 h-3.5" /> Like
-              </button>
-              <button
-                phx-click="feedback"
-                phx-value-id={entry.article.id}
-                phx-value-kind="dislike"
-                class="btn btn-xs btn-ghost gap-1 hover:text-error"
-              >
-                <.icon name="hero-hand-thumb-down" class="w-3.5 h-3.5" /> Dislike
-              </button>
-              <button
-                phx-click="feedback"
-                phx-value-id={entry.article.id}
-                phx-value-kind="save"
-                class="btn btn-xs btn-ghost gap-1 hover:text-primary"
-              >
-                <.icon name="hero-bookmark" class="w-3.5 h-3.5" /> Save
-              </button>
+              <div class="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                <button
+                  phx-click="feedback"
+                  phx-value-id={entry.article.id}
+                  phx-value-kind="like"
+                  class="press btn btn-xs btn-ghost gap-1 hover:bg-success/10 hover:text-success"
+                >
+                  <.icon name="hero-hand-thumb-up" class="size-3.5" /> Like
+                </button>
+                <button
+                  phx-click="feedback"
+                  phx-value-id={entry.article.id}
+                  phx-value-kind="dislike"
+                  class="press btn btn-xs btn-ghost gap-1 hover:bg-error/10 hover:text-error"
+                >
+                  <.icon name="hero-hand-thumb-down" class="size-3.5" /> Dislike
+                </button>
+                <button
+                  phx-click="feedback"
+                  phx-value-id={entry.article.id}
+                  phx-value-kind="save"
+                  class="press btn btn-xs btn-ghost gap-1 hover:bg-primary/10 hover:text-primary"
+                >
+                  <.icon name="hero-bookmark" class="size-3.5" /> Save
+                </button>
+              </div>
             </div>
           </article>
         </div>

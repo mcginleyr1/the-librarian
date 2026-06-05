@@ -1,7 +1,7 @@
 defmodule LibrarianWeb.ForYouLive do
   use LibrarianWeb, :live_view
 
-  alias Librarian.{Interest, Ranking, Stream}
+  alias Librarian.{Interest, LinkPreview, Ranking, Stream}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -38,7 +38,11 @@ defmodule LibrarianWeb.ForYouLive do
   defp load_stream(socket) do
     entries =
       Ranking.rank_stream(limit: 30, topic: socket.assigns.active_topic)
-      |> Enum.map(&Map.put(&1, :id, &1.article.id))
+      |> Enum.map(fn entry ->
+        entry
+        |> Map.put(:id, entry.article.id)
+        |> Map.put(:preview, LinkPreview.for_article(entry.article))
+      end)
 
     socket
     |> assign(count: length(entries), empty?: entries == [])
