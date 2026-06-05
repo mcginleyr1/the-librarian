@@ -4,6 +4,8 @@
 REGISTRY := "mcginleyr1"
 IMAGE := "the-librarian"
 NAMESPACE := "librarian"
+# Internal registry the cluster pulls from (exposed via the Tailscale operator)
+TS_REGISTRY := "registry.<your-tailnet>.ts.net:5000"
 
 # ── Dev ──────────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,22 @@ docker-build:
 # Push to Docker Hub
 docker-push: docker-build
     docker push {{REGISTRY}}/{{IMAGE}}:latest
+
+# Push an already-built image to the INTERNAL registry, bypassing the Tailscale
+# LoadBalancer proxy (it mangles large layer uploads; GET/pull works, push doesn't).
+# Port-forwards straight to the registry pod and pushes to localhost instead.
+# Usage: just registry-push postgres-pgvector:16   (image must be tagged {{TS_REGISTRY}}/<that>)
+registry-push IMG:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    port=5000
+    curl -sf "http://localhost:$port/v2/" >/dev/null 2>&1 && port=5055
+    kubectl port-forward -n registry svc/registry "$port:5000" >/tmp/reg-pf.log 2>&1 &
+    pf=$!; trap 'kill $pf 2>/dev/null' EXIT
+    until curl -sf "http://localhost:$port/v2/" >/dev/null 2>&1; do sleep 1; done
+    docker tag "{{TS_REGISTRY}}/{{IMG}}" "localhost:$port/{{IMG}}"
+    docker push "localhost:$port/{{IMG}}"
+    echo "pushed {{IMG}} -> {{TS_REGISTRY}} (via port-forward)"
 
 # ── K8s ───────────────────────────────────────────────────────────────────────
 
