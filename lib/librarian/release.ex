@@ -1,6 +1,8 @@
 defmodule Librarian.Release do
   @app :librarian
 
+  import Ecto.Query
+
   def migrate do
     load_app()
 
@@ -27,6 +29,75 @@ defmodule Librarian.Release do
     else
       :skipped
     end
+  end
+
+  @doc """
+  One-time stream prep for an existing corpus: embeds all vault notes and the most
+  recent `article_limit` articles, tags untagged articles, and rebuilds the interest
+  model. Builds its own embedding serving (so it works while the app's serving is off)
+  and warms the BUMBLEBEE_CACHE_DIR cache on the PVC.
+
+      bin/librarian eval "Librarian.Release.prepare_for_stream(3000)"
+  """
+  def prepare_for_stream(article_limit \\ 3000) do
+    load_app()
+    {:ok, _} = Application.ensure_all_started(:exla)
+    {:ok, _} = Application.ensure_all_started(:bumblebee)
+
+    repo_name = Application.fetch_env!(:librarian, :embedding_model)
+    {:ok, model} = Bumblebee.load_model({:hf, repo_name})
+    {:ok, tokenizer} = Bumblebee.load_tokenizer({:hf, repo_name})
+
+    serving =
+      Bumblebee.Text.text_embedding(model, tokenizer,
+        compile: [batch_size: 8, sequence_length: 512],
+        defn_options: [compiler: EXLA],
+        output_attribute: :hidden_state,
+        output_pool: :mean_pooling,
+        embedding_processor: :l2_norm
+      )
+
+    {:ok, result, _} =
+      Ecto.Migrator.with_repo(Librarian.Repo, fn _repo ->
+        notes =
+          embed_rows(serving, from(n in Librarian.Vault.Note, where: is_nil(n.embedding)), fn n ->
+            "#{n.title}\n\n#{n.body}"
+          end)
+
+        articles =
+          embed_rows(
+            serving,
+            from(a in Librarian.Reader.Article,
+              where: is_nil(a.embedding),
+              order_by: [desc: a.published_at],
+              limit: ^article_limit
+            ),
+            fn a -> "#{a.title}\n\n#{a.summary}\n\n#{a.content}" end
+          )
+
+        tagged = Librarian.Tagging.tag_untagged()
+        {:ok, clusters} = Librarian.Interest.rebuild()
+        %{notes: notes, articles: articles, tagged: tagged, clusters: clusters}
+      end)
+
+    IO.puts("prepare_for_stream: #{inspect(result)}")
+    result
+  end
+
+  defp embed_rows(serving, query, to_text) do
+    Librarian.Repo.all(query)
+    |> Enum.reduce(0, fn row, acc ->
+      text = row |> to_text.() |> String.trim() |> String.slice(0, 8_000)
+
+      if text == "" do
+        acc
+      else
+        %{embedding: tensor} = Nx.Serving.run(serving, text)
+        vector = tensor |> Nx.to_flat_list() |> Pgvector.new()
+        row |> Ecto.Changeset.change(embedding: vector) |> Librarian.Repo.update!()
+        acc + 1
+      end
+    end)
   end
 
   @doc """

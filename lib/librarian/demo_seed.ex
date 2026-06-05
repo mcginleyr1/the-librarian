@@ -9,8 +9,6 @@ defmodule Librarian.DemoSeed do
   Idempotent: does nothing if any feed already exists.
   """
 
-  import Ecto.Query
-
   alias Librarian.Repo
   alias Librarian.Reader.{Article, Feed}
   alias Librarian.Vault.Note

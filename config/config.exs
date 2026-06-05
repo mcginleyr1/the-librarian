@@ -71,6 +71,7 @@ config :librarian, Oban,
        {"0 */2 * * *", Librarian.Workers.ScheduleFeedsWorker},
        {"30 5,17 * * *", Librarian.Workers.CurateFeedsWorker},
        {"0 2 * * *", Librarian.Workers.BackupWorker},
+       {"*/15 * * * *", Librarian.Workers.EmbedArticlesWorker},
        {"15 */2 * * *", Librarian.Workers.TagArticlesWorker},
        {"45 3 * * *", Librarian.Workers.DiscoverSourcesWorker},
        {"50 3 * * *", Librarian.Workers.PruneSourcesWorker}
