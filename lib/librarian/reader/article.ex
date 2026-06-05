@@ -11,6 +11,7 @@ defmodule Librarian.Reader.Article do
     field :author, :string
     field :published_at, :utc_datetime
     field :fetched_at, :utc_datetime
+    field :embedding, Pgvector.Ecto.Vector
 
     belongs_to :feed, Librarian.Reader.Feed
     has_one :read_state, Librarian.Reader.ReadState

@@ -9,7 +9,15 @@ import Config
 
 config :librarian,
   ecto_repos: [Librarian.Repo],
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2",
+  start_embedding_serving: true
+
+# Register the pgvector type so Postgrex can encode/decode vector columns
+config :librarian, Librarian.Repo, types: Librarian.PostgrexTypes
+
+# Run Nx/Bumblebee computations through EXLA (CPU)
+config :nx, default_backend: EXLA.Backend
 
 # Configure the endpoint
 config :librarian, LibrarianWeb.Endpoint,

@@ -12,6 +12,7 @@ defmodule Librarian.Vault.Note do
     field :storage_key, :string
     field :evernote_guid, :string
     field :original_created_at, :utc_datetime
+    field :embedding, Pgvector.Ecto.Vector
 
     belongs_to :notebook, Librarian.Vault.Notebook
     many_to_many :tags, Librarian.Vault.Tag, join_through: "note_tags", on_replace: :delete

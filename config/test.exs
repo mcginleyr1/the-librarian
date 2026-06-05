@@ -9,6 +9,7 @@ config :librarian, Librarian.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
+  port: 5433,
   database: "librarian_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
@@ -19,6 +20,9 @@ config :librarian, LibrarianWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "BYVnaUCBRUH6dXJPLjjgvY8BmfEsJQxgMKNvnBEX9PsOa5GHbDfY5zSI3BeEZxQT",
   server: false
+
+# Don't load the embedding model during tests
+config :librarian, start_embedding_serving: false
 
 # Print only warnings and errors during test
 config :logger, level: :warning

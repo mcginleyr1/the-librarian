@@ -7,19 +7,28 @@ defmodule Librarian.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      LibrarianWeb.Telemetry,
-      Librarian.Repo,
-      {DNSCluster, query: Application.get_env(:librarian, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: Librarian.PubSub},
-      {Oban, Application.fetch_env!(:librarian, Oban)},
-      LibrarianWeb.Endpoint
-    ]
+    children =
+      [
+        LibrarianWeb.Telemetry,
+        Librarian.Repo,
+        {DNSCluster, query: Application.get_env(:librarian, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: Librarian.PubSub},
+        {Oban, Application.fetch_env!(:librarian, Oban)},
+        LibrarianWeb.Endpoint
+      ] ++ embedding_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Librarian.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp embedding_children do
+    if Application.get_env(:librarian, :start_embedding_serving, false) do
+      [Librarian.Embeddings.child_spec([])]
+    else
+      []
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration

@@ -76,7 +76,13 @@ defmodule Librarian.MixProject do
       {:ex_aws_s3, "~> 2.5"},
       {:sweet_xml, "~> 0.7"},
       # Markdown rendering for curated notes
-      {:mdex, "~> 0.2"}
+      {:mdex, "~> 0.2"},
+      # Vector embeddings for the personalized stream
+      {:pgvector, "~> 0.4.0"},
+      # In-BEAM text embeddings (no external server)
+      {:bumblebee, "~> 0.6"},
+      {:nx, "~> 0.9"},
+      {:exla, "~> 0.9"}
     ]
   end
 
