@@ -227,6 +227,28 @@
               do: "Starred",
               else: "Star"}
           </button>
+          <div class="ml-auto flex items-center gap-1">
+            <button
+              id="feedback-like"
+              phx-click="feedback"
+              phx-value-id={@selected_article.id}
+              phx-value-kind="like"
+              class="btn btn-sm btn-ghost gap-1.5 hover:text-success"
+              title="More like this"
+            >
+              <.icon name="hero-hand-thumb-up" class="w-4 h-4" /> Like
+            </button>
+            <button
+              id="feedback-dislike"
+              phx-click="feedback"
+              phx-value-id={@selected_article.id}
+              phx-value-kind="dislike"
+              class="btn btn-sm btn-ghost gap-1.5 hover:text-error"
+              title="Less like this"
+            >
+              <.icon name="hero-hand-thumb-down" class="w-4 h-4" /> Dislike
+            </button>
+          </div>
         </div>
         <div class="article-body text-base leading-relaxed">
           {Phoenix.HTML.raw(

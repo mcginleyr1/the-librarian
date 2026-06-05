@@ -2,6 +2,7 @@ defmodule LibrarianWeb.ReaderLive do
   use LibrarianWeb, :live_view
 
   alias Librarian.Reader
+  alias Librarian.Stream
 
   @impl true
   def mount(_params, _session, socket) do
@@ -87,6 +88,7 @@ defmodule LibrarianWeb.ReaderLive do
     article_id = String.to_integer(id)
     article = Reader.get_article!(article_id)
     Reader.mark_read(article_id)
+    Stream.record_interaction(article_id, :open)
     index = Enum.find_index(socket.assigns.article_ids, &(&1 == article_id)) || -1
     unread_counts = Map.update(socket.assigns.unread_counts, article.feed_id, 0, &max(0, &1 - 1))
 
@@ -108,6 +110,13 @@ defmodule LibrarianWeb.ReaderLive do
       end
 
     {:noreply, assign(socket, selected_article: updated_article)}
+  end
+
+  def handle_event("feedback", %{"id" => id, "kind" => kind}, socket) do
+    article_id = String.to_integer(id)
+    Stream.record_interaction(article_id, kind)
+
+    {:noreply, put_flash(socket, :info, "Got it — #{kind}d. Tuning your stream.")}
   end
 
   def handle_event("mark_all_read", _params, socket) do
