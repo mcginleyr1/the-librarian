@@ -58,6 +58,7 @@ defmodule Librarian.Reader do
 
   def list_all_unread_articles(opts \\ []) do
     limit = Keyword.get(opts, :limit, 50)
+    offset = Keyword.get(opts, :offset, 0)
 
     Repo.all(
       from a in Article,
@@ -68,12 +69,14 @@ defmodule Librarian.Reader do
         where: is_nil(rs.id) or is_nil(rs.read_at),
         order_by: [desc: a.published_at],
         limit: ^limit,
+        offset: ^offset,
         preload: [:feed, :read_state]
     )
   end
 
   def list_articles_by_category(category, opts \\ []) do
     limit = Keyword.get(opts, :limit, 50)
+    offset = Keyword.get(opts, :offset, 0)
     unread_only = Keyword.get(opts, :unread_only, false)
 
     query =
@@ -83,6 +86,7 @@ defmodule Librarian.Reader do
           where: is_nil(f.category) and f.active == true,
           order_by: [desc: a.published_at],
           limit: ^limit,
+          offset: ^offset,
           preload: [:feed, :read_state]
       else
         from a in Article,
@@ -90,6 +94,7 @@ defmodule Librarian.Reader do
           where: f.category == ^category and f.active == true,
           order_by: [desc: a.published_at],
           limit: ^limit,
+          offset: ^offset,
           preload: [:feed, :read_state]
       end
 

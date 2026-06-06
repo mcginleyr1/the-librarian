@@ -4,6 +4,8 @@ defmodule LibrarianWeb.ReaderLive do
   alias Librarian.Reader
   alias Librarian.Stream
 
+  @page_size 50
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -23,6 +25,8 @@ defmodule LibrarianWeb.ReaderLive do
        selected_article: nil,
        filter: :unread,
        article_ids: [],
+       article_offset: 0,
+       more_articles?: false,
        current_index: -1,
        collapsed_categories: MapSet.new()
      )
@@ -31,56 +35,38 @@ defmodule LibrarianWeb.ReaderLive do
 
   @impl true
   def handle_params(%{"feed_id" => feed_id}, _uri, socket) do
-    feed_id = String.to_integer(feed_id)
-    articles = load_articles(feed_id, socket.assigns.filter)
-    article_ids = Enum.map(articles, & &1.id)
-
     {:noreply,
      socket
      |> assign(
-       selected_feed_id: feed_id,
+       selected_feed_id: String.to_integer(feed_id),
        selected_category: nil,
-       article_ids: article_ids,
        current_index: -1,
        selected_article: nil
      )
-     |> stream(:articles, articles, reset: true)}
+     |> load_articles_page(reset: true)}
   end
 
   def handle_params(%{"category" => category_slug}, _uri, socket) do
-    articles = load_articles_for_category(category_slug, socket.assigns.filter)
-    article_ids = Enum.map(articles, & &1.id)
-
     {:noreply,
      socket
      |> assign(
        selected_feed_id: nil,
        selected_category: category_slug,
-       article_ids: article_ids,
        current_index: -1,
        selected_article: nil
      )
-     |> stream(:articles, articles, reset: true)}
+     |> load_articles_page(reset: true)}
   end
 
   def handle_params(_params, _uri, socket) do
-    articles =
-      case socket.assigns.filter do
-        :starred -> Reader.list_starred_articles()
-        _ -> Reader.list_all_unread_articles(limit: 50)
-      end
-
-    article_ids = Enum.map(articles, & &1.id)
-
     {:noreply,
      socket
      |> assign(
        selected_feed_id: nil,
        selected_category: nil,
-       article_ids: article_ids,
        current_index: -1
      )
-     |> stream(:articles, articles, reset: true)}
+     |> load_articles_page(reset: true)}
   end
 
   @impl true
@@ -94,6 +80,14 @@ defmodule LibrarianWeb.ReaderLive do
 
     {:noreply,
      assign(socket, selected_article: article, current_index: index, unread_counts: unread_counts)}
+  end
+
+  def handle_event("load_more", _params, socket) do
+    if socket.assigns.more_articles? do
+      {:noreply, load_articles_page(socket, reset: false)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("toggle_star", %{"id" => id}, socket) do
@@ -148,7 +142,13 @@ defmodule LibrarianWeb.ReaderLive do
 
     {:noreply,
      socket
-     |> assign(unread_counts: unread_counts, article_ids: [], current_index: -1)
+     |> assign(
+       unread_counts: unread_counts,
+       article_ids: [],
+       article_offset: 0,
+       more_articles?: false,
+       current_index: -1
+     )
      |> stream(:articles, [], reset: true)}
   end
 
@@ -201,13 +201,44 @@ defmodule LibrarianWeb.ReaderLive do
      assign(socket, unread_counts: Map.put(socket.assigns.unread_counts, feed_id, count))}
   end
 
-  defp load_articles(feed_id, :starred),
+  defp load_articles_page(socket, opts) do
+    reset = Keyword.fetch!(opts, :reset)
+    offset = if reset, do: 0, else: socket.assigns.article_offset
+    articles = fetch_articles(socket.assigns, offset)
+    ids = Enum.map(articles, & &1.id)
+
+    socket
+    |> assign(
+      article_ids: if(reset, do: ids, else: socket.assigns.article_ids ++ ids),
+      article_offset: offset + length(articles),
+      more_articles?: length(articles) == @page_size
+    )
+    |> stream(:articles, articles, reset: reset)
+  end
+
+  defp fetch_articles(%{selected_feed_id: feed_id, filter: filter}, offset)
+       when not is_nil(feed_id),
+       do: load_articles(feed_id, filter, offset)
+
+  defp fetch_articles(%{selected_category: category, filter: filter}, offset)
+       when not is_nil(category),
+       do: load_articles_for_category(category, filter, offset)
+
+  defp fetch_articles(%{filter: :starred}, _offset), do: Reader.list_starred_articles()
+
+  defp fetch_articles(_assigns, offset),
+    do: Reader.list_all_unread_articles(limit: @page_size, offset: offset)
+
+  defp load_articles(feed_id, :starred, _offset),
     do: Reader.list_starred_articles() |> Enum.filter(&(&1.feed_id == feed_id))
 
-  defp load_articles(feed_id, :unread), do: Reader.list_articles(feed_id, unread_only: true)
-  defp load_articles(feed_id, _), do: Reader.list_articles(feed_id)
+  defp load_articles(feed_id, :unread, offset),
+    do: Reader.list_articles(feed_id, unread_only: true, limit: @page_size, offset: offset)
 
-  defp load_articles_for_category(category_slug, filter) do
+  defp load_articles(feed_id, _filter, offset),
+    do: Reader.list_articles(feed_id, limit: @page_size, offset: offset)
+
+  defp load_articles_for_category(category_slug, filter, offset) do
     actual_category = if category_slug == "uncategorized", do: nil, else: category_slug
 
     case filter do
@@ -216,10 +247,14 @@ defmodule LibrarianWeb.ReaderLive do
         |> Enum.filter(fn a -> a.feed && a.feed.category == actual_category end)
 
       :unread ->
-        Reader.list_articles_by_category(actual_category, unread_only: true)
+        Reader.list_articles_by_category(actual_category,
+          unread_only: true,
+          limit: @page_size,
+          offset: offset
+        )
 
       _ ->
-        Reader.list_articles_by_category(actual_category)
+        Reader.list_articles_by_category(actual_category, limit: @page_size, offset: offset)
     end
   end
 
