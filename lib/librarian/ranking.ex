@@ -26,10 +26,10 @@ defmodule Librarian.Ranking do
 
     centroids = Interest.centroid_vectors()
     negatives = Interest.negative_embeddings()
-    disliked = MapSet.new(Stream.negative_article_ids())
+    consumed = MapSet.new(Stream.consumed_article_ids())
 
     candidates(topic)
-    |> Enum.reject(&MapSet.member?(disliked, &1.id))
+    |> Enum.reject(&MapSet.member?(consumed, &1.id))
     |> Enum.map(&score(&1, centroids, negatives))
     |> Enum.sort_by(& &1.score, :desc)
     |> with_exploration(limit)

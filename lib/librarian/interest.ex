@@ -94,9 +94,15 @@ defmodule Librarian.Interest do
     Enum.map(centroids(), &Pgvector.to_list(&1.embedding))
   end
 
-  @doc "Embeddings of positively-signalled articles plus all vault notes."
+  @doc """
+  Embeddings of positively-signalled articles plus all vault notes. Level-2
+  signals (likes/saves) and vault notes are weighted 2x against level-1 signals
+  (reads/done) by repetition, so deliberate endorsements pull centroids harder.
+  """
   def positive_embeddings do
-    article_embeddings(Stream.positive_article_ids()) ++ note_embeddings()
+    strong = article_embeddings(Stream.positive_article_ids()) ++ note_embeddings()
+    weak = article_embeddings(Stream.weak_positive_article_ids())
+    strong ++ strong ++ weak
   end
 
   def negative_embeddings do

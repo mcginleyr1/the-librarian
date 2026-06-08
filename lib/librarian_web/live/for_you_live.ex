@@ -1,7 +1,7 @@
 defmodule LibrarianWeb.ForYouLive do
   use LibrarianWeb, :live_view
 
-  alias Librarian.{Interest, LinkPreview, Ranking, Stream}
+  alias Librarian.{Interest, LinkPreview, Ranking, Reader, Stream}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -28,6 +28,13 @@ defmodule LibrarianWeb.ForYouLive do
        "Got it — re-ranking. Rebuild the model from the Dashboard to fold this in."
      )
      |> load_stream()}
+  end
+
+  def handle_event("open", %{"id" => id}, socket) do
+    article_id = String.to_integer(id)
+    Reader.mark_read(article_id)
+    Stream.record_interaction(article_id, :open)
+    {:noreply, socket}
   end
 
   def handle_event("filter_topic", %{"topic" => topic}, socket) do

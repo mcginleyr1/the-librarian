@@ -38,6 +38,7 @@ defmodule Librarian.RankingTest do
 
   test "rebuild builds centroids and ranks liked-similar content highest" do
     beam = article(beam_vec(), "OTP supervision")
+    _beam_similar = article(beam_vec(), "GenServer patterns")
     _db = article(db_vec(), "Postgres internals")
 
     # user likes the BEAM article -> it's a positive exemplar
@@ -46,9 +47,22 @@ defmodule Librarian.RankingTest do
     assert k >= 1
 
     ranked = Ranking.rank_stream(limit: 10)
-    assert length(ranked) == 2
     titles = Enum.map(ranked, & &1.article.title)
-    # BEAM article should outrank the unrelated DB one
-    assert hd(titles) == "OTP supervision"
+    # the liked article is consumed and drops out of the feed
+    refute "OTP supervision" in titles
+    # the unliked BEAM-similar article should outrank the unrelated DB one
+    assert titles == ["GenServer patterns", "Postgres internals"]
+  end
+
+  test "reading an article keeps it in the feed but liking removes it" do
+    read = article(beam_vec(), "Read but not liked")
+    liked = article(db_vec(), "Liked and gone")
+
+    Stream.record_interaction(read.id, :open)
+    Stream.record_interaction(liked.id, :like)
+
+    titles = Ranking.rank_stream(limit: 10) |> Enum.map(& &1.article.title)
+    assert "Read but not liked" in titles
+    refute "Liked and gone" in titles
   end
 end

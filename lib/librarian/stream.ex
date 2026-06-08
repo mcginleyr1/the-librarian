@@ -10,10 +10,17 @@ defmodule Librarian.Stream do
   alias Librarian.Repo
   alias Librarian.Stream.Interaction
 
+  # Level-2 success: deliberate endorsement. Pulls the interest model hardest.
   @positive ~w(like save more_like)
+  # Level-1 success: you engaged but didn't endorse. A gentle positive nudge.
+  @weak_positive ~w(open done)
   @negative ~w(dislike less_like mute_source mute_topic)
+  # Terminal reactions remove an article from the For You feed. Reading alone
+  # (`open`/`dwell`) is NOT terminal — read items stay so you can still act.
+  @consumed @positive ++ @negative ++ ~w(done)
 
   def positive_kinds, do: @positive
+  def weak_positive_kinds, do: @weak_positive
   def negative_kinds, do: @negative
 
   @doc """
@@ -46,9 +53,19 @@ defmodule Librarian.Stream do
     interaction_article_ids(@positive)
   end
 
+  @doc "Article ids the user engaged with weakly (read / marked done) — level-1 signal."
+  def weak_positive_article_ids do
+    interaction_article_ids(@weak_positive)
+  end
+
   @doc "Article ids the user reacted to negatively (disliked / less-like / muted)."
   def negative_article_ids do
     interaction_article_ids(@negative)
+  end
+
+  @doc "Article ids terminally acted on, so they drop out of the For You feed."
+  def consumed_article_ids do
+    interaction_article_ids(@consumed)
   end
 
   defp interaction_article_ids(kinds) do

@@ -138,6 +138,12 @@
                 </span>
                 <div class="ml-auto flex items-center gap-1.5">
                   <span
+                    :if={entry.article.read_state && entry.article.read_state.read_at}
+                    class="inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-[10px] font-semibold text-base-content/50"
+                  >
+                    <.icon name="hero-check" class="size-3" /> Read
+                  </span>
+                  <span
                     :if={entry.exploration}
                     class="inline-flex items-center gap-1 rounded-full bg-secondary/15 text-secondary px-2 py-0.5 text-[10px] font-semibold"
                   >
@@ -157,6 +163,10 @@
                   href={entry.article.url}
                   target="_blank"
                   rel="noopener noreferrer"
+                  phx-click={
+                    JS.push("open", value: %{id: entry.article.id})
+                    |> JS.add_class("opacity-60", to: "##{dom_id}")
+                  }
                   class="hover:text-primary transition-colors"
                 >
                   {entry.article.title || entry.article.url || "(no title)"}
@@ -243,6 +253,14 @@
                   class="press btn btn-xs btn-ghost gap-1 hover:bg-primary/10 hover:text-primary"
                 >
                   <.icon name="hero-bookmark" class="size-3.5" /> Save
+                </button>
+                <button
+                  phx-click="feedback"
+                  phx-value-id={entry.article.id}
+                  phx-value-kind="done"
+                  class="press btn btn-xs btn-ghost gap-1 ml-auto hover:bg-base-300"
+                >
+                  <.icon name="hero-check-circle" class="size-3.5" /> Done
                 </button>
               </div>
             </div>

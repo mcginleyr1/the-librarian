@@ -2,7 +2,7 @@ defmodule Librarian.Stream.Interaction do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @kinds ~w(open dwell like dislike save more_like less_like mute_source mute_topic)
+  @kinds ~w(open dwell like dislike save more_like less_like mute_source mute_topic done)
 
   def kinds, do: @kinds
 
