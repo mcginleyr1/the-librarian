@@ -50,6 +50,11 @@ spec:
                 secretKeyRef:
                   name: librarian-secrets
                   key: secret-key-base
+            # Keep in-BEAM embedding (EXLA CPU) single-threaded so a batch can't
+            # peg every core and starve web requests. The container has spare
+            # cores (below) for web/BEAM while embedding uses ~one.
+            - name: XLA_FLAGS
+              value: "--xla_cpu_multi_thread_eigen=false"
           envFrom:
             - configMapRef:
                 name: librarian-config
@@ -59,10 +64,10 @@ spec:
           resources:
             requests:
               memory: "256Mi"
-              cpu: "250m"
+              cpu: "500m"
             limits:
               memory: "2Gi"
-              cpu: "1000m"
+              cpu: "4"
           readinessProbe:
             httpGet:
               path: /
