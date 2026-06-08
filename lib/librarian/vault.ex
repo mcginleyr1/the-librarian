@@ -2,6 +2,7 @@ defmodule Librarian.Vault do
   import Ecto.Query
   alias Librarian.Repo
   alias Librarian.Vault.{Note, Notebook, Tag}
+  alias Librarian.Workers.RebuildInterestWorker
 
   def list_notebooks do
     Repo.all(from n in Notebook, order_by: n.name)
@@ -42,10 +43,14 @@ defmodule Librarian.Vault do
   def create_note(attrs, tags \\ []) do
     tag_records = find_or_create_tags(tags)
 
-    %Note{}
-    |> Note.changeset(attrs)
-    |> Ecto.Changeset.put_assoc(:tags, tag_records)
-    |> Repo.insert()
+    result =
+      %Note{}
+      |> Note.changeset(attrs)
+      |> Ecto.Changeset.put_assoc(:tags, tag_records)
+      |> Repo.insert()
+
+    if match?({:ok, _}, result), do: RebuildInterestWorker.enqueue()
+    result
   end
 
   def create_note_from_import(attrs, tags) do
@@ -83,7 +88,9 @@ defmodule Librarian.Vault do
     int_ids =
       ids
       |> Enum.map(fn
-        id when is_integer(id) -> id
+        id when is_integer(id) ->
+          id
+
         id when is_binary(id) ->
           case Integer.parse(id) do
             {n, ""} -> n

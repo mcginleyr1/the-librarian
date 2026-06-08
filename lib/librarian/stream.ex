@@ -9,6 +9,7 @@ defmodule Librarian.Stream do
 
   alias Librarian.Repo
   alias Librarian.Stream.Interaction
+  alias Librarian.Workers.RebuildInterestWorker
 
   # Level-2 success: deliberate endorsement. Pulls the interest model hardest.
   @positive ~w(like save more_like)
@@ -18,6 +19,9 @@ defmodule Librarian.Stream do
   # Terminal reactions remove an article from the For You feed. Reading alone
   # (`open`/`dwell`) is NOT terminal — read items stay so you can still act.
   @consumed @positive ++ @negative ++ ~w(done)
+  # Signals that change the positive corpus and so warrant a model rebuild.
+  # Negatives are applied live as a ranking penalty, not baked into centroids.
+  @model_kinds @positive ++ @weak_positive
 
   def positive_kinds, do: @positive
   def weak_positive_kinds, do: @weak_positive
@@ -30,11 +34,18 @@ defmodule Librarian.Stream do
   def record_interaction(article_id, kind, attrs \\ %{}) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    %Interaction{}
-    |> Interaction.changeset(
-      Map.merge(%{article_id: article_id, kind: to_string(kind), occurred_at: now}, attrs)
-    )
-    |> Repo.insert()
+    result =
+      %Interaction{}
+      |> Interaction.changeset(
+        Map.merge(%{article_id: article_id, kind: to_string(kind), occurred_at: now}, attrs)
+      )
+      |> Repo.insert()
+
+    if match?({:ok, _}, result) and to_string(kind) in @model_kinds do
+      RebuildInterestWorker.enqueue()
+    end
+
+    result
   end
 
   @doc "Most recent interactions, newest first."
