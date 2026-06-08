@@ -1,7 +1,6 @@
 # The Librarian — task runner
 # Usage: just <recipe>
 
-REGISTRY := "mcginleyr1"
 IMAGE := "the-librarian"
 NAMESPACE := "librarian"
 # Internal registry the cluster pulls from (exposed via the Tailscale operator)
@@ -60,13 +59,14 @@ db-reset: db-up
 
 # ── Build & Push ──────────────────────────────────────────────────────────────
 
-# Build Docker image
+# Build the app image for the cluster (arm64 node), tagged for the internal registry
 docker-build:
-    docker build -t {{REGISTRY}}/{{IMAGE}}:latest .
+    docker build --platform linux/arm64 -t {{TS_REGISTRY}}/{{IMAGE}}:latest .
 
-# Push to Docker Hub
+# Build and push the app image to the INTERNAL registry the cluster pulls from.
+# Uses registry-push (port-forward) because the Tailscale LB mangles large pushes.
 docker-push: docker-build
-    docker push {{REGISTRY}}/{{IMAGE}}:latest
+    just registry-push {{IMAGE}}:latest
 
 # Push an already-built image to the INTERNAL registry, bypassing the Tailscale
 # LoadBalancer proxy (it mangles large layer uploads; GET/pull works, push doesn't).

@@ -15,7 +15,7 @@ spec:
     spec:
       initContainers:
         - name: migrate
-          image: mcginleyr1/the-librarian:latest
+          image: localhost:31500/the-librarian:latest
           imagePullPolicy: Always
           command: ["/app/bin/librarian", "eval", "Librarian.Release.migrate()"]
           env:
@@ -34,7 +34,7 @@ spec:
                 name: librarian-config
       containers:
         - name: librarian
-          image: mcginleyr1/the-librarian:latest
+          image: localhost:31500/the-librarian:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 4000
