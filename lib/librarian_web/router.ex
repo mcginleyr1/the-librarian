@@ -1,6 +1,8 @@
 defmodule LibrarianWeb.Router do
   use LibrarianWeb, :router
 
+  import Oban.Web.Router
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -34,6 +36,12 @@ defmodule LibrarianWeb.Router do
     live "/settings", SettingsLive, :index
 
     get "/vault/files/*key", VaultFilesController, :show
+  end
+
+  scope "/" do
+    pipe_through :browser
+
+    oban_dashboard("/oban")
   end
 
   scope "/api", LibrarianWeb do

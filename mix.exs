@@ -69,6 +69,7 @@ defmodule Librarian.MixProject do
       {:floki, "~> 0.37"},
       # Background jobs
       {:oban, "~> 2.19"},
+      {:oban_web, "~> 2.12"},
       # HTML to text for full-text content
       {:html_sanitize_ex, "~> 1.4"},
       # B2 / S3 backup
