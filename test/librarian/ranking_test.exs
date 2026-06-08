@@ -65,4 +65,18 @@ defmodule Librarian.RankingTest do
     assert "Read but not liked" in titles
     refute "Liked and gone" in titles
   end
+
+  test "topic lens restricts the pool to articles carrying that topic" do
+    article(beam_vec(), "Elixir thing")
+    |> Ecto.Changeset.change(topics: ["elixir"])
+    |> Repo.update!()
+
+    article(db_vec(), "Postgres thing")
+    |> Ecto.Changeset.change(topics: ["postgres"])
+    |> Repo.update!()
+
+    titles = Ranking.rank_stream(limit: 10, topic: "elixir") |> Enum.map(& &1.article.title)
+    assert "Elixir thing" in titles
+    refute "Postgres thing" in titles
+  end
 end

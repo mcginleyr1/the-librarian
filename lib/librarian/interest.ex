@@ -32,20 +32,24 @@ defmodule Librarian.Interest do
       {centroids, counts} = kmeans(positives, k)
       now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-      centroids
-      |> Enum.zip(counts)
-      |> Enum.with_index(1)
-      |> Enum.each(fn {{vector, count}, i} ->
-        Repo.insert!(%Centroid{
-          label: "Cluster #{i}",
-          embedding: Pgvector.new(vector),
-          member_count: count,
-          inserted_at: now,
-          updated_at: now
-        })
-      end)
+      # Drop empty clusters: their centroid is the zero vector, which makes
+      # cosine distance undefined (NaN) in the SQL ranking.
+      inserted =
+        centroids
+        |> Enum.zip(counts)
+        |> Enum.reject(fn {_vector, count} -> count == 0 end)
+        |> Enum.with_index(1)
+        |> Enum.map(fn {{vector, count}, i} ->
+          Repo.insert!(%Centroid{
+            label: "Cluster #{i}",
+            embedding: Pgvector.new(vector),
+            member_count: count,
+            inserted_at: now,
+            updated_at: now
+          })
+        end)
 
-      {:ok, k}
+      {:ok, length(inserted)}
     end
   end
 

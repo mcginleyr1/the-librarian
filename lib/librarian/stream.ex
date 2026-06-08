@@ -26,6 +26,7 @@ defmodule Librarian.Stream do
   def positive_kinds, do: @positive
   def weak_positive_kinds, do: @weak_positive
   def negative_kinds, do: @negative
+  def consumed_kinds, do: @consumed
 
   @doc """
   Logs an interaction for an article. `kind` is one of `Interaction.kinds/0`.

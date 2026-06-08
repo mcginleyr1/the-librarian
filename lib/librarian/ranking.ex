@@ -9,12 +9,63 @@ defmodule Librarian.Ranking do
   import Ecto.Query
 
   alias Librarian.Repo
-  alias Librarian.{Interest, Stream}
+  alias Librarian.Stream
   alias Librarian.Reader.Article
 
   @exploration 0.15
   @penalty_weight 0.5
   @recency_weight 0.1
+  @pool_size 200
+
+  # Ranks the recency-bounded candidate pool entirely in Postgres: affinity is
+  # the best cosine similarity to any interest centroid, penalty the best
+  # similarity to any disliked article, recency a 30-day linear decay. Returns
+  # only scalar scores — embeddings never leave the database.
+  @scored_sql """
+  WITH pool AS (
+    SELECT a.id, a.embedding, a.published_at
+    FROM articles a
+    WHERE a.embedding IS NOT NULL
+      AND ($1::text IS NULL OR $1 = ANY(a.topics))
+      AND NOT EXISTS (
+        SELECT 1 FROM interactions i
+        WHERE i.article_id = a.id AND i.kind = ANY($2::text[])
+      )
+    ORDER BY a.published_at DESC
+    LIMIT $4
+  ),
+  neg AS (
+    SELECT DISTINCT a.embedding
+    FROM articles a
+    JOIN interactions i ON i.article_id = a.id
+    WHERE i.kind = ANY($3::text[]) AND a.embedding IS NOT NULL
+  ),
+  aff AS (
+    SELECT p.id, MAX(1 - (p.embedding <=> c.embedding)) AS affinity
+    FROM pool p CROSS JOIN interest_centroids c
+    GROUP BY p.id
+  ),
+  pen AS (
+    SELECT p.id, COALESCE(MAX(1 - (p.embedding <=> n.embedding)), 0.0) AS penalty
+    FROM pool p LEFT JOIN neg n ON TRUE
+    GROUP BY p.id
+  ),
+  rec AS (
+    SELECT p.id,
+      COALESCE(GREATEST(0.0, 1.0 - EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - p.published_at)) / (30.0 * 86400.0)), 0.0) AS recency
+    FROM pool p
+  )
+  SELECT p.id,
+         COALESCE(aff.affinity, 0.0)::float8,
+         COALESCE(pen.penalty, 0.0)::float8,
+         rec.recency::float8
+  FROM pool p
+  LEFT JOIN aff ON aff.id = p.id
+  LEFT JOIN pen ON pen.id = p.id
+  JOIN rec ON rec.id = p.id
+  ORDER BY (COALESCE(aff.affinity, 0.0) - $5 * COALESCE(pen.penalty, 0.0) + $6 * rec.recency) DESC
+  LIMIT $7
+  """
 
   @doc """
   Returns ranked stream entries: maps of `%{article, score, components, why,
@@ -24,14 +75,27 @@ defmodule Librarian.Ranking do
     limit = Keyword.get(opts, :limit, 30)
     topic = Keyword.get(opts, :topic)
 
-    centroids = Interest.centroid_vectors()
-    negatives = Interest.negative_embeddings()
-    consumed = MapSet.new(Stream.consumed_article_ids())
+    rows = scored_rows(topic, limit * 2)
+    articles = articles_by_id(Enum.map(rows, & &1.id))
 
-    candidates(topic)
-    |> Enum.reject(&MapSet.member?(consumed, &1.id))
-    |> Enum.map(&score(&1, centroids, negatives))
-    |> Enum.sort_by(& &1.score, :desc)
+    rows
+    |> Enum.flat_map(fn r ->
+      case Map.get(articles, r.id) do
+        nil ->
+          []
+
+        article ->
+          [
+            %{
+              article: article,
+              score: r.affinity - @penalty_weight * r.penalty + @recency_weight * r.recency,
+              exploration: false,
+              components: %{affinity: r.affinity, penalty: r.penalty, recency: r.recency},
+              why: why(article, r.affinity, r.penalty)
+            }
+          ]
+      end
+    end)
     |> with_exploration(limit)
   end
 
@@ -48,32 +112,34 @@ defmodule Librarian.Ranking do
     |> Enum.map(&elem(&1, 0))
   end
 
-  defp candidates(topic) do
-    base =
-      from a in Article,
-        where: not is_nil(a.embedding),
-        order_by: [desc: a.published_at],
-        limit: 200,
-        preload: [:feed, :read_state]
+  defp scored_rows(topic, fetch) do
+    %{rows: rows} =
+      Repo.query!(@scored_sql, [
+        topic,
+        Stream.consumed_kinds(),
+        Stream.negative_kinds(),
+        @pool_size,
+        @penalty_weight,
+        @recency_weight,
+        fetch
+      ])
 
-    query = if topic, do: from(a in base, where: ^topic in a.topics), else: base
-    Repo.all(query)
+    Enum.map(rows, fn [id, affinity, penalty, recency] ->
+      %{id: id, affinity: num(affinity), penalty: num(penalty), recency: num(recency)}
+    end)
   end
 
-  defp score(article, centroids, negatives) do
-    vec = Pgvector.to_list(article.embedding)
-    affinity = max_cosine(vec, centroids)
-    penalty = max_cosine(vec, negatives)
-    recency = recency_boost(article)
-    total = affinity - @penalty_weight * penalty + @recency_weight * recency
+  # Postgrex returns NaN/Infinity (from a zero-norm embedding) as atoms; treat
+  # those as no-signal rather than letting them crash the whole stream.
+  defp num(x) when is_float(x), do: x
+  defp num(_), do: 0.0
 
-    %{
-      article: article,
-      score: total,
-      exploration: false,
-      components: %{affinity: affinity, penalty: penalty, recency: recency},
-      why: why(article, affinity, penalty)
-    }
+  defp articles_by_id([]), do: %{}
+
+  defp articles_by_id(ids) do
+    from(a in Article, where: a.id in ^ids, preload: [:feed, :read_state])
+    |> Repo.all()
+    |> Map.new(&{&1.id, &1})
   end
 
   defp why(article, affinity, penalty) do
@@ -107,22 +173,5 @@ defmodule Librarian.Ranking do
       |> Enum.map(&%{&1 | exploration: true, why: "Exploring — something a bit different"})
 
     top ++ explore
-  end
-
-  defp recency_boost(%{published_at: nil}), do: 0.0
-
-  defp recency_boost(%{published_at: published_at}) do
-    days = DateTime.diff(DateTime.utc_now(), published_at, :day)
-    max(0.0, 1.0 - days / 30.0)
-  end
-
-  defp max_cosine(_vec, []), do: 0.0
-  defp max_cosine(vec, others), do: others |> Enum.map(&cosine(vec, &1)) |> Enum.max()
-
-  defp cosine(a, b) do
-    dot = a |> Enum.zip(b) |> Enum.reduce(0.0, fn {x, y}, acc -> acc + x * y end)
-    na = :math.sqrt(Enum.reduce(a, 0.0, &(&2 + &1 * &1)))
-    nb = :math.sqrt(Enum.reduce(b, 0.0, &(&2 + &1 * &1)))
-    if na == 0.0 or nb == 0.0, do: 0.0, else: dot / (na * nb)
   end
 end
