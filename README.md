@@ -4,10 +4,11 @@ A self-hosted personal knowledge base combining an RSS feed reader with web clip
 
 ## Features
 
+- **Google Sign-In** — Ueberauth-based OAuth; access restricted to an email allowlist
 - **RSS Reader** — Subscribe to feeds, organize by category, track read/starred state, keyboard navigation
 - **Note Vault** — Capture web clips, create notes, organize into notebooks with tags
 - **Full-Text Search** — PostgreSQL-backed search across all articles and notes
-- **Safari Extension** — One-click clipping in five modes: selection, full article, full page, screenshot, PDF
+- **Browser Extension** — One-click clipping in five modes (selection, full article, full page, screenshot, PDF); works in Safari, Chrome, and Orion
 - **Import** — Migrate from Evernote (ENEX) and import OPML feed subscriptions
 
 ## Tech Stack
@@ -34,6 +35,25 @@ just dev
 ```
 
 Visit [http://localhost:4000](http://localhost:4000).
+
+### Authentication
+
+All browser routes require signing in with Google (the `/api` clip endpoints used
+by the Safari extension stay open). Only emails on the allowlist may sign in —
+it defaults to `owner@example.com` and is overridden with the comma-separated
+`ALLOWED_EMAILS` env var. Data created by background workers and the clip API is
+bound to the deployment owner (the first user).
+
+Creating the OAuth client is a one-time manual step — Google exposes no API or
+gcloud command for standard OAuth 2.0 web clients. `just oauth-setup` walks it:
+it prints the exact consent-screen/client values (including both redirect URIs)
+and opens the console. Then:
+
+```bash
+export GOOGLE_CLIENT_ID=...
+export GOOGLE_CLIENT_SECRET=...
+just dev
+```
 
 **Useful commands:**
 
@@ -62,7 +82,16 @@ The app is designed to run on Kubernetes behind Tailscale for TLS termination.
 
 ```bash
 just k-namespace
-just k-create-secrets <db-password>
+just k-create-secrets <db-password> <google-client-id> <google-client-secret>
+```
+
+The production Google OAuth client needs
+`https://<PHX_HOST>/auth/google/callback` as an authorized redirect URI
+(`just oauth-setup` walks the console steps). To rotate or add the Google
+credentials on an existing cluster without touching the other secrets:
+
+```bash
+just k-set-google-oauth <client-id> <client-secret>
 ```
 
 **Deploy:**
@@ -92,6 +121,9 @@ just k-import-evernote-dir DIR/
 | `PHX_HOST` | Public hostname |
 | `PHX_SERVER` | Set to `true` |
 | `PORT` | Default `4000` |
+| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 client secret |
+| `ALLOWED_EMAILS` | Comma-separated sign-in allowlist (default `owner@example.com`) |
 
 ## Importing Data
 
@@ -111,12 +143,18 @@ Full fidelity import: notes, tags, timestamps, source URLs, and attachments. Use
 mix librarian.import_evernote path/to/export.enex "Notebook Name"
 ```
 
-## Safari Extension
+## Browser Extension
 
-The extension lives in `safari-extension/`. It reads the configured API endpoint and lets you clip the current page into a notebook. Supports five clip modes:
+The extension is a standard Manifest V3 WebExtension in `safari-extension/extension/`. It reads the configured API endpoint and lets you clip the current page into a notebook. Supports five clip modes:
 
 - **Selection** — highlighted text
 - **Full Article** — main content via Readability.js
 - **Full Page** — full HTML snapshot
 - **Screenshot** — PNG of visible area
 - **PDF** — captured PDF
+
+The same folder loads in all three browsers:
+
+- **Safari** — build the Xcode wrapper in `safari-extension/TheLibrarian/` (it references the shared folder), then enable via Safari → Develop → Allow Unsigned Extensions
+- **Chrome** — `chrome://extensions` → enable Developer mode → Load unpacked → select `safari-extension/extension/`
+- **Orion** — Orion → Settings → Advanced → enable "Allow installation of 3rd party Chrome extensions", then Tools → Extensions → Manage Extensions → Add Extension and pick the same folder (if Orion asks for a packaged file, `chrome --pack-extension=safari-extension/extension` produces a `.crx`)

@@ -13,6 +13,7 @@ defmodule Librarian.Stream.Interaction do
     field :occurred_at, :utc_datetime
 
     belongs_to :article, Librarian.Reader.Article
+    belongs_to :user, Librarian.Accounts.User
 
     timestamps(type: :utc_datetime, updated_at: false)
   end

@@ -30,7 +30,7 @@ defmodule Librarian.Workers.CleanupWorkerTest do
 
   test "perform deletes stale read articles" do
     {:ok, feed} = Reader.create_feed(feed_attrs())
-    old = DateTime.utc_now() |> DateTime.add(-60, :day) |> DateTime.truncate(:second)
+    old = DateTime.utc_now() |> DateTime.add(-400, :day) |> DateTime.truncate(:second)
 
     {:ok, old_article} =
       Repo.insert(Article.changeset(%Article{}, article_attrs(feed.id, %{published_at: old})))

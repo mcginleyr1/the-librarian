@@ -3,18 +3,19 @@ defmodule LibrarianWeb.ReaderLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias Librarian.Reader.{Article, Feed}
+  alias Librarian.Reader
+  alias Librarian.Reader.Article
   alias Librarian.Repo
+
+  setup :log_in_owner
 
   defp feed_fixture do
     {:ok, feed} =
-      %Feed{}
-      |> Feed.changeset(%{
+      Reader.create_feed(%{
         title: "Test Feed",
         feed_url: "https://example.com/feed.rss",
         category: "Tech"
       })
-      |> Repo.insert()
 
     feed
   end

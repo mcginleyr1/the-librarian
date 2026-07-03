@@ -5,6 +5,7 @@ defmodule Librarian.Vault.Tag do
   schema "tags" do
     field :name, :string
 
+    belongs_to :user, Librarian.Accounts.User
     many_to_many :notes, Librarian.Vault.Note, join_through: "note_tags"
 
     timestamps(type: :utc_datetime)

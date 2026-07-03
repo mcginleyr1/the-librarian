@@ -7,6 +7,8 @@ defmodule Librarian.Interest.Affinity do
     field :key, :string
     field :score, :float, default: 0.0
 
+    belongs_to :user, Librarian.Accounts.User
+
     timestamps(type: :utc_datetime)
   end
 

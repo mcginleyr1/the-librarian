@@ -24,11 +24,12 @@ defmodule Librarian.DemoSeed do
     else
       data = load()
       now = DateTime.utc_now() |> DateTime.truncate(:second)
+      owner_id = Librarian.Accounts.owner!().id
 
-      feeds = insert_feeds(data["feeds"], now)
+      feeds = insert_feeds(data["feeds"], now, owner_id)
       insert_articles(data["articles"], feeds, now)
-      insert_notes(data["notes"], now)
-      insert_centroids(data["centroids"], now)
+      insert_notes(data["notes"], now, owner_id)
+      insert_centroids(data["centroids"], now, owner_id)
 
       Tagging.tag_untagged()
       Discovery.harvest_link_graph()
@@ -47,7 +48,7 @@ defmodule Librarian.DemoSeed do
     |> Jason.decode!()
   end
 
-  defp insert_feeds(feeds, now) do
+  defp insert_feeds(feeds, now, owner_id) do
     Map.new(feeds, fn f ->
       origin = if f["category"] == "Infrastructure", do: "discovered", else: "manual"
 
@@ -60,6 +61,7 @@ defmodule Librarian.DemoSeed do
           origin: origin,
           trust_score: if(origin == "discovered", do: 0.3, else: 0.5),
           discovered_at: if(origin == "discovered", do: now, else: nil),
+          user_id: owner_id,
           inserted_at: now,
           updated_at: now
         })
@@ -92,20 +94,21 @@ defmodule Librarian.DemoSeed do
     end)
   end
 
-  defp insert_notes(notes, now) do
+  defp insert_notes(notes, now, owner_id) do
     Enum.each(notes, fn n ->
       Repo.insert!(%Note{
         title: n["title"],
         body: n["body"],
         clip_mode: "markdown",
         embedding: Pgvector.new(n["embedding"]),
+        user_id: owner_id,
         inserted_at: now,
         updated_at: now
       })
     end)
   end
 
-  defp insert_centroids(centroids, now) do
+  defp insert_centroids(centroids, now, owner_id) do
     Repo.delete_all(Centroid)
 
     Enum.each(centroids, fn c ->
@@ -113,6 +116,7 @@ defmodule Librarian.DemoSeed do
         label: c["label"],
         embedding: Pgvector.new(c["embedding"]),
         member_count: c["member_count"],
+        user_id: owner_id,
         inserted_at: now,
         updated_at: now
       })

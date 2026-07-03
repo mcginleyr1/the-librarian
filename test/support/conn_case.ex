@@ -35,4 +35,22 @@ defmodule LibrarianWeb.ConnCase do
     Librarian.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  @doc """
+  Logs the given user into the test connection's session.
+  """
+  def log_in_user(conn, user) do
+    conn
+    |> Phoenix.ConnTest.init_test_session(%{})
+    |> Plug.Conn.put_session(:user_id, user.id)
+  end
+
+  @doc """
+  Setup helper (`setup :log_in_owner`) that logs in the deployment owner —
+  the user created by the bind_existing_data_to_owner migration.
+  """
+  def log_in_owner(%{conn: conn}) do
+    user = Librarian.Accounts.owner!()
+    %{conn: log_in_user(conn, user), user: user}
+  end
 end

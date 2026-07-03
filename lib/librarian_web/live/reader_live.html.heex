@@ -178,7 +178,11 @@
     </div>
 
     <%!-- RIGHT: Article Content --%>
-    <main id="article-reader" class="flex-1 min-h-0 overflow-y-auto bg-base-100" phx-hook=".KeyNav">
+    <main
+      id="article-reader"
+      class="flex-1 min-h-0 overflow-y-auto bg-base-100"
+      phx-hook=".KeyNav"
+    >
       <script :type={Phoenix.LiveView.ColocatedHook} name=".KeyNav">
         export default {
           mounted() {

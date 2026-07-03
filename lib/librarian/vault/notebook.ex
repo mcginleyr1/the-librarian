@@ -6,6 +6,7 @@ defmodule Librarian.Vault.Notebook do
     field :name, :string
     field :description, :string
 
+    belongs_to :user, Librarian.Accounts.User
     has_many :notes, Librarian.Vault.Note
 
     timestamps(type: :utc_datetime)

@@ -11,3 +11,5 @@ data:
   STORAGE_PATH: "/data/librarian"
   # Tailscale terminates TLS — disable Phoenix's internal force_ssl redirect
   DISABLE_FORCE_SSL: "true"
+  # Google accounts allowed to sign in (comma-separated)
+  ALLOWED_EMAILS: "owner@example.com"

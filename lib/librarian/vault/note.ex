@@ -15,6 +15,7 @@ defmodule Librarian.Vault.Note do
     field :embedding, Pgvector.Ecto.Vector
 
     belongs_to :notebook, Librarian.Vault.Notebook
+    belongs_to :user, Librarian.Accounts.User
     many_to_many :tags, Librarian.Vault.Tag, join_through: "note_tags", on_replace: :delete
 
     timestamps(type: :utc_datetime)

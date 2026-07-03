@@ -23,6 +23,16 @@ end
 config :librarian, LibrarianWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+config :ueberauth, Ueberauth.Strategy.Google.OAuth,
+  client_id: System.get_env("GOOGLE_CLIENT_ID"),
+  client_secret: System.get_env("GOOGLE_CLIENT_SECRET")
+
+if allowed = System.get_env("ALLOWED_EMAILS") do
+  config :librarian,
+         :allowed_emails,
+         allowed |> String.split(",") |> Enum.map(&String.trim/1)
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

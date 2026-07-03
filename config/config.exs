@@ -16,6 +16,14 @@ config :librarian,
 # Register the pgvector type so Postgrex can encode/decode vector columns
 config :librarian, Librarian.Repo, types: Librarian.PostgrexTypes
 
+# Google sign-in. Only these emails may log in (override with ALLOWED_EMAILS).
+config :librarian, :allowed_emails, ["owner@example.com"]
+
+config :ueberauth, Ueberauth,
+  providers: [
+    google: {Ueberauth.Strategy.Google, [default_scope: "email profile"]}
+  ]
+
 # Run Nx/Bumblebee computations through EXLA (CPU)
 config :nx, default_backend: EXLA.Backend
 

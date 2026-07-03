@@ -63,6 +63,9 @@ defmodule Librarian.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
+      # Google OAuth login
+      {:ueberauth, "~> 0.10"},
+      {:ueberauth_google, "~> 0.12"},
       # Feed fetching & parsing
       {:req, "~> 0.5"},
       {:saxy, "~> 1.5"},

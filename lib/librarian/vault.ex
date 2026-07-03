@@ -1,5 +1,6 @@
 defmodule Librarian.Vault do
   import Ecto.Query
+  alias Librarian.Accounts
   alias Librarian.Repo
   alias Librarian.Vault.{Note, Notebook, Tag}
   alias Librarian.Workers.RebuildInterestWorker
@@ -11,7 +12,7 @@ defmodule Librarian.Vault do
   def get_notebook!(id), do: Repo.get!(Notebook, id)
 
   def create_notebook(attrs) do
-    %Notebook{}
+    %Notebook{user_id: Accounts.owner!().id}
     |> Notebook.changeset(attrs)
     |> Repo.insert()
   end
@@ -44,7 +45,7 @@ defmodule Librarian.Vault do
     tag_records = find_or_create_tags(tags)
 
     result =
-      %Note{}
+      %Note{user_id: Accounts.owner!().id}
       |> Note.changeset(attrs)
       |> Ecto.Changeset.put_assoc(:tags, tag_records)
       |> Repo.insert()
@@ -57,7 +58,7 @@ defmodule Librarian.Vault do
     tag_records = find_or_create_tags(tags)
 
     changeset =
-      %Note{}
+      %Note{user_id: Accounts.owner!().id}
       |> Note.changeset(attrs)
       |> Ecto.Changeset.put_assoc(:tags, tag_records)
 
@@ -147,10 +148,19 @@ defmodule Librarian.Vault do
 
   def list_tags, do: Repo.all(from t in Tag, order_by: t.name)
 
+  defp find_or_create_tags([]), do: []
+
   defp find_or_create_tags(names) when is_list(names) do
+    owner_id = Accounts.owner!().id
+
     Enum.map(names, fn name ->
       name = String.downcase(String.trim(name))
-      Repo.insert!(%Tag{name: name}, on_conflict: :nothing, conflict_target: :name)
+
+      Repo.insert!(%Tag{name: name, user_id: owner_id},
+        on_conflict: :nothing,
+        conflict_target: :name
+      )
+
       Repo.get_by!(Tag, name: name)
     end)
   end

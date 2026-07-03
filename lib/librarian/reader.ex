@@ -1,5 +1,6 @@
 defmodule Librarian.Reader do
   import Ecto.Query
+  alias Librarian.Accounts
   alias Librarian.Repo
   alias Librarian.Reader.{Feed, Article, ReadState}
 
@@ -15,13 +16,13 @@ defmodule Librarian.Reader do
   def get_feed!(id), do: Repo.get!(Feed, id)
 
   def create_feed(attrs) do
-    %Feed{}
+    %Feed{user_id: Accounts.owner!().id}
     |> Feed.changeset(attrs)
     |> Repo.insert()
   end
 
   def upsert_feed(attrs) do
-    %Feed{}
+    %Feed{user_id: Accounts.owner!().id}
     |> Feed.changeset(attrs)
     |> Repo.insert(on_conflict: :nothing, conflict_target: :feed_url)
   end
@@ -203,9 +204,18 @@ defmodule Librarian.Reader do
   end
 
   defp bulk_mark_read(article_ids, now) do
+    owner_id = Accounts.owner!().id
+
     article_ids
     |> Enum.map(
-      &%{article_id: &1, read_at: now, starred: false, inserted_at: now, updated_at: now}
+      &%{
+        article_id: &1,
+        user_id: owner_id,
+        read_at: now,
+        starred: false,
+        inserted_at: now,
+        updated_at: now
+      }
     )
     |> Enum.chunk_every(10_000)
     |> Enum.each(fn chunk ->
@@ -219,7 +229,7 @@ defmodule Librarian.Reader do
   def mark_read(article_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    %ReadState{}
+    %ReadState{user_id: Accounts.owner!().id}
     |> ReadState.changeset(%{article_id: article_id, read_at: now})
     |> Repo.insert(
       on_conflict: [set: [read_at: now]],
@@ -228,7 +238,7 @@ defmodule Librarian.Reader do
   end
 
   def mark_starred(article_id, starred) do
-    %ReadState{}
+    %ReadState{user_id: Accounts.owner!().id}
     |> ReadState.changeset(%{article_id: article_id, starred: starred})
     |> Repo.insert(
       on_conflict: [set: [starred: starred]],

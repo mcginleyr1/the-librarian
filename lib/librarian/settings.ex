@@ -11,6 +11,8 @@ defmodule Librarian.Settings do
     field :b2_endpoint, :string
     field :last_backup_at, :utc_datetime
 
+    belongs_to :user, Librarian.Accounts.User
+
     timestamps(type: :utc_datetime)
   end
 
@@ -23,7 +25,7 @@ defmodule Librarian.Settings do
   end
 
   def save_settings(attrs) do
-    existing = get_settings() || %__MODULE__{id: 1}
+    existing = get_settings() || %__MODULE__{id: 1, user_id: Librarian.Accounts.owner!().id}
 
     existing
     |> changeset(attrs)

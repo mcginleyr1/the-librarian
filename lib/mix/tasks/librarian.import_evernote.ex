@@ -106,14 +106,14 @@ defmodule Mix.Tasks.Librarian.ImportEvernote do
         if in_cdata and not at_eof do
           # Keep last 2 bytes buffered in case ]]> spans the chunk boundary
           safe_len = max(0, byte_size(data) - 2)
-          <<safe::binary-size(safe_len), tail::binary>> = data
+          <<safe::binary-size(^safe_len), tail::binary>> = data
           {IO.iodata_to_binary(Enum.reverse([safe | acc])), tail, true}
         else
           {IO.iodata_to_binary(Enum.reverse([data | acc])), <<>>, in_cdata}
         end
 
       {pos, len} ->
-        <<before::binary-size(pos), _::binary-size(len), rest::binary>> = data
+        <<before::binary-size(^pos), _::binary-size(^len), rest::binary>> = data
 
         if in_cdata do
           if not at_eof and byte_size(rest) < @cdata_lookahead do

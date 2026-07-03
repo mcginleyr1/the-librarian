@@ -95,13 +95,49 @@ k-apply:
     kubectl apply -k k8s/
 
 # Create secrets — run after k-namespace, before k-apply
-k-create-secrets db-password: k-namespace
+k-create-secrets db-password google-client-id google-client-secret: k-namespace
     kubectl create secret generic librarian-secrets -n {{NAMESPACE}} \
         --from-literal=db-user=librarian \
         --from-literal=db-password={{db-password}} \
         --from-literal=secret-key-base=$(mix phx.gen.secret) \
         --from-literal=database-url=ecto://librarian:{{db-password}}@postgres:5432/librarian_prod \
+        --from-literal=google-client-id={{google-client-id}} \
+        --from-literal=google-client-secret={{google-client-secret}} \
         --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+# Google has no API/gcloud command for standard OAuth 2.0 web clients (the IAP
+# OAuth Admin API was shut down 2026-03), so the console click-through is
+# unavoidable — this walks it: prints the exact values and opens the console.
+oauth-setup:
+    @echo "Google OAuth clients for web sign-in can only be created in the console."
+    @echo ""
+    @echo "1. Consent screen (once per project):"
+    @echo "     https://console.cloud.google.com/auth/branding"
+    @echo "     - User type: External   - App name: The Librarian"
+    @echo "     - Add yourself as a test user (Audience page): owner@example.com"
+    @echo "       (or hit 'Publish app' so the token doesn't expire after 7 days)"
+    @echo ""
+    @echo "2. Create the client:"
+    @echo "     https://console.cloud.google.com/auth/clients/create"
+    @echo "     - Application type: Web application   - Name: librarian"
+    @echo "     - Authorized redirect URIs:"
+    @echo "         http://localhost:4000/auth/google/callback"
+    @echo "         https://librarian.<your-tailnet>.ts.net/auth/google/callback"
+    @echo ""
+    @echo "3. Store the credentials:"
+    @echo "     just k-set-google-oauth <client-id> <client-secret>   # existing cluster"
+    @echo "     just k-create-secrets <db-pw> <client-id> <client-secret>   # first deploy"
+    @echo "     export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...   # local dev"
+    open "https://console.cloud.google.com/auth/clients/create"
+
+# Patch Google OAuth creds into the existing secret (does NOT touch db password
+# or secret-key-base — unlike k-create-secrets, which regenerates the key base
+# and would invalidate live sessions), then restart the app to pick them up.
+k-set-google-oauth google-client-id google-client-secret:
+    kubectl patch secret librarian-secrets -n {{NAMESPACE}} --type merge \
+        -p '{"stringData":{"google-client-id":"{{google-client-id}}","google-client-secret":"{{google-client-secret}}"}}'
+    kubectl rollout restart deployment/librarian -n {{NAMESPACE}}
+    kubectl rollout status deployment/librarian -n {{NAMESPACE}}
 
 # Run Ecto migrations in cluster
 k-migrate:

@@ -19,6 +19,7 @@ defmodule Librarian.Reader.Feed do
     field :like_rate, :float
     field :discovered_at, :utc_datetime
 
+    belongs_to :user, Librarian.Accounts.User
     has_many :articles, Librarian.Reader.Article
 
     timestamps(type: :utc_datetime)

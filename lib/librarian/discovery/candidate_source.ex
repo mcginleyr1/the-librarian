@@ -13,6 +13,7 @@ defmodule Librarian.Discovery.CandidateSource do
     field :sample_hit_rate, :float
 
     belongs_to :discovered_from_article, Librarian.Reader.Article
+    belongs_to :user, Librarian.Accounts.User
 
     timestamps(type: :utc_datetime)
   end

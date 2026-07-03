@@ -9,6 +9,18 @@
         <.icon name="hero-archive-box" class="w-4 h-4" /> Vault
       </a>
       <h1 class="text-2xl font-bold ml-2">Settings</h1>
+      <div class="ml-auto flex items-center gap-2">
+        <img
+          :if={@current_user.avatar_url}
+          src={@current_user.avatar_url}
+          referrerpolicy="no-referrer"
+          class="w-7 h-7 rounded-full"
+        />
+        <span class="text-sm text-base-content/60">{@current_user.email}</span>
+        <.link href={~p"/logout"} method="delete" id="sign-out" class="btn btn-ghost btn-sm gap-1">
+          <.icon name="hero-arrow-right-start-on-rectangle" class="w-4 h-4" /> Sign out
+        </.link>
+      </div>
     </div>
 
     <%!-- Tabs --%>

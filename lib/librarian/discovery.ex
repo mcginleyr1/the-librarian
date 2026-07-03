@@ -173,7 +173,7 @@ defmodule Librarian.Discovery do
   end
 
   defp upsert_candidate(domain, channel, article_id, mentions) do
-    %CandidateSource{}
+    %CandidateSource{user_id: Librarian.Accounts.owner!().id}
     |> CandidateSource.changeset(%{
       domain: domain,
       channel: channel,

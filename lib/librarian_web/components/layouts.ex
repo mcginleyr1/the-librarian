@@ -96,6 +96,18 @@ defmodule LibrarianWeb.Layouts do
     """
   end
 
+  attr :flash, :map, required: true
+  slot :inner_block, required: true
+
+  def auth(assigns) do
+    ~H"""
+    <div class="min-h-screen flex items-center justify-center bg-base-200 px-4">
+      <.flash_group flash={@flash} />
+      {render_slot(@inner_block)}
+    </div>
+    """
+  end
+
   @doc """
   Shows the flash group with standard titles and content.
 

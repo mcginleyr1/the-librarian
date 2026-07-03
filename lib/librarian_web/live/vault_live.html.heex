@@ -115,7 +115,11 @@
           </button>
         <% end %>
       </div>
-      <form id="bulk-form" phx-submit="bulk_delete" class="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <form
+        id="bulk-form"
+        phx-submit="bulk_delete"
+        class="flex-1 min-h-0 overflow-hidden flex flex-col"
+      >
         <div
           id="notes-list"
           class="flex-1 min-h-0 overflow-y-auto p-1.5 space-y-0.5"
@@ -134,7 +138,7 @@
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                   <p class="text-xs text-base-content/50 mt-0.5">
-                    <span :if={note.notebook}>{note.notebook.name}  · </span>
+                    <span :if={note.notebook}>{note.notebook.name}    · </span>
                     {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                   </p>
                   <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -161,7 +165,7 @@
               >
                 <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                 <p class="text-xs text-base-content/50 mt-0.5">
-                  <span :if={note.notebook}>{note.notebook.name}  · </span>
+                  <span :if={note.notebook}>{note.notebook.name}    · </span>
                   {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                 </p>
                 <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -318,7 +322,7 @@
             class="link link-primary text-xs flex items-center gap-1"
           >
             <.icon name="hero-arrow-top-right-on-square" class="size-3" />
-            {URI.parse(@selected_note.source_url || "").host}
+            {URI.parse(@selected_note.source_url).host}
           </a>
         </div>
         <div :if={@selected_note.tags != []} class="flex flex-wrap gap-1.5 mb-6">

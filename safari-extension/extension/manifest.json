@@ -3,6 +3,10 @@
   "name": "The Librarian",
   "version": "1.0",
   "description": "Save pages to The Librarian vault",
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png"
+  },
   "permissions": ["activeTab", "scripting", "tabs", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": {

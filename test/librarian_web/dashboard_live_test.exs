@@ -6,6 +6,8 @@ defmodule LibrarianWeb.DashboardLiveTest do
   alias Librarian.{Reader, Repo, Stream}
   alias Librarian.Reader.Article
 
+  setup :log_in_owner
+
   test "renders signal stats and the rebuild control", %{conn: conn} do
     {:ok, feed} =
       Reader.create_feed(%{
