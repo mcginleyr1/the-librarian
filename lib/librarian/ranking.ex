@@ -31,7 +31,7 @@ defmodule Librarian.Ranking do
         SELECT 1 FROM interactions i
         WHERE i.article_id = a.id AND i.kind = ANY($2::text[])
       )
-    ORDER BY a.published_at DESC
+    ORDER BY a.published_at DESC NULLS LAST
     LIMIT $4
   ),
   neg AS (
@@ -99,13 +99,20 @@ defmodule Librarian.Ranking do
     |> with_exploration(limit)
   end
 
-  @doc "Distinct topics present across current candidates, for topic-lens chips."
+  @doc """
+  Distinct topics present in the current candidate pool, for topic-lens chips.
+  Bounded to the same recency window the stream ranks over, so lenses reflect
+  what's actually in front of you rather than all-time topic frequencies.
+  """
   def available_topics do
-    Repo.all(
+    pool =
       from a in Article,
-        where: not is_nil(a.embedding) and a.topics != [],
-        select: a.topics
-    )
+        where: not is_nil(a.embedding),
+        order_by: [desc_nulls_last: a.published_at],
+        limit: @pool_size,
+        select: %{topics: a.topics}
+
+    Repo.all(from p in subquery(pool), where: p.topics != [], select: p.topics)
     |> List.flatten()
     |> Enum.frequencies()
     |> Enum.sort_by(fn {_t, n} -> -n end)

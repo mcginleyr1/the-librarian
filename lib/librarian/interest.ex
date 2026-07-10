@@ -16,8 +16,13 @@ defmodule Librarian.Interest do
   alias Librarian.Reader.Article
   alias Librarian.Vault.Note
 
-  @clusters 4
+  @clusters 8
   @iterations 8
+  # Behaviour must outweigh the archive: deliberate endorsements count 10x,
+  # and the vault contributes only its most recent notes so a large historical
+  # import can't pin the centroids against live feedback.
+  @strong_weight 10
+  @vault_cap 300
 
   @doc "Recomputes interest centroids from the current positive corpus."
   def rebuild do
@@ -100,14 +105,15 @@ defmodule Librarian.Interest do
   end
 
   @doc """
-  Embeddings of positively-signalled articles plus all vault notes. Level-2
-  signals (likes/saves) and vault notes are weighted 2x against level-1 signals
-  (reads/done) by repetition, so deliberate endorsements pull centroids harder.
+  Embeddings of positively-signalled articles plus the most recent vault notes.
+  Level-2 signals (likes/saves) are weighted by repetition so deliberate
+  endorsements pull centroids hardest; the vault is capped so it acts as a
+  prior rather than drowning out behaviour.
   """
   def positive_embeddings do
-    strong = article_embeddings(Stream.positive_article_ids()) ++ note_embeddings()
+    strong = article_embeddings(Stream.positive_article_ids())
     weak = article_embeddings(Stream.weak_positive_article_ids())
-    strong ++ strong ++ weak
+    Enum.concat(List.duplicate(strong, @strong_weight)) ++ note_embeddings() ++ weak
   end
 
   def negative_embeddings do
@@ -124,7 +130,13 @@ defmodule Librarian.Interest do
   end
 
   defp note_embeddings do
-    Repo.all(from n in Note, where: not is_nil(n.embedding), select: n.embedding)
+    Repo.all(
+      from n in Note,
+        where: not is_nil(n.embedding),
+        order_by: [desc: n.updated_at],
+        limit: @vault_cap,
+        select: n.embedding
+    )
     |> Enum.map(&Pgvector.to_list/1)
   end
 
