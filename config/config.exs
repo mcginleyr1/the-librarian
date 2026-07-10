@@ -77,7 +77,6 @@ config :librarian, Oban,
     {Oban.Plugins.Cron,
      crontab: [
        {"0 */2 * * *", Librarian.Workers.ScheduleFeedsWorker},
-       {"30 5,17 * * *", Librarian.Workers.CurateFeedsWorker},
        {"0 2 * * *", Librarian.Workers.BackupWorker},
        {"*/15 * * * *", Librarian.Workers.EmbedArticlesWorker},
        {"15 */2 * * *", Librarian.Workers.TagArticlesWorker},

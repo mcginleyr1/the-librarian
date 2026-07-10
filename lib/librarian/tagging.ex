@@ -3,9 +3,9 @@ defmodule Librarian.Tagging do
   Structured tagging of articles (P3). Locally this uses fast keyword + content
   heuristics so topic-lens chips and "why" explanations work without an LLM.
 
-  `judge/1` is the seam for the host Claude agent (the reframed CurateFeedsWorker):
-  when wired up it returns a richer judgement (topics, entities, a 0-10 judge
-  score). Until then it returns `nil` and the heuristic tags stand alone.
+  `judge/1` is the seam for an LLM judge: when wired up it returns a richer
+  judgement (topics, entities, a 0-10 judge score). Until then it returns
+  `nil` and the heuristic tags stand alone.
   """
 
   import Ecto.Query
@@ -48,7 +48,7 @@ defmodule Librarian.Tagging do
 
   @doc """
   Seam for the host LLM judge. Returns a map like `%{score: 8.0, topics: [...]}`
-  or `nil` locally. Wire this to the curate server to enable LLM judging.
+  or `nil` locally.
   """
   def judge(%Article{}), do: %{score: nil}
 

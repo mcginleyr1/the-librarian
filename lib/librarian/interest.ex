@@ -5,8 +5,7 @@ defmodule Librarian.Interest do
   handful of interest centroids (your distinct topic clusters). Disliked items
   form the negative set used as a ranking penalty.
 
-  The hand-written `knowledge/profiles/*.md` are the cold-start prior; once real
-  signal exists, this replaces them. Call `rebuild/0` after signal changes.
+  Call `rebuild/0` after signal changes.
   """
 
   import Ecto.Query

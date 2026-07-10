@@ -79,7 +79,7 @@ defmodule Librarian.MixProject do
       {:ex_aws, "~> 2.5"},
       {:ex_aws_s3, "~> 2.5"},
       {:sweet_xml, "~> 0.7"},
-      # Markdown rendering for curated notes
+      # Markdown rendering for markdown-mode notes
       {:mdex, "~> 0.2"},
       # Vector embeddings for the personalized stream
       {:pgvector, "~> 0.4.0"},
