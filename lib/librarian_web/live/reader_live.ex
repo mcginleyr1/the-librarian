@@ -95,6 +95,7 @@ defmodule LibrarianWeb.ReaderLive do
     article = Reader.get_article!(article_id)
     starred = !(article.read_state && article.read_state.starred)
     Reader.mark_starred(article_id, starred)
+    if starred, do: Stream.record_interaction(article_id, :save)
 
     updated_article =
       if socket.assigns.selected_article && socket.assigns.selected_article.id == article_id do
