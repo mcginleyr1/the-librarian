@@ -1,21 +1,16 @@
 defmodule Librarian.Reader.FeedParser do
   @moduledoc """
   Parses RSS 2.0, Atom, and RSS 1.0/RDF feeds into a common article shape.
-  Returns a list of maps ready for Article.changeset/2.
+  Returns `{:ok, articles}` (maps ready for Article.changeset/2) or
+  `{:error, message}` when the body is not a recognizable feed.
   """
 
   def parse(body, feed_url) when is_binary(body) do
     case Saxy.SimpleForm.parse_string(String.replace_prefix(body, "\uFEFF", "")) do
-      {:ok, doc} -> detect_and_parse(doc, feed_url)
-      {:error, _} -> []
-    end
-  end
-
-  defp detect_and_parse({tag, _attrs, _children} = doc, feed_url) do
-    cond do
-      tag in ["rss", "rdf:RDF"] -> parse_rss(doc, feed_url)
-      tag == "feed" -> parse_atom(doc, feed_url)
-      true -> []
+      {:ok, {tag, _, _} = doc} when tag in ["rss", "rdf:RDF"] -> {:ok, parse_rss(doc, feed_url)}
+      {:ok, {"feed", _, _} = doc} -> {:ok, parse_atom(doc, feed_url)}
+      {:ok, {tag, _, _}} -> {:error, "unrecognized feed root <#{tag}>"}
+      {:error, error} -> {:error, Exception.message(error)}
     end
   end
 

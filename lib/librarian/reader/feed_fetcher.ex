@@ -23,26 +23,30 @@ defmodule Librarian.Reader.FeedFetcher do
         :ok
 
       {:ok, %{status: 200} = response} ->
-        etag = get_header(response, "etag")
-        last_modified = get_header(response, "last-modified")
-        now = DateTime.utc_now() |> DateTime.truncate(:second)
+        case Librarian.Reader.FeedParser.parse(response.body, feed.feed_url) do
+          {:ok, articles} ->
+            etag = get_header(response, "etag")
+            last_modified = get_header(response, "last-modified")
+            now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-        articles = Librarian.Reader.FeedParser.parse(response.body, feed.feed_url)
+            Repo.transaction(fn ->
+              upsert_articles(feed.id, articles, now)
 
-        Repo.transaction(fn ->
-          upsert_articles(feed.id, articles, now)
+              feed
+              |> Feed.changeset(%{
+                etag: etag,
+                last_modified: last_modified,
+                last_fetched_at: now,
+                fetch_error: nil
+              })
+              |> Repo.update!()
+            end)
 
-          feed
-          |> Feed.changeset(%{
-            etag: etag,
-            last_modified: last_modified,
-            last_fetched_at: now,
-            fetch_error: nil
-          })
-          |> Repo.update!()
-        end)
+            :ok
 
-        :ok
+          {:error, message} ->
+            record_error(feed, "parse error: #{message}")
+        end
 
       {:ok, %{status: status}} ->
         record_error(feed, "HTTP #{status}")

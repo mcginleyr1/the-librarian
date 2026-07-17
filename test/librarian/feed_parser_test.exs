@@ -8,7 +8,8 @@ defmodule Librarian.Reader.FeedParserTest do
 
   describe "parse/2 with RSS 2.0" do
     setup do
-      %{articles: FeedParser.parse(@rss2, "https://example.com/feed")}
+      {:ok, articles} = FeedParser.parse(@rss2, "https://example.com/feed")
+      %{articles: articles}
     end
 
     test "returns two articles", %{articles: articles} do
@@ -46,7 +47,8 @@ defmodule Librarian.Reader.FeedParserTest do
 
   describe "parse/2 with Atom" do
     setup do
-      %{articles: FeedParser.parse(@atom, "https://example.com/feed")}
+      {:ok, articles} = FeedParser.parse(@atom, "https://example.com/feed")
+      %{articles: articles}
     end
 
     test "returns two entries", %{articles: articles} do
@@ -87,16 +89,22 @@ defmodule Librarian.Reader.FeedParserTest do
   end
 
   describe "parse/2 with bad input" do
-    test "returns empty list for invalid XML" do
-      assert [] == FeedParser.parse("not xml at all", "https://example.com")
+    test "returns error for invalid XML" do
+      assert {:error, _} = FeedParser.parse("not xml at all", "https://example.com")
     end
 
-    test "returns empty list for empty string" do
-      assert [] == FeedParser.parse("", "https://example.com")
+    test "returns error for empty string" do
+      assert {:error, _} = FeedParser.parse("", "https://example.com")
+    end
+
+    test "returns error for XML that is not a feed" do
+      assert {:error, "unrecognized feed root <html>"} =
+               FeedParser.parse("<html></html>", "https://example.com")
     end
 
     test "parses a feed with a UTF-8 BOM prefix" do
-      assert length(FeedParser.parse("\uFEFF" <> @atom, "https://example.com/feed")) == 2
+      assert {:ok, articles} = FeedParser.parse("\uFEFF" <> @atom, "https://example.com/feed")
+      assert length(articles) == 2
     end
   end
 end
