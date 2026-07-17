@@ -5,7 +5,7 @@ defmodule Librarian.Reader.FeedParser do
   """
 
   def parse(body, feed_url) when is_binary(body) do
-    case Saxy.SimpleForm.parse_string(body) do
+    case Saxy.SimpleForm.parse_string(String.replace_prefix(body, "\uFEFF", "")) do
       {:ok, doc} -> detect_and_parse(doc, feed_url)
       {:error, _} -> []
     end

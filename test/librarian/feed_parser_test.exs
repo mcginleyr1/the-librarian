@@ -94,5 +94,9 @@ defmodule Librarian.Reader.FeedParserTest do
     test "returns empty list for empty string" do
       assert [] == FeedParser.parse("", "https://example.com")
     end
+
+    test "parses a feed with a UTF-8 BOM prefix" do
+      assert length(FeedParser.parse("\uFEFF" <> @atom, "https://example.com/feed")) == 2
+    end
   end
 end
