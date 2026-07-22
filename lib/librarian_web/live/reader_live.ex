@@ -28,6 +28,7 @@ defmodule LibrarianWeb.ReaderLive do
        article_offset: 0,
        more_articles?: false,
        current_index: -1,
+       pending_new: 0,
        collapsed_categories: MapSet.new()
      )
      |> stream(:articles, [])}
@@ -131,7 +132,7 @@ defmodule LibrarianWeb.ReaderLive do
 
           feed_ids =
             socket.assigns.feeds_by_category
-            |> Map.get(actual_category, [])
+            |> Enum.find_value([], fn {cat, feeds} -> if cat == actual_category, do: feeds end)
             |> Enum.map(& &1.id)
 
           Enum.reduce(feed_ids, socket.assigns.unread_counts, &Map.put(&2, &1, 0))
@@ -167,6 +168,13 @@ defmodule LibrarianWeb.ReaderLive do
     {:noreply, push_patch(socket, to: path)}
   end
 
+  def handle_event("show_new_articles", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(current_index: -1)
+     |> load_articles_page(reset: true)}
+  end
+
   def handle_event("toggle_category", %{"category" => category_key}, socket) do
     collapsed = socket.assigns.collapsed_categories
 
@@ -195,12 +203,34 @@ defmodule LibrarianWeb.ReaderLive do
   end
 
   @impl true
-  def handle_info({:feed_updated, feed_id}, socket) do
-    count = Reader.unread_count(feed_id)
+  def handle_info({:feed_updated, feed_id, new_count}, socket) do
+    socket =
+      assign(socket,
+        unread_counts:
+          Map.put(socket.assigns.unread_counts, feed_id, Reader.unread_count(feed_id))
+      )
 
-    {:noreply,
-     assign(socket, unread_counts: Map.put(socket.assigns.unread_counts, feed_id, count))}
+    socket =
+      if socket.assigns.filter != :starred and feed_in_scope?(socket.assigns, feed_id) do
+        assign(socket, pending_new: socket.assigns.pending_new + new_count)
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
+
+  defp feed_in_scope?(%{selected_feed_id: id}, feed_id) when not is_nil(id), do: id == feed_id
+
+  defp feed_in_scope?(%{selected_category: slug} = assigns, feed_id) when not is_nil(slug) do
+    category = if slug == "uncategorized", do: nil, else: slug
+
+    assigns.feeds_by_category
+    |> Enum.find_value([], fn {cat, feeds} -> if cat == category, do: feeds end)
+    |> Enum.any?(&(&1.id == feed_id))
+  end
+
+  defp feed_in_scope?(_assigns, _feed_id), do: true
 
   defp load_articles_page(socket, opts) do
     reset = Keyword.fetch!(opts, :reset)
@@ -212,7 +242,8 @@ defmodule LibrarianWeb.ReaderLive do
     |> assign(
       article_ids: if(reset, do: ids, else: socket.assigns.article_ids ++ ids),
       article_offset: offset + length(articles),
-      more_articles?: length(articles) == @page_size
+      more_articles?: length(articles) == @page_size,
+      pending_new: if(reset, do: 0, else: socket.assigns.pending_new)
     )
     |> stream(:articles, articles, reset: reset)
   end

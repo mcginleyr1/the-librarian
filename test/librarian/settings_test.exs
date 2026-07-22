@@ -33,6 +33,19 @@ defmodule Librarian.SettingsTest do
     end
   end
 
+  describe "category_order/0 and pinned_lenses/0" do
+    test "default to empty lists" do
+      assert Settings.category_order() == []
+      assert Settings.pinned_lenses() == []
+    end
+
+    test "return saved values" do
+      Settings.save_settings(%{category_order: ["News", "Tech"], pinned_lenses: ["News"]})
+      assert Settings.category_order() == ["News", "Tech"]
+      assert Settings.pinned_lenses() == ["News"]
+    end
+  end
+
   describe "configured?/0" do
     test "returns false when no settings" do
       refute Settings.configured?()

@@ -76,7 +76,7 @@ config :librarian, Oban,
     Oban.Plugins.Lifeline,
     {Oban.Plugins.Cron,
      crontab: [
-       {"0 */2 * * *", Librarian.Workers.ScheduleFeedsWorker},
+       {"*/10 * * * *", Librarian.Workers.ScheduleFeedsWorker},
        {"0 2 * * *", Librarian.Workers.BackupWorker},
        {"*/15 * * * *", Librarian.Workers.EmbedArticlesWorker},
        {"15 */2 * * *", Librarian.Workers.TagArticlesWorker},

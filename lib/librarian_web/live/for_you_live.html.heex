@@ -56,9 +56,29 @@
         </nav>
       </div>
 
-      <%!-- TOPIC LENS CHIPS --%>
-      <div :if={@topics != []} class="px-6 pb-3 flex items-center gap-1.5 flex-wrap">
+      <%!-- LENS CHIPS: pinned category lenses first, then pool topics --%>
+      <div
+        :if={@topics != [] or @lenses != []}
+        class="px-6 pb-3 flex items-center gap-1.5 flex-wrap"
+      >
         <span class="text-[11px] uppercase tracking-wider text-base-content/40 mr-1">Lenses</span>
+        <button
+          :for={lens <- @lenses}
+          id={"lens-#{String.replace(lens, ~r/\W+/, "-")}"}
+          phx-click="filter_category"
+          phx-value-category={lens}
+          class={[
+            "press rounded-full px-3 py-1 text-xs font-medium transition inline-flex items-center gap-1",
+            if(@active_category == lens,
+              do: "bg-primary text-primary-content shadow-sm",
+              else:
+                "bg-primary/5 border border-primary/30 text-base-content/70 hover:border-primary/60 hover:text-base-content"
+            )
+          ]}
+        >
+          <.icon name="hero-bolt" class="size-3" />
+          {lens}
+        </button>
         <button
           :for={topic <- @topics}
           phx-click="filter_topic"
@@ -78,6 +98,15 @@
           :if={@active_topic}
           phx-click="filter_topic"
           phx-value-topic={@active_topic}
+          class="press rounded-full px-2 py-1 text-xs text-base-content/40 hover:text-error transition"
+          title="Clear lens"
+        >
+          <.icon name="hero-x-mark" class="size-3.5" />
+        </button>
+        <button
+          :if={@active_category}
+          phx-click="filter_category"
+          phx-value-category={@active_category}
           class="press rounded-full px-2 py-1 text-xs text-base-content/40 hover:text-error transition"
           title="Clear lens"
         >

@@ -8,9 +8,35 @@ defmodule Librarian.Reader do
     Repo.all(from f in Feed, where: f.active == true)
   end
 
+  @doc "Active feeds whose fetch interval has elapsed since their last fetch."
+  def list_due_feeds(now \\ DateTime.utc_now()) do
+    Repo.all(
+      from f in Feed,
+        where: f.active == true,
+        where:
+          is_nil(f.last_fetched_at) or
+            fragment(
+              "? + make_interval(mins => ?) <= ?",
+              f.last_fetched_at,
+              f.fetch_interval_minutes,
+              ^now
+            )
+    )
+  end
+
+  @doc """
+  Active feeds grouped into `{category, feeds}` tuples, ordered by the user's
+  saved category order (Settings). Unordered categories follow alphabetically,
+  with Uncategorized last.
+  """
   def list_feeds_by_category do
-    Repo.all(from f in Feed, where: f.active == true, order_by: [:category, :title])
+    position = Librarian.Settings.category_order() |> Enum.with_index() |> Map.new()
+
+    Repo.all(from f in Feed, where: f.active == true, order_by: [:title])
     |> Enum.group_by(& &1.category)
+    |> Enum.sort_by(fn {category, _feeds} ->
+      {Map.get(position, category, map_size(position)), is_nil(category), category || ""}
+    end)
   end
 
   def get_feed!(id), do: Repo.get!(Feed, id)
@@ -35,7 +61,7 @@ defmodule Librarian.Reader do
     query =
       from a in Article,
         where: a.feed_id == ^feed_id,
-        order_by: [desc: a.published_at],
+        order_by: [desc: a.fetched_at, desc: a.published_at],
         limit: ^limit,
         offset: ^offset,
         preload: [:feed, :read_state]
@@ -68,7 +94,7 @@ defmodule Librarian.Reader do
         left_join: rs in ReadState,
         on: rs.article_id == a.id,
         where: is_nil(rs.id) or is_nil(rs.read_at),
-        order_by: [desc: a.published_at],
+        order_by: [desc: a.fetched_at, desc: a.published_at],
         limit: ^limit,
         offset: ^offset,
         preload: [:feed, :read_state]
@@ -85,7 +111,7 @@ defmodule Librarian.Reader do
         from a in Article,
           join: f in assoc(a, :feed),
           where: is_nil(f.category) and f.active == true,
-          order_by: [desc: a.published_at],
+          order_by: [desc: a.fetched_at, desc: a.published_at],
           limit: ^limit,
           offset: ^offset,
           preload: [:feed, :read_state]
@@ -93,7 +119,7 @@ defmodule Librarian.Reader do
         from a in Article,
           join: f in assoc(a, :feed),
           where: f.category == ^category and f.active == true,
-          order_by: [desc: a.published_at],
+          order_by: [desc: a.fetched_at, desc: a.published_at],
           limit: ^limit,
           offset: ^offset,
           preload: [:feed, :read_state]

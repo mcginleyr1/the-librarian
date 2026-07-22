@@ -318,6 +318,61 @@
         </div>
       </div>
 
+      <%!-- Category order & For You lenses --%>
+      <div :if={@category_order != []} class="card bg-base-200">
+        <div class="card-body pb-4">
+          <h2 class="card-title text-base mb-1">Categories</h2>
+          <p class="text-sm text-base-content/50 mb-3">
+            Order controls the reader sidebar, top to bottom. The bolt pins a category as a For You lens.
+          </p>
+          <div class="space-y-1">
+            <div
+              :for={{cat, i} <- Enum.with_index(@category_order)}
+              id={"category-row-#{String.replace(cat, ~r/\W+/, "-")}"}
+              class="flex items-center gap-1 bg-base-100 rounded-lg px-3 py-1.5"
+            >
+              <span class="flex-1 text-sm font-medium truncate">{cat}</span>
+              <button
+                phx-click="toggle_lens"
+                phx-value-category={cat}
+                class={[
+                  "btn btn-ghost btn-xs",
+                  if(cat in @pinned_lenses, do: "text-primary", else: "text-base-content/30")
+                ]}
+                title={
+                  if(cat in @pinned_lenses,
+                    do: "Remove For You lens",
+                    else: "Pin as For You lens"
+                  )
+                }
+              >
+                <.icon name="hero-bolt" class="w-3.5 h-3.5" />
+              </button>
+              <button
+                phx-click="move_category"
+                phx-value-category={cat}
+                phx-value-dir="up"
+                disabled={i == 0}
+                class="btn btn-ghost btn-xs disabled:opacity-20"
+                title="Move up"
+              >
+                <.icon name="hero-chevron-up" class="w-3.5 h-3.5" />
+              </button>
+              <button
+                phx-click="move_category"
+                phx-value-category={cat}
+                phx-value-dir="down"
+                disabled={i == length(@category_order) - 1}
+                class="btn btn-ghost btn-xs disabled:opacity-20"
+                title="Move down"
+              >
+                <.icon name="hero-chevron-down" class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <%!-- Fetch all --%>
       <div class="flex justify-end">
         <button phx-click="fetch_all_feeds" class="btn btn-sm btn-outline gap-2">
@@ -350,6 +405,13 @@
                     </p>
                   </div>
                   <div class="flex items-center gap-1 shrink-0">
+                    <span
+                      :if={feed.fetch_interval_minutes != 120}
+                      class="badge badge-primary badge-outline badge-sm"
+                      title="Fetch interval"
+                    >
+                      {feed.fetch_interval_minutes}m
+                    </span>
                     <span class="badge badge-ghost badge-sm">{feed.category || "—"}</span>
                     <button
                       phx-click="fetch_feed"
@@ -409,6 +471,19 @@
                       list="categories-list"
                       class="input input-bordered input-sm w-full"
                       placeholder="Category"
+                    />
+                  </div>
+                  <div class="w-32">
+                    <label class="label py-0">
+                      <span class="label-text text-xs">Fetch every (min)</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="feed[fetch_interval_minutes]"
+                      value={Phoenix.HTML.Form.input_value(@feed_form, :fetch_interval_minutes)}
+                      min="5"
+                      step="5"
+                      class="input input-bordered input-sm w-full"
                     />
                   </div>
                   <div class="flex gap-1">

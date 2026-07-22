@@ -5,6 +5,7 @@ defmodule Librarian.Reader.FeedFetcher do
   """
 
   require Logger
+  import Ecto.Query
   alias Librarian.Repo
   alias Librarian.Reader.{Feed, Article}
 
@@ -20,6 +21,12 @@ defmodule Librarian.Reader.FeedFetcher do
 
     case result do
       {:ok, %{status: 304}} ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        feed
+        |> Feed.changeset(%{last_fetched_at: now, fetch_error: nil})
+        |> Repo.update()
+
         :ok
 
       {:ok, %{status: 200} = response} ->
@@ -29,18 +36,29 @@ defmodule Librarian.Reader.FeedFetcher do
             last_modified = get_header(response, "last-modified")
             now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-            Repo.transaction(fn ->
-              upsert_articles(feed.id, articles, now)
+            {:ok, new_count} =
+              Repo.transaction(fn ->
+                new_count = upsert_articles(feed.id, articles, now)
 
-              feed
-              |> Feed.changeset(%{
-                etag: etag,
-                last_modified: last_modified,
-                last_fetched_at: now,
-                fetch_error: nil
-              })
-              |> Repo.update!()
-            end)
+                feed
+                |> Feed.changeset(%{
+                  etag: etag,
+                  last_modified: last_modified,
+                  last_fetched_at: now,
+                  fetch_error: nil
+                })
+                |> Repo.update!()
+
+                new_count
+              end)
+
+            if new_count > 0 do
+              Phoenix.PubSub.broadcast(
+                Librarian.PubSub,
+                "reader:updates",
+                {:feed_updated, feed.id, new_count}
+              )
+            end
 
             :ok
 
@@ -56,7 +74,18 @@ defmodule Librarian.Reader.FeedFetcher do
     end
   end
 
+  # Returns how many of the parsed articles were not already in the database.
   defp upsert_articles(feed_id, articles, now) do
+    guids = articles |> Enum.map(& &1[:guid]) |> Enum.reject(&is_nil/1)
+
+    known =
+      Repo.all(
+        from a in Article,
+          where: a.feed_id == ^feed_id and a.guid in ^guids,
+          select: a.guid
+      )
+      |> MapSet.new()
+
     Enum.each(articles, fn attrs ->
       %Article{}
       |> Article.changeset(Map.merge(attrs, %{feed_id: feed_id, fetched_at: now}))
@@ -65,6 +94,8 @@ defmodule Librarian.Reader.FeedFetcher do
         conflict_target: [:feed_id, :guid]
       )
     end)
+
+    Enum.count(guids, &(not MapSet.member?(known, &1)))
   end
 
   defp conditional_headers(%Feed{etag: etag, last_modified: lm}) do

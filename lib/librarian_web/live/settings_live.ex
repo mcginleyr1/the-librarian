@@ -20,6 +20,8 @@ defmodule LibrarianWeb.SettingsLive do
        # Feeds tab
        feeds: Reader.list_all_feeds(),
        categories: Reader.list_categories(),
+       category_order: ordered_categories(),
+       pinned_lenses: Settings.pinned_lenses(),
        editing_feed_id: nil,
        feed_form: nil,
        new_feed_form: to_form(%{"title" => "", "feed_url" => "", "category" => ""}),
@@ -69,7 +71,8 @@ defmodule LibrarianWeb.SettingsLive do
          |> assign(
            import_result: {:opml, stats},
            feeds: Reader.list_all_feeds(),
-           categories: Reader.list_categories()
+           categories: Reader.list_categories(),
+           category_order: ordered_categories()
          )}
 
       _ ->
@@ -147,6 +150,7 @@ defmodule LibrarianWeb.SettingsLive do
          |> assign(
            feeds: Reader.list_all_feeds(),
            categories: Reader.list_categories(),
+           category_order: ordered_categories(),
            discovered_feeds: nil,
            discover_error: nil
          )
@@ -205,7 +209,8 @@ defmodule LibrarianWeb.SettingsLive do
            editing_feed_id: nil,
            feed_form: nil,
            feeds: Reader.list_all_feeds(),
-           categories: Reader.list_categories()
+           categories: Reader.list_categories(),
+           category_order: ordered_categories()
          )}
 
       {:error, changeset} ->
@@ -224,7 +229,11 @@ defmodule LibrarianWeb.SettingsLive do
     Reader.delete_feed(feed)
 
     {:noreply,
-     assign(socket, feeds: Reader.list_all_feeds(), categories: Reader.list_categories())}
+     assign(socket,
+       feeds: Reader.list_all_feeds(),
+       categories: Reader.list_categories(),
+       category_order: ordered_categories()
+     )}
   end
 
   def handle_event(
@@ -239,6 +248,7 @@ defmodule LibrarianWeb.SettingsLive do
          |> assign(
            feeds: Reader.list_all_feeds(),
            categories: Reader.list_categories(),
+           category_order: ordered_categories(),
            new_feed_form: to_form(%{"title" => "", "feed_url" => "", "category" => ""})
          )
          |> put_flash(:info, "Feed added")}
@@ -246,6 +256,28 @@ defmodule LibrarianWeb.SettingsLive do
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Invalid feed URL or duplicate")}
     end
+  end
+
+  # --- Category order & lenses ---
+
+  def handle_event("move_category", %{"category" => cat, "dir" => dir}, socket) do
+    order = socket.assigns.category_order
+    idx = Enum.find_index(order, &(&1 == cat))
+    target = if dir == "up", do: max(idx - 1, 0), else: min(idx + 1, length(order) - 1)
+    order = order |> List.delete_at(idx) |> List.insert_at(target, cat)
+
+    Settings.save_settings(%{category_order: order})
+    {:noreply, assign(socket, category_order: order)}
+  end
+
+  def handle_event("toggle_lens", %{"category" => cat}, socket) do
+    pinned =
+      if cat in socket.assigns.pinned_lenses,
+        do: List.delete(socket.assigns.pinned_lenses, cat),
+        else: socket.assigns.pinned_lenses ++ [cat]
+
+    Settings.save_settings(%{pinned_lenses: pinned})
+    {:noreply, assign(socket, pinned_lenses: pinned)}
   end
 
   # --- Notebooks tab ---
@@ -334,5 +366,12 @@ defmodule LibrarianWeb.SettingsLive do
   defp backup_settings_form do
     settings = Settings.get_settings() || %Settings{id: 1}
     settings |> Settings.changeset(%{}) |> to_form()
+  end
+
+  # Saved order first (pruned to categories that still exist), new ones after.
+  defp ordered_categories do
+    existing = Reader.list_categories()
+    saved = Settings.category_order()
+    Enum.filter(saved, &(&1 in existing)) ++ Enum.sort(existing -- saved)
   end
 end

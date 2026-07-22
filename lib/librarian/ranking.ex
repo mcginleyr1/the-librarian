@@ -25,8 +25,10 @@ defmodule Librarian.Ranking do
   WITH pool AS (
     SELECT a.id, a.embedding, a.published_at
     FROM articles a
+    JOIN feeds f ON f.id = a.feed_id
     WHERE a.embedding IS NOT NULL
       AND ($1::text IS NULL OR $1 = ANY(a.topics))
+      AND ($8::text IS NULL OR f.category = $8)
       AND NOT EXISTS (
         SELECT 1 FROM interactions i
         WHERE i.article_id = a.id AND i.kind = ANY($2::text[])
@@ -74,8 +76,9 @@ defmodule Librarian.Ranking do
   def rank_stream(opts \\ []) do
     limit = Keyword.get(opts, :limit, 30)
     topic = Keyword.get(opts, :topic)
+    category = Keyword.get(opts, :category)
 
-    rows = scored_rows(topic, limit * 2)
+    rows = scored_rows(topic, category, limit * 2)
     articles = articles_by_id(Enum.map(rows, & &1.id))
 
     rows
@@ -119,7 +122,7 @@ defmodule Librarian.Ranking do
     |> Enum.map(&elem(&1, 0))
   end
 
-  defp scored_rows(topic, fetch) do
+  defp scored_rows(topic, category, fetch) do
     %{rows: rows} =
       Repo.query!(@scored_sql, [
         topic,
@@ -128,7 +131,8 @@ defmodule Librarian.Ranking do
         @pool_size,
         @penalty_weight,
         @recency_weight,
-        fetch
+        fetch,
+        category
       ])
 
     Enum.map(rows, fn [id, affinity, penalty, recency] ->

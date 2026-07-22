@@ -12,6 +12,7 @@ defmodule Librarian.Reader.Feed do
     field :last_fetched_at, :utc_datetime
     field :fetch_error, :string
     field :active, :boolean, default: true
+    field :fetch_interval_minutes, :integer, default: 120
 
     # Discovery (P4): the self-managing source pool
     field :origin, :string, default: "manual"
@@ -36,9 +37,11 @@ defmodule Librarian.Reader.Feed do
       :last_modified,
       :last_fetched_at,
       :fetch_error,
-      :active
+      :active,
+      :fetch_interval_minutes
     ])
     |> validate_required([:title, :feed_url])
+    |> validate_number(:fetch_interval_minutes, greater_than_or_equal_to: 5)
     |> unique_constraint(:feed_url)
   end
 end

@@ -78,6 +78,42 @@ defmodule LibrarianWeb.ReaderLiveTest do
     end
   end
 
+  describe "new-articles pill" do
+    test "appears on feed_updated broadcast and clears when clicked", %{conn: conn} do
+      feed = feed_fixture()
+      unread_articles(feed, 5)
+
+      {:ok, view, _html} = live(conn, "/reader")
+      refute has_element?(view, "#new-articles-pill")
+
+      send(view.pid, {:feed_updated, feed.id, 3})
+      assert view |> element("#new-articles-pill") |> render() =~ "3 new"
+
+      view |> element("#new-articles-pill") |> render_click()
+      refute has_element?(view, "#new-articles-pill")
+    end
+
+    test "ignores updates for feeds outside the current scope", %{conn: conn} do
+      feed = feed_fixture()
+      unread_articles(feed, 2)
+
+      {:ok, other} =
+        Reader.create_feed(%{
+          title: "Other",
+          feed_url: "https://other.com/feed",
+          category: "News"
+        })
+
+      {:ok, view, _html} = live(conn, "/reader/feed/#{feed.id}")
+
+      send(view.pid, {:feed_updated, other.id, 4})
+      refute has_element?(view, "#new-articles-pill")
+
+      send(view.pid, {:feed_updated, feed.id, 2})
+      assert has_element?(view, "#new-articles-pill")
+    end
+  end
+
   defp stream_item_count(html) do
     ~r/id="articles-\d+"/
     |> Regex.scan(html)

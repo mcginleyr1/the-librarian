@@ -10,6 +10,8 @@ defmodule Librarian.Settings do
     field :b2_bucket_name, :string
     field :b2_endpoint, :string
     field :last_backup_at, :utc_datetime
+    field :category_order, {:array, :string}, default: []
+    field :pinned_lenses, {:array, :string}, default: []
 
     belongs_to :user, Librarian.Accounts.User
 
@@ -17,7 +19,14 @@ defmodule Librarian.Settings do
   end
 
   def changeset(settings, attrs) do
-    cast(settings, attrs, [:b2_key_id, :b2_application_key, :b2_bucket_name, :b2_endpoint])
+    cast(settings, attrs, [
+      :b2_key_id,
+      :b2_application_key,
+      :b2_bucket_name,
+      :b2_endpoint,
+      :category_order,
+      :pinned_lenses
+    ])
   end
 
   def get_settings do
@@ -30,6 +39,20 @@ defmodule Librarian.Settings do
     existing
     |> changeset(attrs)
     |> Repo.insert_or_update()
+  end
+
+  def category_order do
+    case get_settings() do
+      %{category_order: order} when is_list(order) -> order
+      _ -> []
+    end
+  end
+
+  def pinned_lenses do
+    case get_settings() do
+      %{pinned_lenses: lenses} when is_list(lenses) -> lenses
+      _ -> []
+    end
   end
 
   def configured? do

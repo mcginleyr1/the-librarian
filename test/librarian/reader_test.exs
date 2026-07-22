@@ -68,9 +68,101 @@ defmodule Librarian.ReaderTest do
       Reader.create_feed(feed_attrs(%{feed_url: "https://b.com/feed", category: "CS"}))
       Reader.create_feed(feed_attrs(%{feed_url: "https://c.com/feed", category: "Security"}))
 
-      grouped = Reader.list_feeds_by_category()
+      grouped = Reader.list_feeds_by_category() |> Map.new()
       assert length(grouped["CS"]) == 2
       assert length(grouped["Security"]) == 1
+    end
+
+    test "orders by saved category order, then alphabetically, uncategorized last" do
+      Reader.create_feed(feed_attrs(%{feed_url: "https://a.com/feed", category: "Apple"}))
+      Reader.create_feed(feed_attrs(%{feed_url: "https://b.com/feed", category: "News"}))
+      Reader.create_feed(feed_attrs(%{feed_url: "https://c.com/feed", category: "Zeta"}))
+      Reader.create_feed(feed_attrs(%{feed_url: "https://d.com/feed", category: nil}))
+
+      Librarian.Settings.save_settings(%{category_order: ["News", "Zeta"]})
+
+      assert Reader.list_feeds_by_category() |> Enum.map(&elem(&1, 0)) ==
+               ["News", "Zeta", "Apple", nil]
+    end
+  end
+
+  describe "list_due_feeds/1" do
+    test "includes never-fetched and overdue feeds, excludes fresh ones" do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      {:ok, never} = Reader.create_feed(feed_attrs(%{feed_url: "https://a.com/feed"}))
+
+      {:ok, fresh} =
+        Reader.create_feed(
+          feed_attrs(%{
+            feed_url: "https://b.com/feed",
+            last_fetched_at: DateTime.add(now, -30, :minute)
+          })
+        )
+
+      {:ok, overdue} =
+        Reader.create_feed(
+          feed_attrs(%{
+            feed_url: "https://c.com/feed",
+            last_fetched_at: DateTime.add(now, -180, :minute)
+          })
+        )
+
+      {:ok, fast} =
+        Reader.create_feed(
+          feed_attrs(%{
+            feed_url: "https://d.com/feed",
+            fetch_interval_minutes: 10,
+            last_fetched_at: DateTime.add(now, -30, :minute)
+          })
+        )
+
+      due = Reader.list_due_feeds(now) |> Enum.map(& &1.id) |> MapSet.new()
+      assert never.id in due
+      assert overdue.id in due
+      assert fast.id in due
+      refute fresh.id in due
+    end
+
+    test "excludes inactive feeds" do
+      {:ok, inactive} =
+        Reader.create_feed(feed_attrs(%{feed_url: "https://x.com/feed", active: false}))
+
+      refute inactive.id in Enum.map(Reader.list_due_feeds(), & &1.id)
+    end
+  end
+
+  describe "list_all_unread_articles/1" do
+    test "orders by first-seen (fetched_at), newest first" do
+      {:ok, feed} = Reader.create_feed(feed_attrs())
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      {:ok, front_paged_late} =
+        Repo.insert(
+          Article.changeset(
+            %Article{},
+            article_attrs(feed.id, %{
+              title: "Front-paged late",
+              published_at: DateTime.add(now, -6, :hour),
+              fetched_at: now
+            })
+          )
+        )
+
+      {:ok, seen_earlier} =
+        Repo.insert(
+          Article.changeset(
+            %Article{},
+            article_attrs(feed.id, %{
+              title: "Seen earlier",
+              published_at: now,
+              fetched_at: DateTime.add(now, -1, :hour)
+            })
+          )
+        )
+
+      assert Reader.list_all_unread_articles() |> Enum.map(& &1.id) ==
+               [front_paged_late.id, seen_earlier.id]
     end
   end
 

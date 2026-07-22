@@ -3,7 +3,7 @@ defmodule Librarian.Workers.ScheduleFeedsWorker do
 
   @impl Oban.Worker
   def perform(_job) do
-    Librarian.Reader.list_active_feeds()
+    Librarian.Reader.list_due_feeds()
     |> Enum.each(fn feed ->
       %{feed_id: feed.id}
       |> Librarian.Workers.FetchFeedWorker.new()

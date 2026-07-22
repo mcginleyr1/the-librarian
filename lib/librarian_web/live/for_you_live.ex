@@ -1,17 +1,21 @@
 defmodule LibrarianWeb.ForYouLive do
   use LibrarianWeb, :live_view
 
-  alias Librarian.{Interest, LinkPreview, Ranking, Reader, Stream}
+  alias Librarian.{Interest, LinkPreview, Ranking, Reader, Settings, Stream}
 
   @impl true
   def mount(_params, _session, socket) do
+    categories = Reader.list_categories()
+
     {:ok,
      socket
      |> assign(
        summary: Stream.signal_summary(),
        centroid_count: length(Interest.centroids()),
        topics: Ranking.available_topics(),
-       active_topic: nil
+       lenses: Enum.filter(Settings.pinned_lenses(), &(&1 in categories)),
+       active_topic: nil,
+       active_category: nil
      )
      |> load_stream()}
   end
@@ -39,12 +43,21 @@ defmodule LibrarianWeb.ForYouLive do
 
   def handle_event("filter_topic", %{"topic" => topic}, socket) do
     active = if socket.assigns.active_topic == topic, do: nil, else: topic
-    {:noreply, socket |> assign(active_topic: active) |> load_stream()}
+    {:noreply, socket |> assign(active_topic: active, active_category: nil) |> load_stream()}
+  end
+
+  def handle_event("filter_category", %{"category" => category}, socket) do
+    active = if socket.assigns.active_category == category, do: nil, else: category
+    {:noreply, socket |> assign(active_category: active, active_topic: nil) |> load_stream()}
   end
 
   defp load_stream(socket) do
     entries =
-      Ranking.rank_stream(limit: 30, topic: socket.assigns.active_topic)
+      Ranking.rank_stream(
+        limit: 30,
+        topic: socket.assigns.active_topic,
+        category: socket.assigns.active_category
+      )
       |> Enum.map(fn entry ->
         entry
         |> Map.put(:id, entry.article.id)
