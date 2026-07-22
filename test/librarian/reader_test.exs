@@ -166,6 +166,32 @@ defmodule Librarian.ReaderTest do
     end
   end
 
+  describe "update_feed/2" do
+    test "changing feed_url updates it and clears conditional-GET state" do
+      {:ok, feed} = Reader.create_feed(feed_attrs())
+      {:ok, feed} = Reader.update_feed(feed, %{etag: "abc", last_modified: "yesterday"})
+
+      {:ok, updated} =
+        Reader.update_feed(feed, %{
+          "feed_url" => "https://hnrss.org/frontpage?points=50",
+          "fetch_interval_minutes" => "15"
+        })
+
+      assert updated.feed_url == "https://hnrss.org/frontpage?points=50"
+      assert updated.fetch_interval_minutes == 15
+      assert updated.etag == nil
+      assert updated.last_modified == nil
+    end
+
+    test "keeps conditional-GET state when the URL is unchanged" do
+      {:ok, feed} = Reader.create_feed(feed_attrs())
+      {:ok, feed} = Reader.update_feed(feed, %{etag: "abc"})
+
+      {:ok, updated} = Reader.update_feed(feed, %{"title" => "Renamed"})
+      assert updated.etag == "abc"
+    end
+  end
+
   describe "mark_read/1 and unread_count/1" do
     setup do
       {:ok, feed} = Reader.create_feed(feed_attrs())

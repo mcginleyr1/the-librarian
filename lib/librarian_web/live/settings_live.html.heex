@@ -460,6 +460,12 @@
                     </label>
                     <.input field={@feed_form[:title]} type="text" class="input-sm" />
                   </div>
+                  <div class="flex-[2] min-w-64">
+                    <label class="label py-0">
+                      <span class="label-text text-xs">Feed URL</span>
+                    </label>
+                    <.input field={@feed_form[:feed_url]} type="url" class="input-sm" />
+                  </div>
                   <div class="w-40">
                     <label class="label py-0">
                       <span class="label-text text-xs">Category</span>

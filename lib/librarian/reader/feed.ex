@@ -43,5 +43,16 @@ defmodule Librarian.Reader.Feed do
     |> validate_required([:title, :feed_url])
     |> validate_number(:fetch_interval_minutes, greater_than_or_equal_to: 5)
     |> unique_constraint(:feed_url)
+    |> clear_conditional_get_on_url_change()
+  end
+
+  # A changed URL invalidates the old endpoint's ETag/Last-Modified — keeping
+  # them risks the first fetch of the new URL short-circuiting as a 304.
+  defp clear_conditional_get_on_url_change(changeset) do
+    case {changeset.data.id, get_change(changeset, :feed_url)} do
+      {nil, _} -> changeset
+      {_, nil} -> changeset
+      _ -> change(changeset, etag: nil, last_modified: nil, fetch_error: nil)
+    end
   end
 end
