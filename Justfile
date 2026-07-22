@@ -5,6 +5,11 @@ IMAGE := "the-librarian"
 NAMESPACE := "librarian"
 # Internal registry the cluster pulls from (exposed via the Tailscale operator)
 TS_REGISTRY := "registry.<your-tailnet>.ts.net:5000"
+# kubectl context hosting the librarian cluster — pinned so `just deploy` works
+# from any machine on the tailnet, not just one whose current context happens to
+# be right. Override per-machine with LIBRARIAN_KUBE_CONTEXT if needed.
+KUBE_CONTEXT := env_var_or_default("LIBRARIAN_KUBE_CONTEXT", "tailscale-operator.<your-tailnet>.ts.net")
+KUBECTL := "kubectl --context " + KUBE_CONTEXT
 
 # ── Dev ──────────────────────────────────────────────────────────────────────
 
@@ -77,9 +82,10 @@ registry-push IMG:
     set -euo pipefail
     port=5000
     curl -sf "http://localhost:$port/v2/" >/dev/null 2>&1 && port=5055
-    kubectl port-forward -n registry svc/registry "$port:5000" >/tmp/reg-pf.log 2>&1 &
+    {{KUBECTL}} port-forward -n registry svc/registry "$port:5000" >/tmp/reg-pf.log 2>&1 &
     pf=$!; trap 'kill $pf 2>/dev/null' EXIT
-    until curl -sf "http://localhost:$port/v2/" >/dev/null 2>&1; do sleep 1; done
+    for _ in $(seq 1 30); do curl -sf "http://localhost:$port/v2/" >/dev/null 2>&1 && break; sleep 1; done
+    curl -sf "http://localhost:$port/v2/" >/dev/null 2>&1 || { echo "registry port-forward failed:"; cat /tmp/reg-pf.log; exit 1; }
     docker tag "{{TS_REGISTRY}}/{{IMG}}" "localhost:$port/{{IMG}}"
     docker push "localhost:$port/{{IMG}}"
     echo "pushed {{IMG}} -> {{TS_REGISTRY}} (via port-forward)"
@@ -88,22 +94,22 @@ registry-push IMG:
 
 # Apply namespace only (needed before k-create-secrets on first deploy)
 k-namespace:
-    kubectl apply -f k8s/namespace.yaml
+    {{KUBECTL}} apply -f k8s/namespace.yaml
 
 # Apply all k8s manifests via kustomize (does not apply secrets.yaml — use k-create-secrets)
 k-apply:
-    kubectl apply -k k8s/
+    {{KUBECTL}} apply -k k8s/
 
 # Create secrets — run after k-namespace, before k-apply
 k-create-secrets db-password google-client-id google-client-secret: k-namespace
-    kubectl create secret generic librarian-secrets -n {{NAMESPACE}} \
+    {{KUBECTL}} create secret generic librarian-secrets -n {{NAMESPACE}} \
         --from-literal=db-user=librarian \
         --from-literal=db-password={{db-password}} \
         --from-literal=secret-key-base=$(mix phx.gen.secret) \
         --from-literal=database-url=ecto://librarian:{{db-password}}@postgres:5432/librarian_prod \
         --from-literal=google-client-id={{google-client-id}} \
         --from-literal=google-client-secret={{google-client-secret}} \
-        --save-config --dry-run=client -o yaml | kubectl apply -f -
+        --save-config --dry-run=client -o yaml | {{KUBECTL}} apply -f -
 
 # Google has no API/gcloud command for standard OAuth 2.0 web clients (the IAP
 # OAuth Admin API was shut down 2026-03), so the console click-through is
@@ -134,31 +140,31 @@ oauth-setup:
 # or secret-key-base — unlike k-create-secrets, which regenerates the key base
 # and would invalidate live sessions), then restart the app to pick them up.
 k-set-google-oauth google-client-id google-client-secret:
-    kubectl patch secret librarian-secrets -n {{NAMESPACE}} --type merge \
+    {{KUBECTL}} patch secret librarian-secrets -n {{NAMESPACE}} --type merge \
         -p '{"stringData":{"google-client-id":"{{google-client-id}}","google-client-secret":"{{google-client-secret}}"}}'
-    kubectl rollout restart deployment/librarian -n {{NAMESPACE}}
-    kubectl rollout status deployment/librarian -n {{NAMESPACE}}
+    {{KUBECTL}} rollout restart deployment/librarian -n {{NAMESPACE}}
+    {{KUBECTL}} rollout status deployment/librarian -n {{NAMESPACE}}
 
 # Run Ecto migrations in cluster
 k-migrate:
-    kubectl exec -n {{NAMESPACE}} deploy/librarian -- \
+    {{KUBECTL}} exec -n {{NAMESPACE}} deploy/librarian -- \
         env -u PHX_SERVER /app/bin/librarian eval "Librarian.Release.migrate()"
 
 # Tail app logs
 k-logs:
-    kubectl logs -n {{NAMESPACE}} -f deploy/librarian
+    {{KUBECTL}} logs -n {{NAMESPACE}} -f deploy/librarian
 
 # Show pod/pvc/ingress status
 k-status:
-    kubectl get pods,pvc,ingress -n {{NAMESPACE}}
+    {{KUBECTL}} get pods,pvc,ingress -n {{NAMESPACE}}
 
 # Rolling restart (picks up new image)
 k-restart:
-    kubectl rollout restart -n {{NAMESPACE}} deploy/librarian
+    {{KUBECTL}} rollout restart -n {{NAMESPACE}} deploy/librarian
 
 # Open remote IEx shell
 k-shell:
-    kubectl exec -n {{NAMESPACE}} -it deploy/librarian -- \
+    {{KUBECTL}} exec -n {{NAMESPACE}} -it deploy/librarian -- \
         /app/bin/librarian remote
 
 # Full deploy: build, push, restart
@@ -166,7 +172,7 @@ deploy: docker-push k-restart
 
 # Delete all resources (destructive!)
 k-teardown:
-    kubectl delete namespace {{NAMESPACE}}
+    {{KUBECTL}} delete namespace {{NAMESPACE}}
 
 # ── Data (local dev) ─────────────────────────────────────────────────────────
 
@@ -191,33 +197,33 @@ import-evernote-dir DIR="enex":
 # Import OPML into k8s (copies file to pod, runs release eval)
 k-import-opml FILE="feedly.opml":
     #!/usr/bin/env bash
-    POD=$(kubectl get pod -n {{NAMESPACE}} -l app=librarian -o jsonpath='{.items[0].metadata.name}')
-    kubectl cp "{{FILE}}" "{{NAMESPACE}}/$POD:/tmp/opml_import.opml"
-    kubectl exec -n {{NAMESPACE}} "$POD" -- \
+    POD=$({{KUBECTL}} get pod -n {{NAMESPACE}} -l app=librarian -o jsonpath='{.items[0].metadata.name}')
+    {{KUBECTL}} cp "{{FILE}}" "{{NAMESPACE}}/$POD:/tmp/opml_import.opml"
+    {{KUBECTL}} exec -n {{NAMESPACE}} "$POD" -- \
         env -u PHX_SERVER /app/bin/librarian eval "Librarian.Release.import_opml(\"/tmp/opml_import.opml\")"
 
 # Import a single .enex file into k8s
 k-import-evernote FILE NOTEBOOK="":
     #!/usr/bin/env bash
-    POD=$(kubectl get pod -n {{NAMESPACE}} -l app=librarian -o jsonpath='{.items[0].metadata.name}')
+    POD=$({{KUBECTL}} get pod -n {{NAMESPACE}} -l app=librarian -o jsonpath='{.items[0].metadata.name}')
     BASENAME=$(basename "{{FILE}}")
     SAFE=$(echo "$BASENAME" | tr ' ' '_')
-    kubectl cp "{{FILE}}" "{{NAMESPACE}}/$POD:/tmp/$SAFE"
+    {{KUBECTL}} cp "{{FILE}}" "{{NAMESPACE}}/$POD:/tmp/$SAFE"
     NB="${NOTEBOOK:-${BASENAME%.enex}}"
-    kubectl exec -n {{NAMESPACE}} "$POD" -- \
+    {{KUBECTL}} exec -n {{NAMESPACE}} "$POD" -- \
         env -u PHX_SERVER /app/bin/librarian eval "Librarian.Release.import_evernote(\"/tmp/$SAFE\", \"$NB\")"
 
 # Import all .enex files from a directory into k8s
 k-import-evernote-dir DIR="enex":
     #!/usr/bin/env bash
-    POD=$(kubectl get pod -n {{NAMESPACE}} -l app=librarian -o jsonpath='{.items[0].metadata.name}')
+    POD=$({{KUBECTL}} get pod -n {{NAMESPACE}} -l app=librarian -o jsonpath='{.items[0].metadata.name}')
     for f in {{DIR}}/*.enex; do
         BASENAME=$(basename "$f")
         NOTEBOOK="${BASENAME%.enex}"
         SAFE=$(echo "$BASENAME" | tr ' ' '_')
         echo "Importing $BASENAME as notebook '$NOTEBOOK'..."
-        kubectl cp "$f" "{{NAMESPACE}}/$POD:/tmp/$SAFE"
-        kubectl exec -n {{NAMESPACE}} "$POD" -- \
+        {{KUBECTL}} cp "$f" "{{NAMESPACE}}/$POD:/tmp/$SAFE"
+        {{KUBECTL}} exec -n {{NAMESPACE}} "$POD" -- \
             env -u PHX_SERVER /app/bin/librarian eval "Librarian.Release.import_evernote(\"/tmp/$SAFE\", \"$NOTEBOOK\")"
     done
 
