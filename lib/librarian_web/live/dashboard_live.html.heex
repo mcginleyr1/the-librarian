@@ -15,23 +15,7 @@
       >
         <.icon name="hero-arrow-path" class="size-4" /> Rebuild model
       </button>
-      <nav class="ml-auto flex items-center gap-1 rounded-full bg-base-200 p-1">
-        <.link
-          navigate="/foryou"
-          class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
-        >
-          For You
-        </.link>
-        <.link
-          navigate="/reader"
-          class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
-        >
-          Reader
-        </.link>
-        <span class="rounded-full bg-base-100 shadow-sm px-3 py-1 text-xs font-semibold">
-          Dashboard
-        </span>
-      </nav>
+      <Layouts.nav_pills active={:dashboard} class="ml-auto" />
     </header>
 
     <div class="flex-1 overflow-y-auto">

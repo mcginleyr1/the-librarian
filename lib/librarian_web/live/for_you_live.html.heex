@@ -31,29 +31,7 @@
           </span>
         </div>
 
-        <nav class="ml-auto flex items-center gap-1 rounded-full bg-base-200 p-1">
-          <span class="rounded-full bg-base-100 shadow-sm px-3 py-1 text-xs font-semibold">
-            For You
-          </span>
-          <.link
-            navigate="/reader"
-            class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
-          >
-            Reader
-          </.link>
-          <.link
-            navigate="/vault"
-            class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
-          >
-            Vault
-          </.link>
-          <.link
-            navigate="/dashboard"
-            class="rounded-full px-3 py-1 text-xs text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
-          >
-            Dashboard
-          </.link>
-        </nav>
+        <Layouts.nav_pills active={:for_you} class="ml-auto" />
       </div>
 
       <%!-- LENS CHIPS: pinned category lenses first, then pool topics --%>

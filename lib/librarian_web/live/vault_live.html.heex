@@ -1,13 +1,15 @@
 <Layouts.vault flash={@flash}>
   <div class="flex flex-1 overflow-hidden h-full min-h-0">
     <%!-- SIDEBAR: Notebooks --%>
-    <aside class="w-56 shrink-0 bg-base-200 flex flex-col overflow-hidden border-r border-base-300 min-h-0">
-      <div class="p-3 border-b border-base-300 bg-gradient-to-r from-primary/10 to-transparent flex items-center gap-2.5">
-        <div class="size-8 rounded-lg bg-primary/15 text-primary grid place-items-center shrink-0">
-          <.icon name="hero-archive-box" class="size-4" />
+    <aside class="w-64 shrink-0 bg-base-200 flex flex-col overflow-hidden border-r border-base-300 min-h-0">
+      <div class="p-3 border-b border-base-300 bg-gradient-to-r from-primary/10 to-transparent space-y-2">
+        <div class="flex items-center gap-2.5">
+          <div class="size-8 rounded-lg bg-primary/15 text-primary grid place-items-center shrink-0">
+            <.icon name="hero-archive-box" class="size-4" />
+          </div>
+          <span class="font-bold text-sm flex-1">Vault</span>
         </div>
-        <span class="font-bold text-sm flex-1">Vault</span>
-        <a href="/reader" class="press btn btn-ghost btn-xs rounded-full">Reader</a>
+        <Layouts.nav_pills active={:vault} compact />
       </div>
       <div class="flex-1 min-h-0 overflow-y-auto p-2 space-y-0.5">
         <.link
@@ -138,7 +140,7 @@
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                   <p class="text-xs text-base-content/50 mt-0.5">
-                    <span :if={note.notebook}>{note.notebook.name}        · </span>
+                    <span :if={note.notebook}>{note.notebook.name}         · </span>
                     {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                   </p>
                   <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -165,7 +167,7 @@
               >
                 <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                 <p class="text-xs text-base-content/50 mt-0.5">
-                  <span :if={note.notebook}>{note.notebook.name}        · </span>
+                  <span :if={note.notebook}>{note.notebook.name}         · </span>
                   {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                 </p>
                 <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">

@@ -72,6 +72,58 @@ defmodule LibrarianWeb.Layouts do
     """
   end
 
+  @nav_items [
+    {:for_you, "For You", "/foryou"},
+    {:reader, "Reader", "/reader"},
+    {:vault, "Vault", "/vault"},
+    {:dashboard, "Dashboard", "/dashboard"}
+  ]
+
+  @doc """
+  The app-wide section switcher. `compact` fits the narrow reader/vault
+  sidebars; the default matches the For You / Dashboard top bars.
+  """
+  attr :active, :atom, required: true, values: [:for_you, :reader, :vault, :dashboard]
+  attr :compact, :boolean, default: false
+  attr :class, :string, default: nil
+
+  def nav_pills(assigns) do
+    assigns = assign(assigns, :items, @nav_items)
+
+    ~H"""
+    <nav class={[
+      "flex items-center gap-1 rounded-full bg-base-200",
+      if(@compact, do: "p-0.5", else: "p-1"),
+      @class
+    ]}>
+      <%= for {key, label, path} <- @items do %>
+        <span
+          :if={@active == key}
+          class={[
+            "rounded-full bg-base-100 shadow-sm font-semibold whitespace-nowrap",
+            pill_size(@compact)
+          ]}
+        >
+          {label}
+        </span>
+        <.link
+          :if={@active != key}
+          navigate={path}
+          class={[
+            "rounded-full text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition whitespace-nowrap",
+            pill_size(@compact)
+          ]}
+        >
+          {label}
+        </.link>
+      <% end %>
+    </nav>
+    """
+  end
+
+  defp pill_size(true), do: "px-2 py-1 text-[11px]"
+  defp pill_size(false), do: "px-3 py-1 text-xs"
+
   attr :flash, :map, required: true
   slot :inner_block, required: true
 
