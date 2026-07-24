@@ -83,7 +83,7 @@ defmodule LibrarianWeb.Layouts do
   The app-wide section switcher. `compact` fits the narrow reader/vault
   sidebars; the default matches the For You / Dashboard top bars.
   """
-  attr :active, :atom, required: true, values: [:for_you, :reader, :vault, :dashboard]
+  attr :active, :atom, required: true, values: [:for_you, :reader, :vault, :dashboard, :graph]
   attr :compact, :boolean, default: false
   attr :class, :string, default: nil
 
@@ -117,6 +117,21 @@ defmodule LibrarianWeb.Layouts do
           {label}
         </.link>
       <% end %>
+      <span
+        :if={@active == :graph}
+        title="Knowledge graph"
+        class="rounded-full bg-base-100 shadow-sm px-1.5 py-1 grid place-items-center"
+      >
+        <.icon name="hero-share" class={if(@compact, do: "size-3", else: "size-3.5")} />
+      </span>
+      <.link
+        :if={@active != :graph}
+        navigate="/vault/graph"
+        title="Knowledge graph"
+        class="rounded-full px-1.5 py-1 grid place-items-center text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
+      >
+        <.icon name="hero-share" class={if(@compact, do: "size-3", else: "size-3.5")} />
+      </.link>
     </nav>
     """
   end
