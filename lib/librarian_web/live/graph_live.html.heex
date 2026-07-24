@@ -44,8 +44,31 @@
       :if={!@loading && @nodes != []}
       id="graph-canvas"
       phx-hook=".GraphPanZoom"
-      class="flex-1 min-h-0 cursor-grab select-none overflow-hidden"
+      class="flex-1 min-h-0 relative cursor-grab select-none touch-none overflow-hidden"
     >
+      <div class="absolute top-3 right-3 z-10 flex flex-col gap-1">
+        <button
+          data-zoom="in"
+          title="Zoom in"
+          class="btn btn-sm btn-square bg-base-100/90 shadow border border-base-300"
+        >
+          <.icon name="hero-plus" class="size-4" />
+        </button>
+        <button
+          data-zoom="out"
+          title="Zoom out"
+          class="btn btn-sm btn-square bg-base-100/90 shadow border border-base-300"
+        >
+          <.icon name="hero-minus" class="size-4" />
+        </button>
+        <button
+          data-zoom="reset"
+          title="Reset view"
+          class="btn btn-sm btn-square bg-base-100/90 shadow border border-base-300"
+        >
+          <.icon name="hero-viewfinder-circle" class="size-4" />
+        </button>
+      </div>
       <svg viewBox="0 0 1200 800" class="w-full h-full">
         <g data-viewport>
           <line
@@ -100,7 +123,7 @@
         {String.replace(kind, "_", " ")}
       </span>
       <span class="ml-auto text-[11px] text-base-content/40">
-        scroll to zoom · drag to pan · click a note to open it
+        scroll or pinch to zoom · drag to pan · double-click to reset · click a note to open it
       </span>
     </footer>
   </div>
@@ -108,33 +131,103 @@
   <script :type={Phoenix.LiveView.ColocatedHook} name=".GraphPanZoom">
     export default {
       mounted() {
+        const svg = this.el.querySelector("svg")
         const viewport = this.el.querySelector("[data-viewport]")
-        let scale = 1, tx = 0, ty = 0, pan = null
+        const VB_W = 1200, VB_H = 800
+        let scale = 1, tx = 0, ty = 0
+        const pointers = new Map()
+        let moved = 0, pinchDist = null
+
         const apply = () =>
           viewport.setAttribute("transform", `translate(${tx} ${ty}) scale(${scale})`)
 
+        // screen px -> svg user units (viewBox, default xMidYMid meet)
+        const toUser = (clientX, clientY) => {
+          const rect = svg.getBoundingClientRect()
+          const s = Math.min(rect.width / VB_W, rect.height / VB_H)
+          return {
+            x: (clientX - rect.left - (rect.width - VB_W * s) / 2) / s,
+            y: (clientY - rect.top - (rect.height - VB_H * s) / 2) / s,
+            s,
+          }
+        }
+
+        const zoomAt = (clientX, clientY, factor) => {
+          const next = Math.min(Math.max(scale * factor, 0.15), 8)
+          const u = toUser(clientX, clientY)
+          tx = u.x - (next / scale) * (u.x - tx)
+          ty = u.y - (next / scale) * (u.y - ty)
+          scale = next
+          apply()
+        }
+
+        const zoomCenter = (factor) => {
+          const r = svg.getBoundingClientRect()
+          zoomAt(r.left + r.width / 2, r.top + r.height / 2, factor)
+        }
+
+        const reset = () => { scale = 1; tx = 0; ty = 0; apply() }
+
         this.el.addEventListener("wheel", (e) => {
           e.preventDefault()
-          const factor = e.deltaY < 0 ? 1.1 : 0.9
-          scale = Math.min(Math.max(scale * factor, 0.2), 6)
-          apply()
+          zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 0.87)
         }, { passive: false })
 
         this.el.addEventListener("pointerdown", (e) => {
-          pan = { x: e.clientX - tx, y: e.clientY - ty }
-          this.el.setPointerCapture(e.pointerId)
-          this.el.style.cursor = "grabbing"
+          if (e.target.closest("[data-zoom]")) return
+          pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+          if (pointers.size === 1) moved = 0
+          pinchDist = null
         })
+
         this.el.addEventListener("pointermove", (e) => {
-          if (!pan) return
-          tx = e.clientX - pan.x
-          ty = e.clientY - pan.y
-          apply()
+          if (!pointers.has(e.pointerId)) return
+          const prev = pointers.get(e.pointerId)
+          pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+          if (pointers.size === 2) {
+            const [a, b] = [...pointers.values()]
+            const dist = Math.hypot(a.x - b.x, a.y - b.y)
+            if (pinchDist) zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, dist / pinchDist)
+            pinchDist = dist
+            moved += 10
+            return
+          }
+
+          const dx = e.clientX - prev.x
+          const dy = e.clientY - prev.y
+          moved += Math.abs(dx) + Math.abs(dy)
+          if (moved > 5) {
+            if (!this.el.hasPointerCapture(e.pointerId)) this.el.setPointerCapture(e.pointerId)
+            this.el.classList.add("cursor-grabbing")
+            const { s } = toUser(e.clientX, e.clientY)
+            tx += dx / s
+            ty += dy / s
+            apply()
+          }
         })
-        this.el.addEventListener("pointerup", () => {
-          pan = null
-          this.el.style.cursor = "grab"
+
+        const release = (e) => {
+          pointers.delete(e.pointerId)
+          pinchDist = null
+          if (pointers.size === 0) this.el.classList.remove("cursor-grabbing")
+        }
+        this.el.addEventListener("pointerup", release)
+        this.el.addEventListener("pointercancel", release)
+
+        // a drag or pinch must not fire the node's phx-click
+        this.el.addEventListener("click", (e) => {
+          if (e.target.closest("[data-zoom]")) return
+          if (moved > 5) { e.stopPropagation(); e.preventDefault() }
+        }, true)
+
+        this.el.addEventListener("dblclick", (e) => {
+          if (!e.target.closest("[data-zoom]")) reset()
         })
+
+        this.el.querySelector('[data-zoom="in"]').addEventListener("click", () => zoomCenter(1.4))
+        this.el.querySelector('[data-zoom="out"]').addEventListener("click", () => zoomCenter(0.7))
+        this.el.querySelector('[data-zoom="reset"]').addEventListener("click", reset)
       }
     }
   </script>
