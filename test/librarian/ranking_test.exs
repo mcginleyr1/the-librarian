@@ -54,15 +54,18 @@ defmodule Librarian.RankingTest do
     assert titles == ["GenServer patterns", "Postgres internals"]
   end
 
-  test "reading an article keeps it in the feed but liking removes it" do
-    read = article(beam_vec(), "Read but not liked")
+  test "read articles drop out of the feed; starring alone does not" do
+    read = article(beam_vec(), "Read in the reader")
+    starred = article(beam_vec(), "Starred but unread")
     liked = article(db_vec(), "Liked and gone")
 
-    Stream.record_interaction(read.id, :open)
+    Librarian.Reader.mark_read(read.id)
+    Librarian.Reader.mark_starred(starred.id, true)
     Stream.record_interaction(liked.id, :like)
 
     titles = Ranking.rank_stream(limit: 10) |> Enum.map(& &1.article.title)
-    assert "Read but not liked" in titles
+    refute "Read in the reader" in titles
+    assert "Starred but unread" in titles
     refute "Liked and gone" in titles
   end
 

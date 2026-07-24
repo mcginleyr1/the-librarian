@@ -20,7 +20,9 @@ defmodule Librarian.Ranking do
   # Ranks the recency-bounded candidate pool entirely in Postgres: affinity is
   # the best cosine similarity to any interest centroid, penalty the best
   # similarity to any disliked article, recency a 30-day linear decay. Returns
-  # only scalar scores — embeddings never leave the database.
+  # only scalar scores — embeddings never leave the database. Articles already
+  # read (anywhere — reader or For You) are excluded; starring or saving alone
+  # keeps an unread article eligible.
   @scored_sql """
   WITH pool AS (
     SELECT a.id, a.embedding, a.published_at
@@ -32,6 +34,10 @@ defmodule Librarian.Ranking do
       AND NOT EXISTS (
         SELECT 1 FROM interactions i
         WHERE i.article_id = a.id AND i.kind = ANY($2::text[])
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM read_states rs
+        WHERE rs.article_id = a.id AND rs.read_at IS NOT NULL
       )
     ORDER BY a.published_at DESC NULLS LAST
     LIMIT $4
