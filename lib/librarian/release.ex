@@ -16,6 +16,31 @@ defmodule Librarian.Release do
     {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))
   end
 
+  @doc """
+  Removes duplicate vault notes (same notebook, title, body), keeping the
+  oldest copy and moving annotations to it. Safe to run repeatedly.
+
+      bin/librarian eval "Librarian.Release.dedupe_notes()"
+  """
+  def dedupe_notes do
+    load_app()
+
+    {:ok, removed, _} =
+      Ecto.Migrator.with_repo(Librarian.Repo, fn _repo ->
+        before = Librarian.Vault.duplicate_note_count()
+        removed = Librarian.Vault.dedupe_notes()
+
+        IO.puts(
+          "Dedupe: #{before} surplus copies found, #{removed} removed. " <>
+            "Survivors re-link on the next hourly graph pass (or press Build Graph Now)."
+        )
+
+        removed
+      end)
+
+    removed
+  end
+
   @doc "Seeds reviewable demo data when DEMO_SEED=true. Safe to run repeatedly."
   def seed_demo do
     if System.get_env("DEMO_SEED") == "true" do

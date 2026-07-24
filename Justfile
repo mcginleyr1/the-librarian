@@ -145,6 +145,11 @@ k-set-google-oauth google-client-id google-client-secret:
     {{KUBECTL}} rollout restart deployment/librarian -n {{NAMESPACE}}
     {{KUBECTL}} rollout status deployment/librarian -n {{NAMESPACE}}
 
+# Remove duplicate vault notes in cluster (keeps oldest copy, moves annotations)
+k-dedupe-notes:
+    {{KUBECTL}} exec -n {{NAMESPACE}} deploy/librarian -- \
+        env -u PHX_SERVER /app/bin/librarian eval "Librarian.Release.dedupe_notes()"
+
 # Run Ecto migrations in cluster
 k-migrate:
     {{KUBECTL}} exec -n {{NAMESPACE}} deploy/librarian -- \
