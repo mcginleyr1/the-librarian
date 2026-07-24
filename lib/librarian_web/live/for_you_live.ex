@@ -21,17 +21,17 @@ defmodule LibrarianWeb.ForYouLive do
   end
 
   @impl true
+  # Terminal feedback removes just that card — no re-rank, so the rest of the
+  # list stays put. Fresh ranking happens on the next mount or filter change.
   def handle_event("feedback", %{"id" => id, "kind" => kind}, socket) do
-    Stream.record_interaction(String.to_integer(id), kind)
+    article_id = String.to_integer(id)
+    Stream.record_interaction(article_id, kind)
+    count = max(socket.assigns.count - 1, 0)
 
     {:noreply,
      socket
-     |> assign(summary: Stream.signal_summary())
-     |> put_flash(
-       :info,
-       "Got it — re-ranking. Rebuild the model from the Dashboard to fold this in."
-     )
-     |> load_stream()}
+     |> assign(summary: Stream.signal_summary(), count: count, empty?: count == 0)
+     |> stream_delete_by_dom_id(:entries, "entry-#{article_id}")}
   end
 
   def handle_event("open", %{"id" => id}, socket) do
