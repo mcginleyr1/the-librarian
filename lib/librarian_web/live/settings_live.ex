@@ -1,9 +1,9 @@
 defmodule LibrarianWeb.SettingsLive do
   use LibrarianWeb, :live_view
 
-  alias Librarian.{Reader, Vault, Settings}
+  alias Librarian.{LLM, Reader, Vault, Settings}
   alias Librarian.Reader.{Feed, FeedDiscoverer}
-  alias Librarian.Workers.{FetchFeedWorker, BackupWorker}
+  alias Librarian.Workers.{FetchFeedWorker, BackupWorker, BuildGraphWorker}
   alias Librarian.Repo
 
   @impl true
@@ -34,7 +34,11 @@ defmodule LibrarianWeb.SettingsLive do
        note_counts: Vault.count_notes_by_notebook(),
        editing_notebook_id: nil,
        # Backup tab
-       backup_form: backup_settings_form()
+       backup_form: backup_settings_form(),
+       # AI tab
+       ai_key_hint: api_key_hint(Settings.get_settings()),
+       ai_budget_dollars: budget_dollars(Settings.get_settings()),
+       llm_spend_cents: LLM.month_spend_cents()
      )
      |> allow_upload(:opml,
        accept: :any,
@@ -334,6 +338,51 @@ defmodule LibrarianWeb.SettingsLive do
     {:noreply, put_flash(socket, :info, "Backup queued — running in background")}
   end
 
+  # --- AI tab ---
+
+  def handle_event("save_ai", params, socket) do
+    cents =
+      case Float.parse(params["budget_dollars"] || "") do
+        {dollars, _} -> max(round(dollars * 100), 0)
+        :error -> Settings.llm_monthly_budget_cents()
+      end
+
+    attrs = %{"llm_monthly_budget_cents" => cents}
+
+    attrs =
+      case String.trim(params["anthropic_api_key"] || "") do
+        "" -> attrs
+        key -> Map.put(attrs, "anthropic_api_key", key)
+      end
+
+    {:ok, settings} = Settings.save_settings(attrs)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "AI settings saved")
+     |> assign(
+       ai_key_hint: api_key_hint(settings),
+       ai_budget_dollars: budget_dollars(settings)
+     )}
+  end
+
+  def handle_event("clear_api_key", _params, socket) do
+    {:ok, settings} = Settings.save_settings(%{"anthropic_api_key" => nil})
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "API key removed")
+     |> assign(ai_key_hint: api_key_hint(settings))}
+  end
+
+  def handle_event("build_graph_now", _params, socket) do
+    %{}
+    |> BuildGraphWorker.new()
+    |> Oban.insert()
+
+    {:noreply, put_flash(socket, :info, "Graph build queued — running in background")}
+  end
+
   @impl true
   def handle_info({:discovery_result, {:ok, []}}, socket) do
     {:noreply, assign(socket, discovering: false, discover_error: "No feeds found at that URL")}
@@ -366,6 +415,17 @@ defmodule LibrarianWeb.SettingsLive do
   defp backup_settings_form do
     settings = Settings.get_settings() || %Settings{id: 1}
     settings |> Settings.changeset(%{}) |> to_form()
+  end
+
+  defp api_key_hint(%Settings{anthropic_api_key: key}) when is_binary(key) and key != "" do
+    "saved · ends in #{String.slice(key, -4, 4)}"
+  end
+
+  defp api_key_hint(_), do: nil
+
+  defp budget_dollars(settings) do
+    cents = (settings && settings.llm_monthly_budget_cents) || 2000
+    :erlang.float_to_binary(cents / 100, decimals: 2)
   end
 
   # Saved order first (pruned to categories that still exist), new ones after.

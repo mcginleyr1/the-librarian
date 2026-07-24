@@ -80,6 +80,7 @@ config :librarian, Oban,
        {"0 2 * * *", Librarian.Workers.BackupWorker},
        {"*/15 * * * *", Librarian.Workers.EmbedArticlesWorker},
        {"15 */2 * * *", Librarian.Workers.TagArticlesWorker},
+       {"30 * * * *", Librarian.Workers.BuildGraphWorker},
        {"45 3 * * *", Librarian.Workers.DiscoverSourcesWorker},
        {"50 3 * * *", Librarian.Workers.PruneSourcesWorker}
      ]}

@@ -13,6 +13,7 @@ defmodule Librarian.Vault.Note do
     field :evernote_guid, :string
     field :original_created_at, :utc_datetime
     field :embedding, Pgvector.Ecto.Vector
+    field :graph_indexed_at, :utc_datetime
 
     belongs_to :notebook, Librarian.Vault.Notebook
     belongs_to :user, Librarian.Accounts.User

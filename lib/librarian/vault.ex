@@ -2,7 +2,7 @@ defmodule Librarian.Vault do
   import Ecto.Query
   alias Librarian.Accounts
   alias Librarian.Repo
-  alias Librarian.Vault.{Note, Notebook, Tag}
+  alias Librarian.Vault.{Annotation, Edge, Note, Notebook, Tag}
   alias Librarian.Workers.RebuildInterestWorker
 
   def list_notebooks do
@@ -147,6 +147,117 @@ defmodule Librarian.Vault do
   end
 
   def list_tags, do: Repo.all(from t in Tag, order_by: t.name)
+
+  @doc """
+  Edges touching a note in either direction, deduped per {kind, other note}
+  (mutual similarity edges exist in both directions), strongest first.
+  Returns [%{edge: edge, note: other_note}].
+  """
+  def related_notes(note_id) do
+    from(e in Edge,
+      where: e.source_note_id == ^note_id or e.target_note_id == ^note_id,
+      order_by: [desc: e.weight],
+      preload: [:source_note, :target_note]
+    )
+    |> Repo.all()
+    |> Enum.map(fn e ->
+      other = if e.source_note_id == note_id, do: e.target_note, else: e.source_note
+      %{edge: e, note: other}
+    end)
+    |> Enum.uniq_by(fn %{edge: e, note: n} -> {e.kind, n.id} end)
+  end
+
+  def upsert_edges(entries) when is_list(entries) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    owner_id = Accounts.owner!().id
+
+    rows =
+      entries
+      |> Enum.filter(fn e ->
+        e.kind in Edge.kinds() and e.source_note_id != e.target_note_id
+      end)
+      |> Enum.map(&Map.merge(&1, %{user_id: owner_id, inserted_at: now, updated_at: now}))
+
+    Repo.insert_all(Edge, rows,
+      on_conflict: {:replace, [:reason, :weight, :origin, :updated_at]},
+      conflict_target: [:source_note_id, :target_note_id, :kind]
+    )
+  end
+
+  def delete_edge(id) do
+    Repo.delete_all(from e in Edge, where: e.id == ^id)
+    :ok
+  end
+
+  @doc """
+  Builds `related` edges from pgvector neighbors for every embedded note
+  (or one note via `:note_id`). Weight is cosine similarity; pairs below
+  `:threshold` are skipped.
+  """
+  def generate_similarity_edges(opts \\ []) do
+    k = Keyword.get(opts, :k, 8)
+    threshold = Keyword.get(opts, :threshold, 0.5)
+    note_filter = Keyword.get(opts, :note_id)
+
+    {filter_sql, params} =
+      if note_filter,
+        do: {"AND n.id = $3", [k, threshold, note_filter]},
+        else: {"", [k, threshold]}
+
+    {:ok, %{num_rows: count}} =
+      Repo.query(
+        """
+        INSERT INTO note_edges
+          (source_note_id, target_note_id, kind, weight, origin, user_id, inserted_at, updated_at)
+        SELECT n.id, m.id, 'related', m.sim, 'similarity', n.user_id, now(), now()
+        FROM notes n
+        JOIN LATERAL (
+          SELECT m2.id, 1 - (m2.embedding <=> n.embedding) AS sim
+          FROM notes m2
+          WHERE m2.id != n.id AND m2.embedding IS NOT NULL
+          ORDER BY m2.embedding <=> n.embedding
+          LIMIT $1
+        ) m ON m.sim >= $2
+        WHERE n.embedding IS NOT NULL #{filter_sql}
+        ON CONFLICT (source_note_id, target_note_id, kind)
+        DO UPDATE SET weight = EXCLUDED.weight, updated_at = now()
+        """,
+        params
+      )
+
+    {:ok, count}
+  end
+
+  @doc "Top-k embedded neighbors of a note — candidate set for LLM edge typing."
+  def neighbor_candidates(%Note{id: id, embedding: embedding}, k \\ 10) when embedding != nil do
+    Repo.all(
+      from n in Note,
+        where: n.id != ^id and not is_nil(n.embedding),
+        order_by: fragment("embedding <=> ?", ^embedding),
+        limit: ^k
+    )
+  end
+
+  def list_annotations(note_id) do
+    Repo.all(from a in Annotation, where: a.note_id == ^note_id, order_by: [desc: a.inserted_at])
+  end
+
+  def create_annotation(note_id, body) do
+    %Annotation{user_id: Accounts.owner!().id}
+    |> Annotation.changeset(%{note_id: note_id, body: body})
+    |> Repo.insert()
+  end
+
+  def delete_annotation(id) do
+    Repo.delete_all(from a in Annotation, where: a.id == ^id)
+    :ok
+  end
+
+  @doc "Clears the graph marker so the next BuildGraphWorker pass re-types this note."
+  def mark_graph_stale(note_id) do
+    Repo.update_all(from(n in Note, where: n.id == ^note_id), set: [graph_indexed_at: nil])
+    :ok
+  end
 
   defp find_or_create_tags([]), do: []
 

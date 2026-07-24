@@ -12,6 +12,8 @@ defmodule Librarian.Settings do
     field :last_backup_at, :utc_datetime
     field :category_order, {:array, :string}, default: []
     field :pinned_lenses, {:array, :string}, default: []
+    field :anthropic_api_key, :string
+    field :llm_monthly_budget_cents, :integer, default: 2000
 
     belongs_to :user, Librarian.Accounts.User
 
@@ -25,8 +27,11 @@ defmodule Librarian.Settings do
       :b2_bucket_name,
       :b2_endpoint,
       :category_order,
-      :pinned_lenses
+      :pinned_lenses,
+      :anthropic_api_key,
+      :llm_monthly_budget_cents
     ])
+    |> validate_number(:llm_monthly_budget_cents, greater_than_or_equal_to: 0)
   end
 
   def get_settings do
@@ -52,6 +57,13 @@ defmodule Librarian.Settings do
     case get_settings() do
       %{pinned_lenses: lenses} when is_list(lenses) -> lenses
       _ -> []
+    end
+  end
+
+  def llm_monthly_budget_cents do
+    case get_settings() do
+      %{llm_monthly_budget_cents: cents} when is_integer(cents) -> cents
+      _ -> 2000
     end
   end
 

@@ -24,6 +24,8 @@ defmodule LibrarianWeb.VaultLive do
        tags_input: "",
        note_offset: 0,
        more_notes?: false,
+       related: [],
+       annotations: [],
        note_changeset: Note.changeset(%Note{}, %{})
      )
      |> stream(:notes, [])}
@@ -56,8 +58,44 @@ defmodule LibrarianWeb.VaultLive do
 
   @impl true
   def handle_event("select_note", %{"id" => id}, socket) do
-    note = Vault.get_note!(String.to_integer(id))
-    {:noreply, assign(socket, selected_note: note, editing: false)}
+    {:noreply, select_note(socket, String.to_integer(id))}
+  end
+
+  def handle_event("add_annotation", %{"body" => body}, socket) do
+    note = socket.assigns.selected_note
+
+    case Vault.create_annotation(note.id, body) do
+      {:ok, _} ->
+        Vault.mark_graph_stale(note.id)
+        {:noreply, assign(socket, annotations: Vault.list_annotations(note.id))}
+
+      {:error, _} ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("delete_annotation", %{"id" => id}, socket) do
+    :ok = Vault.delete_annotation(String.to_integer(id))
+    note = socket.assigns.selected_note
+    {:noreply, assign(socket, annotations: Vault.list_annotations(note.id))}
+  end
+
+  def handle_event("delete_edge", %{"id" => id}, socket) do
+    :ok = Vault.delete_edge(String.to_integer(id))
+    note = socket.assigns.selected_note
+    {:noreply, assign(socket, related: Vault.related_notes(note.id))}
+  end
+
+  def handle_event("refresh_connections", _params, socket) do
+    note = socket.assigns.selected_note
+    Vault.mark_graph_stale(note.id)
+    Vault.generate_similarity_edges(note_id: note.id)
+    %{"note_id" => note.id} |> Librarian.Workers.ExtractEdgesWorker.new() |> Oban.insert()
+
+    {:noreply,
+     socket
+     |> assign(related: Vault.related_notes(note.id))
+     |> put_flash(:info, "Rebuilding connections in the background")}
   end
 
   def handle_event("new_note", _params, socket) do
@@ -104,18 +142,13 @@ defmodule LibrarianWeb.VaultLive do
 
     case result do
       {:ok, saved} ->
-        note = Vault.get_note!(saved.id)
         note_counts = Vault.count_notes_by_notebook()
 
         {:noreply,
          socket
-         |> assign(
-           selected_note: note,
-           editing: false,
-           note_counts: note_counts,
-           notebooks: Vault.list_notebooks()
-         )
-         |> stream_insert(:notes, note, at: 0)}
+         |> select_note(saved.id)
+         |> assign(note_counts: note_counts, notebooks: Vault.list_notebooks())
+         |> stream_insert(:notes, Vault.get_note!(saved.id), at: 0)}
 
       {:error, changeset} ->
         {:noreply, assign(socket, note_changeset: changeset)}
@@ -216,6 +249,34 @@ defmodule LibrarianWeb.VaultLive do
   end
 
   def handle_event("create_notebook", _params, socket), do: {:noreply, socket}
+
+  defp select_note(socket, id) do
+    note = Vault.get_note!(id)
+
+    assign(socket,
+      selected_note: note,
+      editing: false,
+      related: Vault.related_notes(id),
+      annotations: Vault.list_annotations(id)
+    )
+  end
+
+  @kind_order ~w(extends contradicts example_of references same_topic related)
+  @kind_labels %{
+    "extends" => "Extends",
+    "contradicts" => "Contradicts",
+    "example_of" => "Example of",
+    "references" => "References",
+    "same_topic" => "Same topic",
+    "related" => "Related"
+  }
+
+  defp group_related(related) do
+    related
+    |> Enum.group_by(fn %{edge: e} -> e.kind end)
+    |> Enum.sort_by(fn {kind, _} -> Enum.find_index(@kind_order, &(&1 == kind)) || 99 end)
+    |> Enum.map(fn {kind, entries} -> {Map.get(@kind_labels, kind, kind), entries} end)
+  end
 
   defp split_tags(""), do: []
 

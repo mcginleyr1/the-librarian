@@ -138,7 +138,7 @@
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                   <p class="text-xs text-base-content/50 mt-0.5">
-                    <span :if={note.notebook}>{note.notebook.name}       · </span>
+                    <span :if={note.notebook}>{note.notebook.name}        · </span>
                     {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                   </p>
                   <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -165,7 +165,7 @@
               >
                 <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                 <p class="text-xs text-base-content/50 mt-0.5">
-                  <span :if={note.notebook}>{note.notebook.name}       · </span>
+                  <span :if={note.notebook}>{note.notebook.name}        · </span>
                   {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                 </p>
                 <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -344,6 +344,99 @@
         <div class="note-body prose-like text-base leading-relaxed">
           {Phoenix.HTML.raw(render_note_body(@selected_note))}
         </div>
+
+        <%!-- Annotations --%>
+        <section class="mt-10 pt-6 border-t border-base-300">
+          <h2 class="text-sm font-bold uppercase tracking-wide text-base-content/50 mb-3 flex items-center gap-1.5">
+            <.icon name="hero-chat-bubble-bottom-center-text" class="size-4" /> Annotations
+          </h2>
+          <div :if={@annotations != []} class="space-y-2 mb-3">
+            <div
+              :for={annotation <- @annotations}
+              class="group flex items-start gap-2 rounded-lg bg-warning/5 border border-warning/20 px-3 py-2"
+            >
+              <p class="flex-1 text-sm leading-relaxed whitespace-pre-wrap">{annotation.body}</p>
+              <div class="shrink-0 flex items-center gap-2">
+                <span class="text-[10px] text-base-content/40 tabular-nums">
+                  {Calendar.strftime(annotation.inserted_at, "%b %-d")}
+                </span>
+                <button
+                  phx-click="delete_annotation"
+                  phx-value-id={annotation.id}
+                  class="press btn btn-ghost btn-xs opacity-0 group-hover:opacity-100 transition-opacity hover:text-error"
+                  title="Delete annotation"
+                >
+                  <.icon name="hero-x-mark" class="size-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+          <form id="annotation-form" phx-submit="add_annotation" class="flex gap-2">
+            <input
+              type="text"
+              name="body"
+              placeholder="Add a thought about this note..."
+              autocomplete="off"
+              class="input input-bordered input-sm flex-1 rounded-lg"
+            />
+            <button type="submit" class="press btn btn-primary btn-sm rounded-lg">Add</button>
+          </form>
+        </section>
+
+        <%!-- Connections --%>
+        <section class="mt-8 pt-6 border-t border-base-300">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-bold uppercase tracking-wide text-base-content/50 flex items-center gap-1.5">
+              <.icon name="hero-share" class="size-4" /> Connections
+            </h2>
+            <button
+              phx-click="refresh_connections"
+              class="press btn btn-ghost btn-xs gap-1"
+              title="Rebuild connections for this note"
+            >
+              <.icon name="hero-arrow-path" class="size-3" /> Rebuild
+            </button>
+          </div>
+          <p :if={@related == []} class="text-sm text-base-content/40 italic">
+            No connections yet — they appear as the graph is built in the background.
+          </p>
+          <div :for={{kind_label, entries} <- group_related(@related)} class="mb-4 last:mb-0">
+            <h3 class="text-xs font-semibold text-base-content/60 mb-1.5">{kind_label}</h3>
+            <div class="space-y-1.5">
+              <div
+                :for={%{edge: edge, note: other} <- entries}
+                class="group flex items-start gap-2 rounded-lg border border-base-300 hover:border-primary/40 hover:bg-primary/5 px-3 py-2 transition-colors"
+              >
+                <button
+                  phx-click="select_note"
+                  phx-value-id={other.id}
+                  class="flex-1 min-w-0 text-left cursor-pointer"
+                >
+                  <p class="text-sm font-medium truncate">{other.title || "(Untitled)"}</p>
+                  <p :if={edge.reason} class="text-xs text-base-content/60 mt-0.5 leading-snug">
+                    {edge.reason}
+                  </p>
+                </button>
+                <div class="shrink-0 flex items-center gap-1.5">
+                  <span
+                    class="text-[10px] tabular-nums text-base-content/40"
+                    title={"#{edge.origin} edge"}
+                  >
+                    {round(edge.weight * 100)}%
+                  </span>
+                  <button
+                    phx-click="delete_edge"
+                    phx-value-id={edge.id}
+                    class="press btn btn-ghost btn-xs opacity-0 group-hover:opacity-100 transition-opacity hover:text-error"
+                    title="Remove this connection"
+                  >
+                    <.icon name="hero-x-mark" class="size-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   </div>
