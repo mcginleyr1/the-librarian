@@ -77,7 +77,7 @@ defmodule LibrarianWeb.Layouts do
 
   def reader(assigns) do
     ~H"""
-    <div class="h-screen flex flex-col bg-base-100 overflow-hidden">
+    <div class="h-dvh flex flex-col bg-base-100 overflow-hidden">
       <.flash_group flash={@flash} />
       {render_slot(@inner_block)}
     </div>
@@ -89,7 +89,7 @@ defmodule LibrarianWeb.Layouts do
 
   def vault(assigns) do
     ~H"""
-    <div class="h-screen flex flex-col bg-base-100 overflow-hidden">
+    <div class="h-dvh flex flex-col bg-base-100 overflow-hidden">
       <.flash_group flash={@flash} />
       {render_slot(@inner_block)}
     </div>
@@ -101,7 +101,7 @@ defmodule LibrarianWeb.Layouts do
 
   def auth(assigns) do
     ~H"""
-    <div class="min-h-screen flex items-center justify-center bg-base-200 px-4">
+    <div class="min-h-dvh flex items-center justify-center bg-base-200 px-4">
       <.flash_group flash={@flash} />
       {render_slot(@inner_block)}
     </div>
