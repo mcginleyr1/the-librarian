@@ -62,11 +62,94 @@ defmodule Librarian.Vault do
       |> Note.changeset(attrs)
       |> Ecto.Changeset.put_assoc(:tags, tag_records)
 
-    if attrs[:evernote_guid] do
-      Repo.insert(changeset, on_conflict: :nothing, conflict_target: :evernote_guid)
-    else
-      Repo.insert(changeset)
+    cond do
+      attrs[:evernote_guid] ->
+        Repo.insert(changeset, on_conflict: :nothing, conflict_target: :evernote_guid)
+
+      existing = find_import_duplicate(attrs) ->
+        {:ok, existing}
+
+      true ->
+        Repo.insert(changeset)
     end
+  end
+
+  # ENEX exports carry no note GUIDs, so guid-less imports dedupe on content:
+  # same notebook, title, and body means the note is already here.
+  defp find_import_duplicate(attrs) do
+    Repo.one(
+      from n in Note,
+        where:
+          fragment(
+            "coalesce(?, '') = coalesce(?, '')",
+            n.title,
+            type(^attrs[:title], :string)
+          ) and
+            fragment(
+              "md5(coalesce(?, '')) = md5(coalesce(?, ''))",
+              n.body,
+              type(^attrs[:body], :string)
+            ) and
+            fragment(
+              "coalesce(?, -1) = coalesce(?, -1)",
+              n.notebook_id,
+              type(^attrs[:notebook_id], :integer)
+            ),
+        limit: 1
+    )
+  end
+
+  @doc "Number of surplus copies among identical (notebook, title, body) notes."
+  def duplicate_note_count do
+    %{rows: [[n]]} =
+      Repo.query!("""
+      SELECT COALESCE(SUM(c - 1), 0)::bigint FROM (
+        SELECT COUNT(*) AS c
+        FROM notes
+        GROUP BY notebook_id, title, md5(coalesce(body, ''))
+        HAVING COUNT(*) > 1
+      ) dupes
+      """)
+
+    n
+  end
+
+  @doc """
+  Deletes surplus copies of identical (notebook, title, body) notes, keeping
+  the oldest. Annotations move to the survivor; edges cascade away, and
+  survivors are marked graph-stale so the next build re-links them.
+  """
+  def dedupe_notes do
+    {:ok, removed} =
+      Repo.transaction(fn ->
+        %{rows: rows} =
+          Repo.query!("""
+          SELECT id,
+                 MIN(id) OVER (PARTITION BY notebook_id, title, md5(coalesce(body, ''))) AS survivor
+          FROM notes
+          """)
+
+        dupes = for [id, survivor] <- rows, id != survivor, do: {id, survivor}
+
+        Enum.each(dupes, fn {id, survivor} ->
+          Repo.update_all(from(a in Annotation, where: a.note_id == ^id),
+            set: [note_id: survivor]
+          )
+        end)
+
+        dupe_ids = Enum.map(dupes, &elem(&1, 0))
+        survivor_ids = dupes |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+
+        Repo.delete_all(from n in Note, where: n.id in ^dupe_ids)
+
+        Repo.update_all(from(n in Note, where: n.id in ^survivor_ids),
+          set: [graph_indexed_at: nil]
+        )
+
+        length(dupe_ids)
+      end)
+
+    removed
   end
 
   def update_note(%Note{} = note, attrs, tags \\ nil) do

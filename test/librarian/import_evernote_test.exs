@@ -124,14 +124,18 @@ defmodule Librarian.ImportEvernoteTest do
   end
 
   describe "idempotency" do
-    test "running import twice on same notebook creates notes on each run (no guid dedup)" do
+    test "running import twice on same notebook does not duplicate notes" do
       notebook_id = find_or_create_notebook("Idempotency Test")
 
       state1 = parse_and_import(@fixture, notebook_id)
       assert state1.notes_count == 2
 
-      state2 = parse_and_import(@fixture, notebook_id)
-      assert state2.notes_count == 2
+      parse_and_import(@fixture, notebook_id)
+
+      note_count =
+        Repo.aggregate(from(n in Note, where: n.notebook_id == ^notebook_id), :count)
+
+      assert note_count == 2
     end
 
     test "notebook is found not duplicated on second run" do

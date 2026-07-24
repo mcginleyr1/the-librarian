@@ -518,6 +518,21 @@
       <p class="text-sm text-base-content/50">
         Notes whose notebook is deleted will be unassigned (not deleted).
       </p>
+      <div :if={@duplicate_count > 0} class="alert alert-warning">
+        <.icon name="hero-document-duplicate" class="w-5 h-5" />
+        <span>
+          {@duplicate_count} duplicate {if @duplicate_count == 1, do: "note", else: "notes"} found
+          (same notebook, title, and content — usually from re-running an Evernote import).
+          Removing keeps the oldest copy and moves its annotations over.
+        </span>
+        <button
+          phx-click="dedupe_notes"
+          data-confirm="Remove duplicate notes? The oldest copy of each is kept."
+          class="btn btn-sm btn-warning"
+        >
+          Remove duplicates
+        </button>
+      </div>
       <div class="overflow-x-auto">
         <table class="table table-sm w-full">
           <thead>

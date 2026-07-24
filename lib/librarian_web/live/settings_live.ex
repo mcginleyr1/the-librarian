@@ -32,6 +32,7 @@ defmodule LibrarianWeb.SettingsLive do
        # Notebooks tab
        notebooks: Vault.list_notebooks(),
        note_counts: Vault.count_notes_by_notebook(),
+       duplicate_count: Vault.duplicate_note_count(),
        editing_notebook_id: nil,
        # Backup tab
        backup_form: backup_settings_form(),
@@ -336,6 +337,20 @@ defmodule LibrarianWeb.SettingsLive do
     |> Oban.insert()
 
     {:noreply, put_flash(socket, :info, "Backup queued — running in background")}
+  end
+
+  def handle_event("dedupe_notes", _params, socket) do
+    removed = Vault.dedupe_notes()
+    %{} |> BuildGraphWorker.new() |> Oban.insert()
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Removed #{removed} duplicate notes — graph rebuild queued")
+     |> assign(
+       duplicate_count: Vault.duplicate_note_count(),
+       notebooks: Vault.list_notebooks(),
+       note_counts: Vault.count_notes_by_notebook()
+     )}
   end
 
   # --- AI tab ---

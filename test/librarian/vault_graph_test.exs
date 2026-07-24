@@ -210,6 +210,38 @@ defmodule Librarian.VaultGraphTest do
     end
   end
 
+  describe "duplicate notes" do
+    test "import skips exact duplicates without a guid" do
+      {:ok, first} = Vault.create_note_from_import(%{title: "Once", body: "b"}, [])
+      {:ok, second} = Vault.create_note_from_import(%{title: "Once", body: "b"}, [])
+
+      assert second.id == first.id
+
+      assert Repo.aggregate(from(n in Librarian.Vault.Note, where: n.title == "Once"), :count) ==
+               1
+    end
+
+    test "dedupe_notes/0 keeps the oldest copy and moves annotations over" do
+      {:ok, keeper} = Vault.create_note_from_import(%{title: "Dup", body: "same"}, [])
+
+      # bypass import-time prevention to simulate a pre-existing duplicate
+      {:ok, copy} =
+        %Librarian.Vault.Note{user_id: Librarian.Accounts.owner!().id}
+        |> Librarian.Vault.Note.changeset(%{title: "Dup", body: "same"})
+        |> Repo.insert()
+
+      {:ok, _} = Vault.create_annotation(copy.id, "keep me")
+
+      assert Vault.duplicate_note_count() == 1
+      assert Vault.dedupe_notes() == 1
+      assert Vault.duplicate_note_count() == 0
+
+      assert Repo.get(Librarian.Vault.Note, copy.id) == nil
+      assert [%{body: "keep me"}] = Vault.list_annotations(keeper.id)
+      assert Repo.get!(Librarian.Vault.Note, keeper.id).graph_indexed_at == nil
+    end
+  end
+
   test "edge changeset validates kind and origin" do
     changeset =
       Edge.changeset(%Edge{}, %{kind: "nope", origin: "llm", source_note_id: 1, target_note_id: 2})
