@@ -3,32 +3,32 @@ defmodule LibrarianWeb.GraphLive do
 
   alias Librarian.Vault
 
-  @palette ~w(#6366f1 #f59e0b #10b981 #ef4444 #06b6d4 #d946ef #84cc16 #f97316)
+  # Starlight palette — desaturated luminous hues that glow on the night canvas.
+  @palette ~w(#8b9cf7 #e8c47d #8fd8a8 #ef9bb0 #7dd8e8 #c0a8f0 #efae8a #9fb8d8)
+  @unfiled "#7a86a8"
+
   @edge_legend [
-    {"related", "#9ca3af"},
-    {"extends", "#6366f1"},
-    {"contradicts", "#ef4444"},
-    {"example_of", "#10b981"},
-    {"references", "#06b6d4"},
-    {"same_topic", "#f59e0b"}
+    {"extends", "#8b9cf7"},
+    {"contradicts", "#ef7d95"},
+    {"example_of", "#7fd8a0"},
+    {"references", "#7dd0e8"},
+    {"same_topic", "#e8c47d"}
   ]
-  @edge_colors Map.new(@edge_legend)
 
   @impl true
   def mount(_params, _session, socket) do
     socket =
       assign(socket,
         loading: true,
-        nodes: [],
-        edges: [],
         node_count: 0,
-        edge_count: 0,
-        notebooks: Vault.list_notebooks()
+        typed_count: 0,
+        similarity_count: 0,
+        notebook_legend: []
       )
 
     socket =
       if connected?(socket) do
-        start_async(socket, :layout, fn -> Vault.graph_layout() end)
+        start_async(socket, :graph, fn -> Vault.graph() end)
       else
         socket
       end
@@ -37,22 +37,48 @@ defmodule LibrarianWeb.GraphLive do
   end
 
   @impl true
-  def handle_async(:layout, {:ok, %{nodes: nodes, edges: edges}}, socket) do
+  def handle_async(:graph, {:ok, %{nodes: nodes, edges: edges}}, socket) do
+    notebooks = Map.new(Vault.list_notebooks(), &{&1.id, &1.name})
+
+    node_payload =
+      Enum.map(nodes, fn n ->
+        %{
+          id: n.id,
+          title: n.title || "(Untitled)",
+          notebook: Map.get(notebooks, n.notebook_id),
+          color: notebook_color(n.notebook_id),
+          degree: n.degree
+        }
+      end)
+
+    edge_payload =
+      Enum.map(edges, &%{source: &1.source, target: &1.target, kind: &1.kind, weight: &1.weight})
+
+    legend =
+      node_payload
+      |> Enum.map(&{&1.notebook || "Unfiled", &1.color})
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    typed = Enum.count(edges, &(&1.kind != "related"))
+
     {:noreply,
-     assign(socket,
+     socket
+     |> assign(
        loading: false,
-       nodes: nodes,
-       edges: edges,
        node_count: length(nodes),
-       edge_count: length(edges)
-     )}
+       typed_count: typed,
+       similarity_count: length(edges) - typed,
+       notebook_legend: legend
+     )
+     |> push_event("graph", %{nodes: node_payload, edges: edge_payload})}
   end
 
-  def handle_async(:layout, {:exit, reason}, socket) do
+  def handle_async(:graph, {:exit, reason}, socket) do
     {:noreply,
      socket
      |> assign(loading: false)
-     |> put_flash(:error, "Graph layout failed: #{inspect(reason)}")}
+     |> put_flash(:error, "Graph failed to load: #{inspect(reason)}")}
   end
 
   @impl true
@@ -60,14 +86,10 @@ defmodule LibrarianWeb.GraphLive do
     {:noreply, push_navigate(socket, to: "/vault/note/#{id}")}
   end
 
-  def notebook_color(nil), do: "#9ca3af"
+  def notebook_color(nil), do: @unfiled
 
   def notebook_color(notebook_id),
     do: Enum.at(@palette, rem(:erlang.phash2(notebook_id), length(@palette)))
 
-  def edge_color(kind), do: Map.get(@edge_colors, kind, "#9ca3af")
-
   def edge_legend, do: @edge_legend
-
-  def node_radius(degree), do: min(4 + degree * 1.5, 14)
 end

@@ -184,8 +184,8 @@ defmodule Librarian.VaultGraphTest do
     assert Repo.get!(Librarian.Vault.Note, note.id).graph_indexed_at == nil
   end
 
-  describe "graph_layout/0" do
-    test "returns positioned nodes and edges for connected notes only" do
+  describe "graph/0" do
+    test "returns connected notes with degrees and their edges" do
       a = note!("A")
       b = note!("B")
       _isolated = note!("C")
@@ -201,12 +201,12 @@ defmodule Librarian.VaultGraphTest do
         }
       ])
 
-      %{nodes: nodes, edges: edges} = Vault.graph_layout()
+      %{nodes: nodes, edges: edges} = Vault.graph()
 
       assert Enum.map(nodes, & &1.id) |> Enum.sort() == Enum.sort([a.id, b.id])
-      assert Enum.all?(nodes, &(is_float(&1.x) and is_float(&1.y) and &1.degree == 1))
-      assert [%{kind: "extends", x1: x1, y1: y1}] = edges
-      assert is_float(x1) and is_float(y1)
+      assert Enum.all?(nodes, &(&1.degree == 1))
+      assert [%{kind: "extends", source: source, target: target}] = edges
+      assert {source, target} == {a.id, b.id}
     end
   end
 
