@@ -39,8 +39,11 @@ COPY lib lib
 COPY assets assets
 COPY rel rel
 
-RUN mix assets.deploy
+# compile must precede assets.deploy: colocated LiveView hooks are extracted
+# into _build/<env>/phoenix-colocated/ during compilation, and esbuild
+# resolves phoenix-colocated/librarian from there
 RUN mix compile
+RUN mix assets.deploy
 RUN mix release && chmod +x _build/prod/rel/librarian/bin/start
 
 FROM ${RUNNER_IMAGE}
