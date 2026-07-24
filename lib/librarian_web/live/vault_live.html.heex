@@ -143,7 +143,7 @@
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                   <p class="text-xs text-base-content/50 mt-0.5">
-                    <span :if={note.notebook}>{note.notebook.name}           · </span>
+                    <span :if={note.notebook}>{note.notebook.name}            · </span>
                     {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                   </p>
                   <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -170,7 +170,7 @@
               >
                 <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                 <p class="text-xs text-base-content/50 mt-0.5">
-                  <span :if={note.notebook}>{note.notebook.name}           · </span>
+                  <span :if={note.notebook}>{note.notebook.name}            · </span>
                   {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                 </p>
                 <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -346,12 +346,8 @@
             <.icon name="hero-paper-clip" class="size-4" /> View attachment
           </a>
         </div>
-        <div class="note-body prose-like text-base leading-relaxed">
-          {Phoenix.HTML.raw(render_note_body(@selected_note))}
-        </div>
-
         <%!-- Annotations --%>
-        <section class="mt-10 pt-6 border-t border-base-300">
+        <section class="mt-6 pt-6 border-t border-base-300">
           <h2 class="text-sm font-bold uppercase tracking-wide text-base-content/50 mb-3 flex items-center gap-1.5">
             <.icon name="hero-chat-bubble-bottom-center-text" class="size-4" /> Annotations
           </h2>
@@ -442,6 +438,10 @@
             </div>
           </div>
         </section>
+
+        <div class="note-body prose-like text-base leading-relaxed mt-8 pt-6 border-t border-base-300">
+          {Phoenix.HTML.raw(render_note_body(@selected_note))}
+        </div>
       </div>
     </main>
   </div>
