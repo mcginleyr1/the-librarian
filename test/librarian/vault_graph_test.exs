@@ -184,11 +184,12 @@ defmodule Librarian.VaultGraphTest do
     assert Repo.get!(Librarian.Vault.Note, note.id).graph_indexed_at == nil
   end
 
-  describe "graph/0" do
-    test "returns connected notes with degrees and their edges" do
-      a = note!("A")
-      b = note!("B")
-      _isolated = note!("C")
+  describe "mind_map/0" do
+    test "builds the notebook tree with typed cross-links, excluding similarity" do
+      {:ok, nb} = Vault.create_notebook(%{name: "Research #{System.unique_integer([:positive])}"})
+      {:ok, a} = Vault.create_note(%{title: "A", notebook_id: nb.id})
+      {:ok, b} = Vault.create_note(%{title: "B", notebook_id: nb.id})
+      _unfiled = note!("Loose note")
 
       Vault.upsert_edges([
         %{
@@ -198,15 +199,42 @@ defmodule Librarian.VaultGraphTest do
           reason: nil,
           weight: 0.8,
           origin: "llm"
+        },
+        %{
+          source_note_id: a.id,
+          target_note_id: b.id,
+          kind: "related",
+          reason: nil,
+          weight: 0.9,
+          origin: "similarity"
         }
       ])
 
-      %{nodes: nodes, edges: edges} = Vault.graph()
+      %{tree: tree, links: links, note_count: 3} = Vault.mind_map()
 
-      assert Enum.map(nodes, & &1.id) |> Enum.sort() == Enum.sort([a.id, b.id])
-      assert Enum.all?(nodes, &(&1.degree == 1))
-      assert [%{kind: "extends", source: source, target: target}] = edges
-      assert {source, target} == {a.id, b.id}
+      notebook = Enum.find(tree.children, &(&1.uid == "nb-#{nb.id}"))
+      assert notebook.count == 2
+      assert Enum.map(notebook.children, & &1.name) |> Enum.sort() == ["A", "B"]
+
+      unfiled = Enum.find(tree.children, &(&1.name == "Unfiled"))
+      assert unfiled.count == 1
+
+      assert links == [%{source: a.id, target: b.id, kind: "extends"}]
+    end
+
+    test "large notebooks bucket notes by first tag" do
+      {:ok, nb} = Vault.create_notebook(%{name: "Big #{System.unique_integer([:positive])}"})
+
+      for i <- 1..25 do
+        tag = if i <= 20, do: "elixir", else: "otp"
+        {:ok, _} = Vault.create_note(%{title: "Note #{i}", notebook_id: nb.id}, [tag])
+      end
+
+      %{tree: tree} = Vault.mind_map()
+      notebook = Enum.find(tree.children, &(&1.uid == "nb-#{nb.id}"))
+
+      assert [%{kind: "tag", name: "elixir", count: 20}, %{kind: "tag", name: "otp", count: 5}] =
+               notebook.children
     end
   end
 

@@ -336,47 +336,72 @@ defmodule Librarian.Vault do
     :ok
   end
 
-  @graph_node_cap 400
+  @flat_notebook_limit 24
 
   @doc """
-  Nodes (notes with at least one edge) and edges for the graph view, capped
-  to the #{@graph_node_cap} highest-degree notes so layout stays fast.
+  The full vault as a Notebook -> tag group -> note tree for the mind map,
+  plus the typed edges as cross-links. Notebooks over #{@flat_notebook_limit}
+  notes bucket their notes by first tag so no branch dumps hundreds of
+  leaves at once.
   """
-  def graph do
-    edges =
+  def mind_map do
+    notes = Repo.all(from n in Note, order_by: n.title, preload: [:tags])
+
+    links =
       Repo.all(
         from e in Edge,
-          select: %{
-            source: e.source_note_id,
-            target: e.target_note_id,
-            kind: e.kind,
-            weight: e.weight
+          where: e.kind != "related",
+          select: %{source: e.source_note_id, target: e.target_note_id, kind: e.kind}
+      )
+
+    by_notebook = Enum.group_by(notes, & &1.notebook_id)
+
+    children =
+      Enum.map(list_notebooks(), fn nb ->
+        notebook_node(nb.id, nb.name, Map.get(by_notebook, nb.id, []))
+      end) ++
+        case Map.get(by_notebook, nil, []) do
+          [] -> []
+          unfiled -> [notebook_node(nil, "Unfiled", unfiled)]
+        end
+
+    children = Enum.reject(children, &(&1.count == 0))
+
+    %{
+      tree: %{uid: "root", kind: "root", name: "Vault", children: children},
+      links: links,
+      note_count: length(notes)
+    }
+  end
+
+  defp notebook_node(id, name, notes) do
+    children =
+      if length(notes) > @flat_notebook_limit do
+        notes
+        |> Enum.group_by(&tag_bucket/1)
+        |> Enum.sort_by(fn {tag, group} -> {-length(group), tag} end)
+        |> Enum.map(fn {tag, group} ->
+          %{
+            uid: "tag-#{id}-#{tag}",
+            kind: "tag",
+            name: tag,
+            count: length(group),
+            children: Enum.map(group, &note_node/1)
           }
-      )
+        end)
+      else
+        Enum.map(notes, &note_node/1)
+      end
 
-    degrees =
-      edges
-      |> Enum.flat_map(&[&1.source, &1.target])
-      |> Enum.frequencies()
+    %{uid: "nb-#{id}", kind: "notebook", name: name, count: length(notes), children: children}
+  end
 
-    kept =
-      degrees
-      |> Enum.sort_by(fn {_id, degree} -> -degree end)
-      |> Enum.take(@graph_node_cap)
-      |> Map.new()
+  defp tag_bucket(%Note{tags: tags}) do
+    tags |> Enum.map(& &1.name) |> Enum.sort() |> List.first() || "untagged"
+  end
 
-    edges =
-      Enum.filter(edges, &(Map.has_key?(kept, &1.source) and Map.has_key?(kept, &1.target)))
-
-    nodes =
-      Repo.all(
-        from n in Note,
-          where: n.id in ^Map.keys(kept),
-          select: %{id: n.id, title: n.title, notebook_id: n.notebook_id}
-      )
-      |> Enum.map(&Map.put(&1, :degree, Map.fetch!(kept, &1.id)))
-
-    %{nodes: nodes, edges: edges}
+  defp note_node(n) do
+    %{uid: "note-#{n.id}", kind: "note", id: n.id, name: n.title || "(Untitled)"}
   end
 
   @doc "Clears the graph marker so the next BuildGraphWorker pass re-types this note."

@@ -1,356 +1,382 @@
-// Constellation — the vault knowledge graph as a deep-sky survey.
-// Nodes are glowing stars grouped into per-notebook constellations, typed
-// edges are curved light bridges, similarity edges are optional faint
-// threads. Hovering lifts one constellation out of the dimmed sky.
-import * as d3 from "../vendor/d3-force.js"
+// MindMap — the vault as a collapsible left-to-right tree.
+// Vault -> notebooks -> tag groups -> notes. Quiet by default: only the
+// notebook spines show until a branch is expanded. Typed edges appear as
+// dashed cross-links when hovering a note.
+import * as d3 from "../vendor/d3-hierarchy.js"
 
-const SKY = "#0a0d18"
-const SKY_GLOW = "rgba(28, 36, 66, 0.55)"
-const LABEL = "#e6e9f5"
-const EDGE_COLORS = {
-  related: "#5a6486",
-  extends: "#8b9cf7",
-  contradicts: "#ef7d95",
-  example_of: "#7fd8a0",
-  references: "#7dd0e8",
-  same_topic: "#e8c47d",
+const KIND_COLORS = {
+  extends: "#6366f1",
+  contradicts: "#e11d48",
+  example_of: "#059669",
+  references: "#0891b2",
+  same_topic: "#d97706",
 }
+const ROW = 26
+const COL = 250
 
-const dpr = () => window.devicePixelRatio || 1
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi)
-const smoothstep = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t) }
 
 export default {
   mounted() {
-    this.canvas = this.el.querySelector("canvas")
-    this.ctx = this.canvas.getContext("2d")
-    this.tooltip = this.el.querySelector("[data-tooltip]")
+    this.svg = this.el.querySelector("svg")
+    this.viewport = this.el.querySelector("[data-viewport]")
+    this.linkLayer = this.el.querySelector("[data-links]")
+    this.overlayLayer = this.el.querySelector("[data-overlay]")
+    this.nodeLayer = this.el.querySelector("[data-nodes]")
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
-    this.nodes = []
-    this.links = []
-    this.adjacent = new Map()
-    this.k = 1; this.tx = 0; this.ty = 0
-    this.hover = null
-    this.pinned = null // search selection: stays focused until dismissed
-    this.searchMatches = null
-    this.focus = 0 // 0 = full sky, 1 = neighborhood lifted
-    this.showSimilarity = false
+    this.tree = null
+    this.expanded = new Set(["root"])
+    this.searchExpanded = null // extra uids opened by an active search
+    this.matchUids = null
+    this.positions = new Map() // uid -> {x, y} after layout
+    this.parentOf = new Map()
+    this.noteLinks = new Map() // note id -> [{other, kind}]
+    this.k = 1; this.tx = 40; this.ty = 40
     this.pointers = new Map()
     this.moved = 0
     this.pinchDist = null
-    this.dragNode = null
-    this.framePending = false
-    this.fittedOnce = false
 
-    this.resize = () => {
-      const rect = this.el.getBoundingClientRect()
-      this.w = rect.width; this.h = rect.height
-      this.canvas.width = rect.width * dpr()
-      this.canvas.height = rect.height * dpr()
-      this.schedule()
-    }
-    this.observer = new ResizeObserver(this.resize)
-    this.observer.observe(this.el)
-    this.resize()
+    this.handleEvent("mindmap", ({tree, links}) => {
+      this.tree = tree
+      this.indexTree(tree, null, null)
+      this.noteLinks = new Map()
+      for (const l of links) {
+        if (!this.noteLinks.has(l.source)) this.noteLinks.set(l.source, [])
+        if (!this.noteLinks.has(l.target)) this.noteLinks.set(l.target, [])
+        this.noteLinks.get(l.source).push({other: l.target, kind: l.kind})
+        this.noteLinks.get(l.target).push({other: l.source, kind: l.kind})
+      }
+      this.layout()
+      this.fit()
+    })
 
-    this.handleEvent("graph", ({nodes, edges}) => this.start(nodes, edges))
-    this.bindInteractions()
+    this.bindPanZoom()
     this.bindSearch()
   },
 
   destroyed() {
-    this.sim?.stop()
-    this.observer?.disconnect()
     window.removeEventListener("keydown", this.slashShortcut)
   },
 
-  start(nodes, edges) {
-    this.nodes = nodes
-    this.links = edges
-    this.typedLinks = edges.filter((e) => e.kind !== "related")
-    this.simLinks = edges.filter((e) => e.kind === "related")
+  indexTree(node, parent, color) {
+    node.color = node.color || color
+    this.parentOf.set(node.uid, parent?.uid || null)
+    for (const child of node.children || []) this.indexTree(child, node, node.color)
+  },
 
-    // per-notebook anchors on a ring, so notebooks settle into constellations
-    const notebooks = [...new Set(nodes.map((n) => n.notebook || ""))]
-    const ringR = Math.min(this.w, this.h) * 0.26
-    const anchors = new Map(notebooks.map((name, i) => {
-      const angle = (i / notebooks.length) * Math.PI * 2 - Math.PI / 2
-      return [name, {
-        x: this.w / 2 + Math.cos(angle) * ringR,
-        y: this.h / 2 + Math.sin(angle) * ringR,
-      }]
-    }))
+  nodeByUid(uid, node = this.tree) {
+    if (node.uid === uid) return node
+    for (const child of node.children || []) {
+      const found = this.nodeByUid(uid, child)
+      if (found) return found
+    }
+    return null
+  },
 
-    this.adjacent = new Map(nodes.map((n) => [n.id, new Set()]))
-    const typedCount = new Map()
-    for (const e of edges) {
-      this.adjacent.get(e.source)?.add(e.target)
-      this.adjacent.get(e.target)?.add(e.source)
-      if (e.kind !== "related") {
-        typedCount.set(e.source, (typedCount.get(e.source) || 0) + 1)
-        typedCount.set(e.target, (typedCount.get(e.target) || 0) + 1)
+  // ---- layout + render ----------------------------------------------------
+
+  isOpen(uid) {
+    return this.expanded.has(uid) || this.searchExpanded?.has(uid)
+  },
+
+  prune(node) {
+    const open = node.kind === "root" || this.isOpen(node.uid)
+    return {
+      data: node,
+      children: open && node.children ? node.children.map((c) => this.prune(c)) : null,
+    }
+  },
+
+  layout() {
+    if (!this.tree) return
+    const root = d3.hierarchy(this.prune(this.tree), (d) => d.children)
+    d3.tree().nodeSize([ROW, COL])(root)
+
+    this.positions.clear()
+    this.linkLayer.replaceChildren()
+    this.overlayLayer.replaceChildren()
+    this.nodeLayer.replaceChildren()
+
+    for (const h of root.descendants()) {
+      const node = h.data.data
+      this.positions.set(node.uid, {x: h.x, y: h.y})
+      if (h.parent && h.parent.data.data.kind !== "root") {
+        this.linkLayer.appendChild(this.linkPath(h.parent, h, node.color))
       }
+      this.nodeLayer.appendChild(this.nodeGroup(node, h))
     }
-    // similarity inflates raw degree (avg ~14 here) — prominence comes from
-    // curated/typed structure, so hubs of meaning stand out, not hubs of noise
-    for (const n of nodes) n.typedDegree = typedCount.get(n.id) || 0
-    this.byImportance = [...nodes].sort(
-      (a, b) => b.typedDegree - a.typedDegree || b.degree - a.degree
-    )
+  },
 
-    // seed positions near the notebook anchor so constellations form calmly
-    for (const n of nodes) {
-      const a = anchors.get(n.notebook || "")
-      const jitter = () => (Math.random() - 0.5) * 120
-      n.x = a.x + jitter(); n.y = a.y + jitter()
-    }
+  linkPath(parent, child, color) {
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path")
+    const sx = parent.y + 8, sy = parent.x
+    const tx = child.y - 8, ty = child.x
+    const mid = (sx + tx) / 2
+    p.setAttribute("d", `M ${sx} ${sy} C ${mid} ${sy}, ${mid} ${ty}, ${tx} ${ty}`)
+    p.setAttribute("fill", "none")
+    p.setAttribute("stroke", color || "currentColor")
+    p.setAttribute("stroke-width", "1.5")
+    p.setAttribute("stroke-opacity", "0.5")
+    return p
+  },
 
-    this.sim = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(edges).id((d) => d.id)
-        .distance((l) => l.kind === "related" ? 46 : 74)
-        .strength((l) => l.kind === "related" ? 0.22 * l.weight : 0.45))
-      .force("charge", d3.forceManyBody().strength(-46).theta(0.9))
-      .force("collide", d3.forceCollide((d) => this.radius(d) + 3.5))
-      .force("x", d3.forceX((d) => anchors.get(d.notebook || "").x).strength(0.05))
-      .force("y", d3.forceY((d) => anchors.get(d.notebook || "").y).strength(0.05))
-      .on("tick", () => {
-        if (!this.fittedOnce && this.sim.alpha() < 0.35) {
-          this.fittedOnce = true
-          this.fit(false)
-        }
-        this.schedule()
+  nodeGroup(node, h) {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g")
+    g.setAttribute("transform", `translate(${h.y} ${h.x})`)
+
+    const isBranch = node.kind === "notebook" || node.kind === "tag" || node.kind === "root"
+    const match = this.matchUids?.has(node.uid)
+
+    if (isBranch) {
+      const open = node.kind === "root" || this.isOpen(node.uid)
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle")
+      dot.setAttribute("r", "4")
+      dot.setAttribute("fill", open ? "none" : node.color || "currentColor")
+      dot.setAttribute("stroke", node.color || "currentColor")
+      dot.setAttribute("stroke-width", "1.5")
+      g.appendChild(dot)
+
+      const label = this.textEl(node.name, 10, match)
+      label.setAttribute("font-weight", node.kind === "notebook" ? "600" : "500")
+      g.appendChild(label)
+
+      if (node.count != null) {
+        const count = this.textEl(String(node.count), 10, false)
+        count.setAttribute("opacity", "0.45")
+        count.setAttribute("font-size", "10")
+        const w = this.measure(node.name, node.kind === "notebook" ? 600 : 500)
+        count.setAttribute("x", 16 + w)
+        g.appendChild(count)
+      }
+
+      if (node.kind !== "root") {
+        g.classList.add("cursor-pointer")
+        g.addEventListener("click", (e) => {
+          e.stopPropagation()
+          if (this.moved > 5) return
+          this.expanded.has(node.uid)
+            ? this.expanded.delete(node.uid)
+            : this.expanded.add(node.uid)
+          this.layout()
+        })
+      }
+    } else {
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle")
+      dot.setAttribute("r", "2.5")
+      dot.setAttribute("fill", node.color || "currentColor")
+      dot.setAttribute("fill-opacity", "0.7")
+      g.appendChild(dot)
+
+      const links = this.noteLinks.get(node.id)
+      const title = node.name.length > 42 ? node.name.slice(0, 41) + "…" : node.name
+      const label = this.textEl(title, 9, match)
+      g.appendChild(label)
+
+      if (links?.length) {
+        const badge = this.textEl(`⇄${links.length}`, 9, false)
+        badge.setAttribute("font-size", "9")
+        badge.setAttribute("opacity", "0.5")
+        badge.setAttribute("x", 13 + this.measure(title, 400))
+        g.appendChild(badge)
+      }
+
+      g.classList.add("cursor-pointer")
+      g.addEventListener("click", (e) => {
+        e.stopPropagation()
+        if (this.moved <= 5) this.pushEvent("open_note", {id: node.id})
       })
+      g.addEventListener("mouseenter", () => this.showCrossLinks(node))
+      g.addEventListener("mouseleave", () => this.overlayLayer.replaceChildren())
+    }
+    return g
   },
 
-  radius(n) {
-    return Math.min(2.3 + Math.sqrt(n.typedDegree ?? 0) * 1.7, 13)
+  textEl(text, x, match) {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text")
+    t.setAttribute("x", x)
+    t.setAttribute("dy", "0.32em")
+    t.setAttribute("font-size", "12")
+    t.setAttribute("fill", "currentColor")
+    if (match) {
+      t.setAttribute("font-weight", "700")
+      t.setAttribute("text-decoration", "underline")
+    }
+    t.textContent = text
+    return t
   },
 
-  // ---- rendering ----------------------------------------------------------
-
-  schedule() {
-    if (this.framePending) return
-    this.framePending = true
-    requestAnimationFrame(() => { this.framePending = false; this.render() })
+  measure(text, weight) {
+    this.measureCtx ||= document.createElement("canvas").getContext("2d")
+    this.measureCtx.font = `${weight} 12px system-ui, -apple-system, sans-serif`
+    return this.measureCtx.measureText(text).width
   },
 
-  render() {
-    const ctx = this.ctx
-    const d = dpr()
-
-    // night sky with a soft nebular center
-    ctx.setTransform(d, 0, 0, d, 0, 0)
-    ctx.fillStyle = SKY
-    ctx.fillRect(0, 0, this.w, this.h)
-    const sky = ctx.createRadialGradient(
-      this.w / 2, this.h / 2, 0,
-      this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.7
-    )
-    sky.addColorStop(0, SKY_GLOW)
-    sky.addColorStop(1, "rgba(10, 13, 24, 0)")
-    ctx.fillStyle = sky
-    ctx.fillRect(0, 0, this.w, this.h)
-
-    if (!this.nodes.length) return
-
-    // one focus model: a hovered/pinned star lifts its neighborhood; an
-    // active search lifts every match. Everything else dims.
-    const focusNode = this.hover || this.pinned
-    const matches = focusNode ? null : this.searchMatches
-    const target = focusNode || matches ? 1 : 0
-    if (Math.abs(this.focus - target) > 0.01) {
-      this.focus += (target - this.focus) * (this.reducedMotion ? 1 : 0.22)
-      this.schedule()
-    } else {
-      this.focus = target
+  showCrossLinks(note) {
+    this.overlayLayer.replaceChildren()
+    const from = this.positions.get(note.uid)
+    if (!from) return
+    for (const {other, kind} of this.noteLinks.get(note.id) || []) {
+      const to = this.positions.get(`note-${other}`)
+      if (!to) continue
+      const p = document.createElementNS("http://www.w3.org/2000/svg", "path")
+      const mid = (from.y + to.y) / 2
+      p.setAttribute(
+        "d",
+        `M ${from.y} ${from.x} C ${mid + 60} ${from.x}, ${mid + 60} ${to.x}, ${to.y} ${to.x}`
+      )
+      p.setAttribute("fill", "none")
+      p.setAttribute("stroke", KIND_COLORS[kind] || "currentColor")
+      p.setAttribute("stroke-width", "1.5")
+      p.setAttribute("stroke-dasharray", "4 3")
+      p.setAttribute("stroke-opacity", "0.85")
+      this.overlayLayer.appendChild(p)
     }
-
-    const neighbors = focusNode ? this.adjacent.get(focusNode.id) : null
-    const inFocus = (n) => {
-      if (focusNode) return n === focusNode || neighbors?.has(n.id)
-      if (matches) return matches.has(n.id)
-      return true
-    }
-    const dimmed = 1 - 0.88 * this.focus
-
-    ctx.setTransform(d * this.k, 0, 0, d * this.k, d * this.tx, d * this.ty)
-
-    // edges: curved bridges of light
-    const drawLink = (l, baseAlpha, width) => {
-      const s = l.source, t = l.target
-      const lit = focusNode && (s === focusNode || t === focusNode)
-      const alpha = lit ? Math.min(baseAlpha * 3, 0.9) : baseAlpha * (target ? dimmed : 1)
-      if (alpha < 0.015) return
-      const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2
-      const dx = t.x - s.x, dy = t.y - s.y
-      const len = Math.hypot(dx, dy) || 1
-      const bow = ((s.id + t.id) % 2 === 0 ? 1 : -1) * len * 0.07
-      ctx.strokeStyle = EDGE_COLORS[l.kind] || EDGE_COLORS.related
-      ctx.globalAlpha = alpha
-      ctx.lineWidth = (lit ? width * 1.6 : width) / this.k
-      ctx.beginPath()
-      ctx.moveTo(s.x, s.y)
-      ctx.quadraticCurveTo(mx - (dy / len) * bow, my + (dx / len) * bow, t.x, t.y)
-      ctx.stroke()
-    }
-
-    if (this.showSimilarity) {
-      for (const l of this.simLinks) drawLink(l, 0.08, 0.6)
-    }
-    for (const l of this.typedLinks) drawLink(l, 0.14 + 0.2 * l.weight, 1.15)
-    ctx.globalAlpha = 1
-
-    // glow pass: stars bloom additively
-    ctx.globalCompositeOperation = "lighter"
-    for (const n of this.nodes) {
-      const r = this.radius(n)
-      const a = (inFocus(n) ? 0.42 : 0.42 * dimmed)
-      if (a < 0.02) continue
-      const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 3)
-      g.addColorStop(0, this.withAlpha(n.color, a))
-      g.addColorStop(1, this.withAlpha(n.color, 0))
-      ctx.fillStyle = g
-      ctx.beginPath()
-      ctx.arc(n.x, n.y, r * 3, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    ctx.globalCompositeOperation = "source-over"
-
-    // core pass: bright-hearted discs
-    for (const n of this.nodes) {
-      const r = this.radius(n)
-      ctx.globalAlpha = inFocus(n) ? 1 : dimmed * 0.7
-      const g = ctx.createRadialGradient(n.x - r * 0.3, n.y - r * 0.3, 0, n.x, n.y, r)
-      g.addColorStop(0, "#f4f6ff")
-      g.addColorStop(0.35, n.color)
-      g.addColorStop(1, this.withAlpha(n.color, 0.75))
-      ctx.fillStyle = g
-      ctx.beginPath()
-      ctx.arc(n.x, n.y, r, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    ctx.globalAlpha = 1
-
-    // focus ring
-    if (focusNode) {
-      ctx.strokeStyle = this.withAlpha(focusNode.color, 0.9)
-      ctx.lineWidth = 1.4 / this.k
-      ctx.beginPath()
-      ctx.arc(focusNode.x, focusNode.y, this.radius(focusNode) + 4 / this.k, 0, Math.PI * 2)
-      ctx.stroke()
-    }
-
-    // labels in screen space, under a hard budget: a quiet sky at overview,
-    // more names only as you zoom into a smaller region
-    ctx.setTransform(d, 0, 0, d, 0, 0)
-    ctx.font = "500 11px system-ui, -apple-system, sans-serif"
-    ctx.textAlign = "center"
-
-    const drawLabel = (n, a) => {
-      if (a < 0.03) return false
-      const sx = n.x * this.k + this.tx
-      const sy = n.y * this.k + this.ty + this.radius(n) * this.k + 13
-      if (sx < -80 || sx > this.w + 80 || sy < 0 || sy > this.h + 20) return false
-      const text = n.title.length > 34 ? n.title.slice(0, 33) + "…" : n.title
-      ctx.globalAlpha = a
-      ctx.shadowColor = "rgba(5, 7, 15, 0.9)"
-      ctx.shadowBlur = 4
-      ctx.fillStyle = LABEL
-      ctx.fillText(text, sx, sy)
-      ctx.shadowBlur = 0
-      return true
-    }
-
-    if (focusNode) {
-      for (const n of this.nodes) if (inFocus(n)) drawLabel(n, 1)
-    } else {
-      const zoomAlpha = smoothstep((this.k - 0.55) / 0.5)
-      const budget = matches
-        ? 24
-        : Math.round(6 + 26 * Math.max(this.k - 0.5, 0) ** 2)
-      let drawn = 0
-      for (const n of this.byImportance || []) {
-        if (drawn >= budget) break
-        if (matches && !matches.has(n.id)) continue
-        if (drawLabel(n, matches ? 1 : zoomAlpha)) drawn++
-      }
-    }
-    ctx.globalAlpha = 1
-  },
-
-  withAlpha(hex, a) {
-    const n = parseInt(hex.slice(1), 16)
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
   },
 
   // ---- view control -------------------------------------------------------
 
-  toWorld(clientX, clientY) {
-    const rect = this.canvas.getBoundingClientRect()
-    return {
-      x: (clientX - rect.left - this.tx) / this.k,
-      y: (clientY - rect.top - this.ty) / this.k,
-    }
-  },
-
-  zoomAt(clientX, clientY, factor) {
-    const next = clamp(this.k * factor, 0.15, 9)
-    const rect = this.canvas.getBoundingClientRect()
-    const px = clientX - rect.left, py = clientY - rect.top
-    this.tx = px - (next / this.k) * (px - this.tx)
-    this.ty = py - (next / this.k) * (py - this.ty)
-    this.k = next
-    this.schedule()
+  applyTransform() {
+    this.viewport.setAttribute(
+      "transform",
+      `translate(${this.tx} ${this.ty}) scale(${this.k})`
+    )
   },
 
   animateView(k, tx, ty) {
     if (this.reducedMotion) {
       this.k = k; this.tx = tx; this.ty = ty
-      this.schedule()
+      this.applyTransform()
       return
     }
     const from = {k: this.k, tx: this.tx, ty: this.ty}
     const t0 = performance.now()
     const step = (now) => {
-      const t = smoothstep(clamp((now - t0) / 260, 0, 1))
+      let t = clamp((now - t0) / 240, 0, 1)
+      t = t * t * (3 - 2 * t)
       this.k = from.k + (k - from.k) * t
       this.tx = from.tx + (tx - from.tx) * t
       this.ty = from.ty + (ty - from.ty) * t
-      this.render()
+      this.applyTransform()
       if (t < 1) requestAnimationFrame(step)
     }
     requestAnimationFrame(step)
   },
 
-  fit(animate = true) {
-    if (!this.nodes.length) return
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
-    for (const n of this.nodes) {
-      x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y)
-      x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y)
+  fit() {
+    const box = this.viewport.getBBox()
+    if (box.width === 0) return
+    const rect = this.svg.getBoundingClientRect()
+    const k = clamp(Math.min(rect.width / (box.width + 120), rect.height / (box.height + 80)), 0.3, 1.25)
+    this.animateView(
+      k,
+      rect.width / 2 - (box.x + box.width / 2) * k,
+      rect.height / 2 - (box.y + box.height / 2) * k
+    )
+  },
+
+  centerOn(uid) {
+    const pos = this.positions.get(uid)
+    if (!pos) return
+    const rect = this.svg.getBoundingClientRect()
+    const k = Math.max(this.k, 0.9)
+    this.animateView(k, rect.width / 2 - pos.y * k, rect.height / 2 - pos.x * k)
+  },
+
+  zoomAt(clientX, clientY, factor) {
+    const next = clamp(this.k * factor, 0.2, 4)
+    const rect = this.svg.getBoundingClientRect()
+    const px = clientX - rect.left, py = clientY - rect.top
+    this.tx = px - (next / this.k) * (px - this.tx)
+    this.ty = py - (next / this.k) * (py - this.ty)
+    this.k = next
+    this.applyTransform()
+  },
+
+  bindPanZoom() {
+    this.el.addEventListener("wheel", (e) => {
+      e.preventDefault()
+      this.zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 0.89)
+    }, {passive: false})
+
+    this.el.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("[data-ui]")) return
+      this.pointers.set(e.pointerId, {x: e.clientX, y: e.clientY})
+      if (this.pointers.size === 1) this.moved = 0
+      this.pinchDist = null
+    })
+
+    this.el.addEventListener("pointermove", (e) => {
+      if (!this.pointers.has(e.pointerId)) return
+      const prev = this.pointers.get(e.pointerId)
+      this.pointers.set(e.pointerId, {x: e.clientX, y: e.clientY})
+
+      if (this.pointers.size === 2) {
+        const [a, b] = [...this.pointers.values()]
+        const dist = Math.hypot(a.x - b.x, a.y - b.y)
+        if (this.pinchDist) this.zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, dist / this.pinchDist)
+        this.pinchDist = dist
+        this.moved += 10
+        return
+      }
+
+      const dx = e.clientX - prev.x, dy = e.clientY - prev.y
+      this.moved += Math.abs(dx) + Math.abs(dy)
+      if (this.moved > 5) {
+        if (!this.el.hasPointerCapture(e.pointerId)) this.el.setPointerCapture(e.pointerId)
+        this.tx += dx
+        this.ty += dy
+        this.applyTransform()
+      }
+    })
+
+    const release = (e) => {
+      this.pointers.delete(e.pointerId)
+      this.pinchDist = null
     }
-    const pad = 70
-    const k = clamp(Math.min(
-      this.w / (x1 - x0 + pad * 2),
-      this.h / (y1 - y0 + pad * 2)
-    ), 0.15, 1.6)
-    const tx = this.w / 2 - ((x0 + x1) / 2) * k
-    const ty = this.h / 2 - ((y0 + y1) / 2) * k
-    animate ? this.animateView(k, tx, ty) : (this.k = k, this.tx = tx, this.ty = ty, this.schedule())
-  },
+    this.el.addEventListener("pointerup", release)
+    this.el.addEventListener("pointercancel", release)
 
-  zoomCenter(factor) {
-    const rect = this.canvas.getBoundingClientRect()
-    this.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor)
-  },
+    this.el.addEventListener("dblclick", (e) => {
+      if (!e.target.closest("[data-ui]")) this.fit()
+    })
 
-  flyTo(node) {
-    const k = Math.max(this.k, 1.6)
-    this.animateView(k, this.w / 2 - node.x * k, this.h / 2 - node.y * k)
+    this.el.querySelector('[data-zoom="in"]').addEventListener("click", () => {
+      const r = this.svg.getBoundingClientRect()
+      this.zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.3)
+    })
+    this.el.querySelector('[data-zoom="out"]').addEventListener("click", () => {
+      const r = this.svg.getBoundingClientRect()
+      this.zoomAt(r.left + r.width / 2, r.top + r.height / 2, 0.77)
+    })
+    this.el.querySelector('[data-zoom="reset"]').addEventListener("click", () => {
+      this.expanded = new Set(["root"])
+      this.layout()
+      this.fit()
+    })
   },
 
   // ---- search -------------------------------------------------------------
+
+  ancestorsOf(uid) {
+    const out = []
+    let cur = this.parentOf.get(uid)
+    while (cur) {
+      out.push(cur)
+      cur = this.parentOf.get(cur)
+    }
+    return out
+  },
+
+  collectMatches(q) {
+    const matches = []
+    const walk = (node) => {
+      if (node.kind !== "root" && node.name.toLowerCase().includes(q)) matches.push(node)
+      for (const c of node.children || []) walk(c)
+    }
+    walk(this.tree)
+    return matches
+  },
 
   bindSearch() {
     const input = this.el.querySelector("[data-search]")
@@ -366,37 +392,37 @@ export default {
     const clearSearch = () => {
       input.value = ""
       clear.classList.add("hidden")
-      this.searchMatches = null
-      this.pinned = null
+      this.searchExpanded = null
+      this.matchUids = null
       hideResults()
-      this.schedule()
+      this.layout()
     }
-    this.clearSearch = clearSearch
+
+    const select = (node) => {
+      hideResults()
+      input.blur()
+      this.layout()
+      this.centerOn(node.uid)
+    }
 
     const showResults = (nodes) => {
       this.resultNodes = nodes
       results.replaceChildren()
       if (nodes.length === 0) {
         const p = document.createElement("p")
-        p.className = "px-3 py-2 text-xs text-slate-500"
-        p.textContent = "No matching notes"
+        p.className = "px-3 py-2 text-xs opacity-50"
+        p.textContent = "No matches"
         results.appendChild(p)
       }
-      for (const n of nodes) {
+      for (const n of nodes.slice(0, 8)) {
         const row = document.createElement("button")
-        row.className = "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/5"
+        row.className = "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-base-200"
         const dot = document.createElement("span")
         dot.className = "size-2 rounded-full shrink-0"
-        dot.style.background = n.color
+        dot.style.background = n.color || "#64748b"
         const text = document.createElement("span")
-        text.className = "min-w-0"
-        const title = document.createElement("span")
-        title.className = "block truncate text-sm text-slate-100"
-        title.textContent = n.title
-        const notebook = document.createElement("span")
-        notebook.className = "block text-[10px] uppercase tracking-wider text-slate-500"
-        notebook.textContent = n.notebook || "Unfiled"
-        text.append(title, notebook)
+        text.className = "block truncate text-sm"
+        text.textContent = n.name
         row.append(dot, text)
         row.addEventListener("mousedown", (e) => {
           e.preventDefault()
@@ -407,32 +433,21 @@ export default {
       results.classList.remove("hidden")
     }
 
-    const select = (node) => {
-      this.pinned = node
-      this.searchMatches = null
-      hideResults()
-      input.blur()
-      this.flyTo(node)
-      this.schedule()
-    }
-
     input.addEventListener("input", () => {
       const q = input.value.trim().toLowerCase()
       clear.classList.toggle("hidden", q === "")
-      this.pinned = null
       if (q.length < 2) {
-        this.searchMatches = null
+        this.searchExpanded = null
+        this.matchUids = null
         hideResults()
-        this.schedule()
+        this.layout()
         return
       }
-      const found = this.nodes
-        .filter((n) =>
-          n.title.toLowerCase().includes(q) || (n.notebook || "").toLowerCase().includes(q))
-        .sort((a, b) => (b.typedDegree ?? 0) - (a.typedDegree ?? 0) || b.degree - a.degree)
-      this.searchMatches = new Set(found.map((n) => n.id))
-      showResults(found.slice(0, 8))
-      this.schedule()
+      const matches = this.collectMatches(q).slice(0, 60)
+      this.matchUids = new Set(matches.map((m) => m.uid))
+      this.searchExpanded = new Set(matches.flatMap((m) => this.ancestorsOf(m.uid)))
+      showResults(matches)
+      this.layout()
     })
 
     input.addEventListener("keydown", (e) => {
@@ -451,131 +466,5 @@ export default {
       input.select()
     }
     window.addEventListener("keydown", this.slashShortcut)
-  },
-
-  // ---- interactions -------------------------------------------------------
-
-  hitTest(clientX, clientY) {
-    if (!this.sim) return null
-    const p = this.toWorld(clientX, clientY)
-    return this.sim.find(p.x, p.y, 14 / this.k) || null
-  },
-
-  setHover(node, clientX, clientY) {
-    if (this.hover === node) { if (node) this.moveTooltip(clientX, clientY); return }
-    this.hover = node
-    this.el.style.cursor = node ? "pointer" : "grab"
-    if (node) {
-      this.tooltip.querySelector("[data-tt-notebook]").textContent = node.notebook || "No notebook"
-      this.tooltip.querySelector("[data-tt-title]").textContent = node.title
-      this.tooltip.querySelector("[data-tt-dot]").style.background = node.color
-      this.tooltip.classList.remove("hidden")
-      this.moveTooltip(clientX, clientY)
-    } else {
-      this.tooltip.classList.add("hidden")
-    }
-    this.schedule()
-  },
-
-  moveTooltip(clientX, clientY) {
-    const rect = this.el.getBoundingClientRect()
-    const x = clamp(clientX - rect.left + 14, 8, rect.width - 240)
-    const y = clamp(clientY - rect.top + 14, 8, rect.height - 70)
-    this.tooltip.style.transform = `translate(${x}px, ${y}px)`
-  },
-
-  bindInteractions() {
-    this.el.addEventListener("wheel", (e) => {
-      e.preventDefault()
-      this.zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 0.87)
-    }, {passive: false})
-
-    this.el.addEventListener("pointerdown", (e) => {
-      if (e.target.closest("[data-ui]")) return
-      this.pointers.set(e.pointerId, {x: e.clientX, y: e.clientY})
-      if (this.pointers.size === 1) {
-        this.moved = 0
-        const node = this.hitTest(e.clientX, e.clientY)
-        if (node) {
-          this.dragNode = node
-          this.sim.alphaTarget(0.18).restart()
-        }
-      }
-      this.pinchDist = null
-    })
-
-    this.el.addEventListener("pointermove", (e) => {
-      if (!this.pointers.has(e.pointerId)) {
-        if (!this.dragNode) this.setHover(this.hitTest(e.clientX, e.clientY), e.clientX, e.clientY)
-        return
-      }
-      const prev = this.pointers.get(e.pointerId)
-      this.pointers.set(e.pointerId, {x: e.clientX, y: e.clientY})
-
-      if (this.pointers.size === 2) {
-        const [a, b] = [...this.pointers.values()]
-        const dist = Math.hypot(a.x - b.x, a.y - b.y)
-        if (this.pinchDist) this.zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, dist / this.pinchDist)
-        this.pinchDist = dist
-        this.moved += 10
-        return
-      }
-
-      const dx = e.clientX - prev.x, dy = e.clientY - prev.y
-      this.moved += Math.abs(dx) + Math.abs(dy)
-
-      if (this.dragNode) {
-        const p = this.toWorld(e.clientX, e.clientY)
-        this.dragNode.fx = p.x
-        this.dragNode.fy = p.y
-        this.setHover(this.dragNode, e.clientX, e.clientY)
-        this.schedule()
-        return
-      }
-      if (this.moved > 5) {
-        if (!this.el.hasPointerCapture(e.pointerId)) this.el.setPointerCapture(e.pointerId)
-        this.el.style.cursor = "grabbing"
-        this.tooltip.classList.add("hidden")
-        this.tx += dx
-        this.ty += dy
-        this.schedule()
-      }
-    })
-
-    const release = (e) => {
-      this.pointers.delete(e.pointerId)
-      this.pinchDist = null
-      if (this.dragNode) {
-        if (this.moved <= 5) this.pushEvent("open_note", {id: this.dragNode.id})
-        this.dragNode.fx = null
-        this.dragNode.fy = null
-        this.dragNode = null
-        this.sim.alphaTarget(0)
-      } else if (this.moved <= 5 && this.pinned) {
-        // tapping empty sky releases a search-pinned star
-        this.pinned = null
-        this.schedule()
-      }
-      if (this.pointers.size === 0) this.el.style.cursor = this.hover ? "pointer" : "grab"
-    }
-    this.el.addEventListener("pointerup", release)
-    this.el.addEventListener("pointercancel", release)
-    this.el.addEventListener("pointerleave", () => { if (!this.dragNode) this.setHover(null) })
-
-    this.el.addEventListener("dblclick", (e) => {
-      if (!e.target.closest("[data-ui]")) this.fit()
-    })
-
-    this.el.querySelector('[data-zoom="in"]').addEventListener("click", () => this.zoomCenter(1.4))
-    this.el.querySelector('[data-zoom="out"]').addEventListener("click", () => this.zoomCenter(0.7))
-    this.el.querySelector('[data-zoom="reset"]').addEventListener("click", () => this.fit())
-
-    const simToggle = this.el.querySelector("[data-similarity]")
-    simToggle.addEventListener("click", () => {
-      this.showSimilarity = !this.showSimilarity
-      simToggle.setAttribute("aria-pressed", String(this.showSimilarity))
-      simToggle.classList.toggle("ring-1", this.showSimilarity)
-      this.schedule()
-    })
   },
 }
