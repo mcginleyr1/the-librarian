@@ -32,6 +32,8 @@ export default {
     this.adjacent = new Map()
     this.k = 1; this.tx = 0; this.ty = 0
     this.hover = null
+    this.pinned = null // search selection: stays focused until dismissed
+    this.searchMatches = null
     this.focus = 0 // 0 = full sky, 1 = neighborhood lifted
     this.showSimilarity = false
     this.pointers = new Map()
@@ -54,11 +56,13 @@ export default {
 
     this.handleEvent("graph", ({nodes, edges}) => this.start(nodes, edges))
     this.bindInteractions()
+    this.bindSearch()
   },
 
   destroyed() {
     this.sim?.stop()
     this.observer?.disconnect()
+    window.removeEventListener("keydown", this.slashShortcut)
   },
 
   start(nodes, edges) {
@@ -139,8 +143,11 @@ export default {
 
     if (!this.nodes.length) return
 
-    // ease the focus dim toward its target
-    const target = this.hover ? 1 : 0
+    // one focus model: a hovered/pinned star lifts its neighborhood; an
+    // active search lifts every match. Everything else dims.
+    const focusNode = this.hover || this.pinned
+    const matches = focusNode ? null : this.searchMatches
+    const target = focusNode || matches ? 1 : 0
     if (Math.abs(this.focus - target) > 0.01) {
       this.focus += (target - this.focus) * (this.reducedMotion ? 1 : 0.22)
       this.schedule()
@@ -148,8 +155,12 @@ export default {
       this.focus = target
     }
 
-    const neighbors = this.hover ? this.adjacent.get(this.hover.id) : null
-    const inFocus = (n) => !this.hover || n === this.hover || neighbors?.has(n.id)
+    const neighbors = focusNode ? this.adjacent.get(focusNode.id) : null
+    const inFocus = (n) => {
+      if (focusNode) return n === focusNode || neighbors?.has(n.id)
+      if (matches) return matches.has(n.id)
+      return true
+    }
     const dimmed = 1 - 0.88 * this.focus
 
     ctx.setTransform(d * this.k, 0, 0, d * this.k, d * this.tx, d * this.ty)
@@ -157,8 +168,8 @@ export default {
     // edges: curved bridges of light
     const drawLink = (l, baseAlpha, width) => {
       const s = l.source, t = l.target
-      const lit = this.hover && (s === this.hover || t === this.hover)
-      const alpha = lit ? Math.min(baseAlpha * 3, 0.9) : baseAlpha * (this.hover ? dimmed : 1)
+      const lit = focusNode && (s === focusNode || t === focusNode)
+      const alpha = lit ? Math.min(baseAlpha * 3, 0.9) : baseAlpha * (target ? dimmed : 1)
       if (alpha < 0.015) return
       const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2
       const dx = t.x - s.x, dy = t.y - s.y
@@ -210,13 +221,12 @@ export default {
     }
     ctx.globalAlpha = 1
 
-    // hover ring
-    if (this.hover) {
-      const n = this.hover
-      ctx.strokeStyle = this.withAlpha(n.color, 0.9)
+    // focus ring
+    if (focusNode) {
+      ctx.strokeStyle = this.withAlpha(focusNode.color, 0.9)
       ctx.lineWidth = 1.4 / this.k
       ctx.beginPath()
-      ctx.arc(n.x, n.y, this.radius(n) + 4 / this.k, 0, Math.PI * 2)
+      ctx.arc(focusNode.x, focusNode.y, this.radius(focusNode) + 4 / this.k, 0, Math.PI * 2)
       ctx.stroke()
     }
 
@@ -227,7 +237,7 @@ export default {
     const zoomAlpha = smoothstep((this.k - 0.8) / 0.7)
     for (const n of this.nodes) {
       let a
-      if (this.hover) {
+      if (focusNode || matches) {
         a = inFocus(n) ? 1 : 0
       } else {
         a = n.degree >= 3 || this.k > 2.2 ? zoomAlpha : 0
@@ -311,6 +321,114 @@ export default {
   zoomCenter(factor) {
     const rect = this.canvas.getBoundingClientRect()
     this.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor)
+  },
+
+  flyTo(node) {
+    const k = Math.max(this.k, 1.6)
+    this.animateView(k, this.w / 2 - node.x * k, this.h / 2 - node.y * k)
+  },
+
+  // ---- search -------------------------------------------------------------
+
+  bindSearch() {
+    const input = this.el.querySelector("[data-search]")
+    const results = this.el.querySelector("[data-results]")
+    const clear = this.el.querySelector("[data-search-clear]")
+
+    const hideResults = () => {
+      results.classList.add("hidden")
+      results.replaceChildren()
+      this.resultNodes = []
+    }
+
+    const clearSearch = () => {
+      input.value = ""
+      clear.classList.add("hidden")
+      this.searchMatches = null
+      this.pinned = null
+      hideResults()
+      this.schedule()
+    }
+    this.clearSearch = clearSearch
+
+    const showResults = (nodes) => {
+      this.resultNodes = nodes
+      results.replaceChildren()
+      if (nodes.length === 0) {
+        const p = document.createElement("p")
+        p.className = "px-3 py-2 text-xs text-slate-500"
+        p.textContent = "No matching notes"
+        results.appendChild(p)
+      }
+      for (const n of nodes) {
+        const row = document.createElement("button")
+        row.className = "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/5"
+        const dot = document.createElement("span")
+        dot.className = "size-2 rounded-full shrink-0"
+        dot.style.background = n.color
+        const text = document.createElement("span")
+        text.className = "min-w-0"
+        const title = document.createElement("span")
+        title.className = "block truncate text-sm text-slate-100"
+        title.textContent = n.title
+        const notebook = document.createElement("span")
+        notebook.className = "block text-[10px] uppercase tracking-wider text-slate-500"
+        notebook.textContent = n.notebook || "Unfiled"
+        text.append(title, notebook)
+        row.append(dot, text)
+        row.addEventListener("mousedown", (e) => {
+          e.preventDefault()
+          select(n)
+        })
+        results.appendChild(row)
+      }
+      results.classList.remove("hidden")
+    }
+
+    const select = (node) => {
+      this.pinned = node
+      this.searchMatches = null
+      hideResults()
+      input.blur()
+      this.flyTo(node)
+      this.schedule()
+    }
+
+    input.addEventListener("input", () => {
+      const q = input.value.trim().toLowerCase()
+      clear.classList.toggle("hidden", q === "")
+      this.pinned = null
+      if (q.length < 2) {
+        this.searchMatches = null
+        hideResults()
+        this.schedule()
+        return
+      }
+      const found = this.nodes
+        .filter((n) =>
+          n.title.toLowerCase().includes(q) || (n.notebook || "").toLowerCase().includes(q))
+        .sort((a, b) => b.degree - a.degree)
+      this.searchMatches = new Set(found.map((n) => n.id))
+      showResults(found.slice(0, 8))
+      this.schedule()
+    })
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && this.resultNodes?.length) select(this.resultNodes[0])
+      if (e.key === "Escape") { clearSearch(); input.blur() }
+      e.stopPropagation()
+    })
+
+    input.addEventListener("blur", () => setTimeout(hideResults, 150))
+    clear.addEventListener("click", () => { clearSearch(); input.focus() })
+
+    this.slashShortcut = (e) => {
+      if (e.key !== "/" || e.target.closest("input, textarea, select")) return
+      e.preventDefault()
+      input.focus()
+      input.select()
+    }
+    window.addEventListener("keydown", this.slashShortcut)
   },
 
   // ---- interactions -------------------------------------------------------
@@ -411,6 +529,10 @@ export default {
         this.dragNode.fy = null
         this.dragNode = null
         this.sim.alphaTarget(0)
+      } else if (this.moved <= 5 && this.pinned) {
+        // tapping empty sky releases a search-pinned star
+        this.pinned = null
+        this.schedule()
       }
       if (this.pointers.size === 0) this.el.style.cursor = this.hover ? "pointer" : "grab"
     }

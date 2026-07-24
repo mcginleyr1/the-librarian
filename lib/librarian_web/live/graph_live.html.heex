@@ -67,6 +67,34 @@
           <p data-tt-title class="mt-0.5 text-sm font-medium text-slate-100 leading-snug"></p>
         </div>
 
+        <div data-ui class="absolute top-3 left-3 z-10 w-72 max-w-[calc(100%-6rem)]">
+          <div class="relative">
+            <.icon
+              name="hero-magnifying-glass"
+              class="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+            />
+            <input
+              data-search
+              type="text"
+              placeholder="Find a note…  ( / )"
+              autocomplete="off"
+              class="w-full rounded-full border border-white/10 bg-[#131829]/80 backdrop-blur pl-8 pr-8 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-400/50 shadow-lg"
+            />
+            <button
+              data-search-clear
+              title="Clear search"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 hidden"
+            >
+              <.icon name="hero-x-mark" class="size-3.5" />
+            </button>
+          </div>
+          <div
+            data-results
+            class="mt-1 hidden rounded-xl border border-white/10 bg-[#131829]/95 backdrop-blur shadow-xl shadow-black/40 overflow-hidden"
+          >
+          </div>
+        </div>
+
         <div data-ui class="absolute top-3 right-3 z-10 flex flex-col gap-1">
           <button
             data-zoom="in"
