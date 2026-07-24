@@ -83,10 +83,21 @@ export default {
     }))
 
     this.adjacent = new Map(nodes.map((n) => [n.id, new Set()]))
+    const typedCount = new Map()
     for (const e of edges) {
       this.adjacent.get(e.source)?.add(e.target)
       this.adjacent.get(e.target)?.add(e.source)
+      if (e.kind !== "related") {
+        typedCount.set(e.source, (typedCount.get(e.source) || 0) + 1)
+        typedCount.set(e.target, (typedCount.get(e.target) || 0) + 1)
+      }
     }
+    // similarity inflates raw degree (avg ~14 here) — prominence comes from
+    // curated/typed structure, so hubs of meaning stand out, not hubs of noise
+    for (const n of nodes) n.typedDegree = typedCount.get(n.id) || 0
+    this.byImportance = [...nodes].sort(
+      (a, b) => b.typedDegree - a.typedDegree || b.degree - a.degree
+    )
 
     // seed positions near the notebook anchor so constellations form calmly
     for (const n of nodes) {
@@ -113,7 +124,7 @@ export default {
   },
 
   radius(n) {
-    return Math.min(2.6 + Math.sqrt(n.degree) * 1.35, 13)
+    return Math.min(2.3 + Math.sqrt(n.typedDegree ?? 0) * 1.7, 13)
   },
 
   // ---- rendering ----------------------------------------------------------
@@ -230,22 +241,17 @@ export default {
       ctx.stroke()
     }
 
-    // labels in screen space, fading in with zoom
+    // labels in screen space, under a hard budget: a quiet sky at overview,
+    // more names only as you zoom into a smaller region
     ctx.setTransform(d, 0, 0, d, 0, 0)
     ctx.font = "500 11px system-ui, -apple-system, sans-serif"
     ctx.textAlign = "center"
-    const zoomAlpha = smoothstep((this.k - 0.8) / 0.7)
-    for (const n of this.nodes) {
-      let a
-      if (focusNode || matches) {
-        a = inFocus(n) ? 1 : 0
-      } else {
-        a = n.degree >= 3 || this.k > 2.2 ? zoomAlpha : 0
-      }
-      if (a < 0.03) continue
+
+    const drawLabel = (n, a) => {
+      if (a < 0.03) return false
       const sx = n.x * this.k + this.tx
       const sy = n.y * this.k + this.ty + this.radius(n) * this.k + 13
-      if (sx < -80 || sx > this.w + 80 || sy < 0 || sy > this.h + 20) continue
+      if (sx < -80 || sx > this.w + 80 || sy < 0 || sy > this.h + 20) return false
       const text = n.title.length > 34 ? n.title.slice(0, 33) + "…" : n.title
       ctx.globalAlpha = a
       ctx.shadowColor = "rgba(5, 7, 15, 0.9)"
@@ -253,6 +259,22 @@ export default {
       ctx.fillStyle = LABEL
       ctx.fillText(text, sx, sy)
       ctx.shadowBlur = 0
+      return true
+    }
+
+    if (focusNode) {
+      for (const n of this.nodes) if (inFocus(n)) drawLabel(n, 1)
+    } else {
+      const zoomAlpha = smoothstep((this.k - 0.55) / 0.5)
+      const budget = matches
+        ? 24
+        : Math.round(6 + 26 * Math.max(this.k - 0.5, 0) ** 2)
+      let drawn = 0
+      for (const n of this.byImportance || []) {
+        if (drawn >= budget) break
+        if (matches && !matches.has(n.id)) continue
+        if (drawLabel(n, matches ? 1 : zoomAlpha)) drawn++
+      }
     }
     ctx.globalAlpha = 1
   },
@@ -407,7 +429,7 @@ export default {
       const found = this.nodes
         .filter((n) =>
           n.title.toLowerCase().includes(q) || (n.notebook || "").toLowerCase().includes(q))
-        .sort((a, b) => b.degree - a.degree)
+        .sort((a, b) => (b.typedDegree ?? 0) - (a.typedDegree ?? 0) || b.degree - a.degree)
       this.searchMatches = new Set(found.map((n) => n.id))
       showResults(found.slice(0, 8))
       this.schedule()
