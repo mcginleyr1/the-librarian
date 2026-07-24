@@ -184,6 +184,32 @@ defmodule Librarian.VaultGraphTest do
     assert Repo.get!(Librarian.Vault.Note, note.id).graph_indexed_at == nil
   end
 
+  describe "graph_layout/0" do
+    test "returns positioned nodes and edges for connected notes only" do
+      a = note!("A")
+      b = note!("B")
+      _isolated = note!("C")
+
+      Vault.upsert_edges([
+        %{
+          source_note_id: a.id,
+          target_note_id: b.id,
+          kind: "extends",
+          reason: nil,
+          weight: 0.8,
+          origin: "llm"
+        }
+      ])
+
+      %{nodes: nodes, edges: edges} = Vault.graph_layout()
+
+      assert Enum.map(nodes, & &1.id) |> Enum.sort() == Enum.sort([a.id, b.id])
+      assert Enum.all?(nodes, &(is_float(&1.x) and is_float(&1.y) and &1.degree == 1))
+      assert [%{kind: "extends", x1: x1, y1: y1}] = edges
+      assert is_float(x1) and is_float(y1)
+    end
+  end
+
   test "edge changeset validates kind and origin" do
     changeset =
       Edge.changeset(%Edge{}, %{kind: "nope", origin: "llm", source_note_id: 1, target_note_id: 2})

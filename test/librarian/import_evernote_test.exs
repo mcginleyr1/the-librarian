@@ -1,5 +1,7 @@
 defmodule Librarian.ImportEvernoteTest do
-  use Librarian.DataCase, async: true
+  # Not async: tag find-or-create races other sandboxes on the global
+  # tags.name unique index, intermittently importing notes with no tags.
+  use Librarian.DataCase, async: false
 
   alias Librarian.Vault
   alias Librarian.Vault.{Note, Notebook}

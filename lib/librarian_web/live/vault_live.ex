@@ -44,6 +44,14 @@ defmodule LibrarianWeb.VaultLive do
      |> load_notes(reset: true)}
   end
 
+  def handle_params(%{"note_id" => note_id}, _uri, socket) do
+    {:noreply,
+     socket
+     |> assign(selected_notebook_id: nil, search_query: "")
+     |> load_notes(reset: true)
+     |> select_note(String.to_integer(note_id))}
+  end
+
   def handle_params(_params, _uri, socket) do
     {:noreply,
      socket

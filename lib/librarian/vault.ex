@@ -2,7 +2,7 @@ defmodule Librarian.Vault do
   import Ecto.Query
   alias Librarian.Accounts
   alias Librarian.Repo
-  alias Librarian.Vault.{Annotation, Edge, Note, Notebook, Tag}
+  alias Librarian.Vault.{Annotation, Edge, GraphLayout, Note, Notebook, Tag}
   alias Librarian.Workers.RebuildInterestWorker
 
   def list_notebooks do
@@ -251,6 +251,83 @@ defmodule Librarian.Vault do
   def delete_annotation(id) do
     Repo.delete_all(from a in Annotation, where: a.id == ^id)
     :ok
+  end
+
+  @graph_node_cap 400
+
+  @doc """
+  Nodes (notes with at least one edge) and edges for the graph view, capped
+  to the #{@graph_node_cap} highest-degree notes so layout stays fast.
+  """
+  def graph do
+    edges =
+      Repo.all(
+        from e in Edge,
+          select: %{
+            source: e.source_note_id,
+            target: e.target_note_id,
+            kind: e.kind,
+            weight: e.weight
+          }
+      )
+
+    degrees =
+      edges
+      |> Enum.flat_map(&[&1.source, &1.target])
+      |> Enum.frequencies()
+
+    kept =
+      degrees
+      |> Enum.sort_by(fn {_id, degree} -> -degree end)
+      |> Enum.take(@graph_node_cap)
+      |> Map.new()
+
+    edges =
+      Enum.filter(edges, &(Map.has_key?(kept, &1.source) and Map.has_key?(kept, &1.target)))
+
+    nodes =
+      Repo.all(
+        from n in Note,
+          where: n.id in ^Map.keys(kept),
+          select: %{id: n.id, title: n.title, notebook_id: n.notebook_id}
+      )
+      |> Enum.map(&Map.put(&1, :degree, Map.fetch!(kept, &1.id)))
+
+    %{nodes: nodes, edges: edges}
+  end
+
+  @doc "graph/0 plus force-layout coordinates, ready for SVG rendering."
+  def graph_layout(width \\ 1200.0, height \\ 800.0) do
+    %{nodes: nodes, edges: edges} = graph()
+
+    pos =
+      GraphLayout.layout(
+        Enum.map(nodes, & &1.id),
+        Enum.map(edges, &{&1.source, &1.target}),
+        width,
+        height
+      )
+
+    nodes =
+      Enum.map(nodes, fn n ->
+        {x, y} = pos[n.id]
+        Map.merge(n, %{x: Float.round(x, 1), y: Float.round(y, 1)})
+      end)
+
+    edges =
+      Enum.map(edges, fn e ->
+        {x1, y1} = pos[e.source]
+        {x2, y2} = pos[e.target]
+
+        Map.merge(e, %{
+          x1: Float.round(x1, 1),
+          y1: Float.round(y1, 1),
+          x2: Float.round(x2, 1),
+          y2: Float.round(y2, 1)
+        })
+      end)
+
+    %{nodes: nodes, edges: edges}
   end
 
   @doc "Clears the graph marker so the next BuildGraphWorker pass re-types this note."

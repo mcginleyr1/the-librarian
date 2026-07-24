@@ -59,6 +59,9 @@
           />
           <button type="submit" class="press btn btn-primary btn-xs rounded-lg">+</button>
         </form>
+        <.link navigate="/vault/graph" class="press btn btn-ghost btn-xs w-full gap-1">
+          <.icon name="hero-share" class="size-3" /> Graph
+        </.link>
         <a href="/settings" class="press btn btn-ghost btn-xs w-full gap-1">
           <.icon name="hero-cog-6-tooth" class="size-3" /> Settings
         </a>
@@ -140,7 +143,7 @@
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                   <p class="text-xs text-base-content/50 mt-0.5">
-                    <span :if={note.notebook}>{note.notebook.name}         · </span>
+                    <span :if={note.notebook}>{note.notebook.name}          · </span>
                     {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                   </p>
                   <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -167,7 +170,7 @@
               >
                 <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                 <p class="text-xs text-base-content/50 mt-0.5">
-                  <span :if={note.notebook}>{note.notebook.name}         · </span>
+                  <span :if={note.notebook}>{note.notebook.name}          · </span>
                   {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                 </p>
                 <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">

@@ -1,0 +1,141 @@
+<Layouts.reader flash={@flash}>
+  <div class="flex flex-col h-full overflow-hidden bg-base-200/40">
+    <header class="shrink-0 border-b border-base-300 bg-gradient-to-r from-primary/10 via-base-100 to-base-100 px-6 py-3 flex items-center gap-4">
+      <div class="flex items-center gap-2.5">
+        <div class="size-9 rounded-xl bg-primary/15 text-primary grid place-items-center">
+          <.icon name="hero-share" class="size-5" />
+        </div>
+        <div class="leading-tight">
+          <h1 class="text-base font-bold tracking-tight">Knowledge Graph</h1>
+          <p class="text-[11px] text-base-content/50">
+            {@node_count} notes · {@edge_count} connections
+          </p>
+        </div>
+      </div>
+      <.link navigate="/vault" class="press btn btn-ghost btn-xs rounded-full gap-1">
+        <.icon name="hero-arrow-left" class="size-3" /> Vault
+      </.link>
+      <Layouts.nav_pills active={:vault} class="ml-auto" />
+    </header>
+
+    <div :if={@loading} class="flex-1 grid place-items-center text-base-content/40">
+      <div class="text-center select-none">
+        <span class="loading loading-ring loading-lg"></span>
+        <p class="mt-2 text-sm">Laying out the graph…</p>
+      </div>
+    </div>
+
+    <div
+      :if={!@loading && @nodes == []}
+      class="flex-1 grid place-items-center text-base-content/30"
+    >
+      <div class="text-center select-none max-w-sm">
+        <div class="size-16 mx-auto rounded-2xl bg-base-200 grid place-items-center mb-4">
+          <.icon name="hero-share" class="size-8" />
+        </div>
+        <p class="text-lg font-medium">No connections yet</p>
+        <p class="text-sm mt-1">
+          Edges appear as the graph builds in the background — check the AI tab in Settings.
+        </p>
+      </div>
+    </div>
+
+    <div
+      :if={!@loading && @nodes != []}
+      id="graph-canvas"
+      phx-hook=".GraphPanZoom"
+      class="flex-1 min-h-0 cursor-grab select-none overflow-hidden"
+    >
+      <svg viewBox="0 0 1200 800" class="w-full h-full">
+        <g data-viewport>
+          <line
+            :for={edge <- @edges}
+            x1={edge.x1}
+            y1={edge.y1}
+            x2={edge.x2}
+            y2={edge.y2}
+            stroke={edge_color(edge.kind)}
+            stroke-width={0.5 + edge.weight}
+            stroke-opacity="0.45"
+          />
+          <g
+            :for={node <- @nodes}
+            transform={"translate(#{node.x} #{node.y})"}
+            phx-click="open_note"
+            phx-value-id={node.id}
+            class="cursor-pointer"
+          >
+            <circle
+              r={node_radius(node.degree)}
+              fill={notebook_color(node.notebook_id)}
+              fill-opacity="0.9"
+              stroke="#ffffff"
+              stroke-width="1.5"
+            />
+            <text
+              :if={node.degree >= 3 or @node_count <= 60}
+              y={node_radius(node.degree) + 10}
+              text-anchor="middle"
+              font-size="9"
+              fill="currentColor"
+              opacity="0.6"
+            >
+              {String.slice(node.title || "(Untitled)", 0, 28)}
+            </text>
+            <title>{node.title || "(Untitled)"}</title>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <footer
+      :if={!@loading && @nodes != []}
+      class="shrink-0 border-t border-base-300 bg-base-100 px-6 py-2 flex flex-wrap items-center gap-x-4 gap-y-1"
+    >
+      <span
+        :for={{kind, color} <- edge_legend()}
+        class="inline-flex items-center gap-1.5 text-[11px] text-base-content/60"
+      >
+        <span class="inline-block w-4 h-0.5 rounded" style={"background: #{color}"}></span>
+        {String.replace(kind, "_", " ")}
+      </span>
+      <span class="ml-auto text-[11px] text-base-content/40">
+        scroll to zoom · drag to pan · click a note to open it
+      </span>
+    </footer>
+  </div>
+
+  <script :type={Phoenix.LiveView.ColocatedHook} name=".GraphPanZoom">
+    export default {
+      mounted() {
+        const viewport = this.el.querySelector("[data-viewport]")
+        let scale = 1, tx = 0, ty = 0, pan = null
+        const apply = () =>
+          viewport.setAttribute("transform", `translate(${tx} ${ty}) scale(${scale})`)
+
+        this.el.addEventListener("wheel", (e) => {
+          e.preventDefault()
+          const factor = e.deltaY < 0 ? 1.1 : 0.9
+          scale = Math.min(Math.max(scale * factor, 0.2), 6)
+          apply()
+        }, { passive: false })
+
+        this.el.addEventListener("pointerdown", (e) => {
+          pan = { x: e.clientX - tx, y: e.clientY - ty }
+          this.el.setPointerCapture(e.pointerId)
+          this.el.style.cursor = "grabbing"
+        })
+        this.el.addEventListener("pointermove", (e) => {
+          if (!pan) return
+          tx = e.clientX - pan.x
+          ty = e.clientY - pan.y
+          apply()
+        })
+        this.el.addEventListener("pointerup", () => {
+          pan = null
+          this.el.style.cursor = "grab"
+        })
+      }
+    }
+  </script>
+</Layouts.reader>
