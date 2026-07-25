@@ -26,9 +26,19 @@ defmodule LibrarianWeb.VaultLive do
        more_notes?: false,
        related: [],
        annotations: [],
-       note_changeset: Note.changeset(%Note{}, %{})
+       note_changeset: Note.changeset(%Note{}, %{}),
+       show_notebooks: false
      )
      |> stream(:notes, [])}
+  end
+
+  # Below `md` only one pane fits, so the three panes become a drill-down.
+  defp mobile_pane(assigns) do
+    cond do
+      assigns.show_notebooks -> :notebooks
+      assigns.selected_note || assigns.editing -> :note
+      true -> :list
+    end
   end
 
   @impl true
@@ -39,7 +49,8 @@ defmodule LibrarianWeb.VaultLive do
        selected_notebook_id: String.to_integer(nb_id),
        selected_note: nil,
        editing: false,
-       search_query: ""
+       search_query: "",
+       show_notebooks: false
      )
      |> load_notes(reset: true)}
   end
@@ -47,7 +58,7 @@ defmodule LibrarianWeb.VaultLive do
   def handle_params(%{"note_id" => note_id}, _uri, socket) do
     {:noreply,
      socket
-     |> assign(selected_notebook_id: nil, search_query: "")
+     |> assign(selected_notebook_id: nil, search_query: "", show_notebooks: false)
      |> load_notes(reset: true)
      |> select_note(String.to_integer(note_id))}
   end
@@ -59,7 +70,8 @@ defmodule LibrarianWeb.VaultLive do
        selected_notebook_id: nil,
        selected_note: nil,
        editing: false,
-       search_query: ""
+       search_query: "",
+       show_notebooks: false
      )
      |> load_notes(reset: true)}
   end
@@ -67,6 +79,14 @@ defmodule LibrarianWeb.VaultLive do
   @impl true
   def handle_event("select_note", %{"id" => id}, socket) do
     {:noreply, select_note(socket, String.to_integer(id))}
+  end
+
+  def handle_event("toggle_notebooks", _params, socket) do
+    {:noreply, assign(socket, show_notebooks: !socket.assigns.show_notebooks)}
+  end
+
+  def handle_event("back_to_list", _params, socket) do
+    {:noreply, assign(socket, selected_note: nil, editing: false)}
   end
 
   def handle_event("add_annotation", %{"body" => body}, socket) do

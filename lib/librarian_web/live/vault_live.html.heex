@@ -1,13 +1,25 @@
+<% pane = mobile_pane(assigns) %>
 <Layouts.vault flash={@flash}>
   <div class="flex flex-1 overflow-hidden h-full min-h-0">
     <%!-- SIDEBAR: Notebooks --%>
-    <aside class="w-72 shrink-0 bg-base-200 flex flex-col overflow-hidden border-r border-base-300 min-h-0">
+    <aside class={[
+      "w-72 shrink-0 bg-base-200 flex flex-col overflow-hidden border-r border-base-300 min-h-0",
+      "max-md:w-full max-md:border-r-0",
+      pane != :notebooks && "max-md:hidden"
+    ]}>
       <div class="p-3 border-b border-base-300 bg-gradient-to-r from-primary/10 to-transparent space-y-2">
         <div class="flex items-center gap-2.5">
           <div class="size-8 rounded-lg bg-primary/15 text-primary grid place-items-center shrink-0">
             <.icon name="hero-archive-box" class="size-4" />
           </div>
           <span class="font-bold text-sm flex-1">Vault</span>
+          <button
+            phx-click="toggle_notebooks"
+            class="press md:hidden btn btn-ghost btn-xs btn-square"
+            aria-label="Close notebook list"
+          >
+            <.icon name="hero-x-mark" class="size-4" />
+          </button>
         </div>
         <Layouts.nav_pills active={:vault} compact />
       </div>
@@ -69,8 +81,20 @@
     </aside>
 
     <%!-- MIDDLE: Note List --%>
-    <div class="w-72 shrink-0 flex flex-col border-r border-base-300 bg-base-100 overflow-hidden min-h-0">
+    <div class={[
+      "w-72 shrink-0 flex flex-col border-r border-base-300 bg-base-100 overflow-hidden min-h-0",
+      "max-md:w-full max-md:border-r-0",
+      pane != :list && "max-md:hidden"
+    ]}>
       <div class="px-3 py-2.5 border-b border-base-300 flex gap-2 items-center">
+        <button
+          :if={!@selection_mode}
+          phx-click="toggle_notebooks"
+          class="press md:hidden btn btn-ghost btn-sm btn-square shrink-0"
+          aria-label="Show notebooks"
+        >
+          <.icon name="hero-bars-3" class="size-5" />
+        </button>
         <%= if @selection_mode do %>
           <button
             type="submit"
@@ -143,7 +167,7 @@
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                   <p class="text-xs text-base-content/50 mt-0.5">
-                    <span :if={note.notebook}>{note.notebook.name}            · </span>
+                    <span :if={note.notebook}>{note.notebook.name}             · </span>
                     {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                   </p>
                   <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -170,7 +194,7 @@
               >
                 <p class="text-sm font-medium truncate">{note.title || "(Untitled)"}</p>
                 <p class="text-xs text-base-content/50 mt-0.5">
-                  <span :if={note.notebook}>{note.notebook.name}            · </span>
+                  <span :if={note.notebook}>{note.notebook.name}             · </span>
                   {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
                 </p>
                 <div :if={note.tags != []} class="flex flex-wrap gap-1 mt-1">
@@ -189,7 +213,19 @@
     </div>
 
     <%!-- RIGHT: Note Viewer / Editor --%>
-    <main class="flex-1 min-h-0 overflow-y-auto bg-base-100">
+    <main class={[
+      "flex-1 min-h-0 overflow-y-auto bg-base-100",
+      pane != :note && "max-md:hidden"
+    ]}>
+      <div
+        :if={@selected_note || @editing}
+        class="md:hidden sticky top-0 z-10 bg-base-100/95 backdrop-blur border-b border-base-200 px-2 py-1.5"
+      >
+        <button phx-click="back_to_list" class="press btn btn-ghost btn-sm gap-1">
+          <.icon name="hero-chevron-left" class="size-4" /> Notes
+        </button>
+      </div>
+
       <div
         :if={is_nil(@selected_note) && !@editing}
         class="flex items-center justify-center h-full text-base-content/30"
@@ -203,7 +239,7 @@
       </div>
 
       <%!-- Editor --%>
-      <div :if={@editing} class="max-w-2xl mx-auto px-8 py-10 prism-in">
+      <div :if={@editing} class="max-w-2xl mx-auto px-4 py-6 md:px-8 md:py-10 prism-in">
         <h2 class="text-xl font-bold mb-6">
           {if @selected_note, do: "Edit Note", else: "New Note"}
         </h2>
@@ -282,7 +318,10 @@
       </div>
 
       <%!-- Note Viewer --%>
-      <div :if={@selected_note && !@editing} class="max-w-2xl mx-auto px-8 py-10 prism-in">
+      <div
+        :if={@selected_note && !@editing}
+        class="max-w-2xl mx-auto px-4 py-6 md:px-8 md:py-10 prism-in"
+      >
         <div class="flex items-start justify-between mb-2 gap-4">
           <h1 class="text-2xl font-bold leading-tight flex-1">
             {@selected_note.title || "(Untitled)"}

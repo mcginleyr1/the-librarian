@@ -2,7 +2,7 @@
   <div class="flex flex-col h-full overflow-hidden bg-base-200/40">
     <%!-- TOP BAR --%>
     <header class="shrink-0 border-b border-base-300 bg-gradient-to-r from-primary/10 via-base-100 to-base-100 backdrop-blur">
-      <div class="px-6 py-3 flex items-center gap-4">
+      <div class="px-4 md:px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div class="flex items-center gap-2.5">
           <div class="size-9 rounded-xl bg-primary/15 text-primary grid place-items-center">
             <.icon name="hero-sparkles" class="size-5" />
@@ -37,7 +37,7 @@
       <%!-- LENS CHIPS: pinned category lenses first, then pool topics --%>
       <div
         :if={@topics != [] or @lenses != []}
-        class="px-6 pb-3 flex items-center gap-1.5 flex-wrap"
+        class="px-4 md:px-6 pb-3 flex items-center gap-1.5 flex-wrap"
       >
         <span class="text-[11px] uppercase tracking-wider text-base-content/40 mr-1">Lenses</span>
         <button

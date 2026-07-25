@@ -1,6 +1,6 @@
 <Layouts.reader flash={@flash}>
   <div class="flex flex-col h-full overflow-hidden bg-base-100">
-    <header class="shrink-0 border-b border-base-300 bg-gradient-to-r from-primary/10 via-base-100 to-base-100 px-6 py-3 flex items-center gap-4">
+    <header class="shrink-0 border-b border-base-300 bg-gradient-to-r from-primary/10 via-base-100 to-base-100 px-4 md:px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
       <div class="flex items-center gap-2.5">
         <div class="size-9 rounded-xl bg-primary/15 text-primary grid place-items-center">
           <.icon name="hero-share" class="size-5" />
@@ -112,7 +112,7 @@
 
     <footer
       :if={!@loading && @note_count > 0}
-      class="shrink-0 border-t border-base-300 bg-base-100 px-6 py-2 flex flex-wrap items-center gap-x-4 gap-y-1"
+      class="shrink-0 border-t border-base-300 bg-base-100 px-4 md:px-6 py-2 flex flex-wrap items-center gap-x-4 gap-y-1"
     >
       <span
         :for={{kind, color} <- edge_legend()}
@@ -125,7 +125,7 @@
         </span>
         {String.replace(kind, "_", " ")}
       </span>
-      <span class="ml-auto text-[11px] text-base-content/40">
+      <span class="ml-auto text-[11px] text-base-content/40 max-md:hidden">
         click a branch to expand · click a note to open · hover ⇄ for its links · double-click to fit
       </span>
     </footer>

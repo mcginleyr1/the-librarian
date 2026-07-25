@@ -104,6 +104,20 @@
 
 /* This file is for your main application CSS */
 
+/* iOS Safari zooms the viewport whenever a focused field is under 16px. The
+   compact input-xs/input-sm fields would trigger it on every search box. */
+@media (max-width: 767px) {
+  input, select, textarea { font-size: 16px; }
+}
+
+/* Horizontal chip/pill rails: scrollable without a visible scrollbar. */
+.rail { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.rail::-webkit-scrollbar { display: none; }
+
+/* Long unbroken URLs in feed content must not force the page sideways. */
+.article-body, .note-body { overflow-wrap: anywhere; }
+.article-body pre, .article-body table { max-width: 100%; overflow-x: auto; }
+
 /* Article body styles */
 .article-body img { max-width: 100%; height: auto; border-radius: 0.5rem; }
 .article-body a { text-decoration: underline; }

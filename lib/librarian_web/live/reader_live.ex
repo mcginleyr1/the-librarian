@@ -29,9 +29,19 @@ defmodule LibrarianWeb.ReaderLive do
        more_articles?: false,
        current_index: -1,
        pending_new: 0,
-       collapsed_categories: MapSet.new()
+       collapsed_categories: MapSet.new(),
+       show_feeds: false
      )
      |> stream(:articles, [])}
+  end
+
+  # Below `md` only one pane fits, so the three panes become a drill-down.
+  defp mobile_pane(assigns) do
+    cond do
+      assigns.show_feeds -> :feeds
+      assigns.selected_article -> :article
+      true -> :list
+    end
   end
 
   @impl true
@@ -42,7 +52,8 @@ defmodule LibrarianWeb.ReaderLive do
        selected_feed_id: String.to_integer(feed_id),
        selected_category: nil,
        current_index: -1,
-       selected_article: nil
+       selected_article: nil,
+       show_feeds: false
      )
      |> load_articles_page(reset: true)}
   end
@@ -54,7 +65,8 @@ defmodule LibrarianWeb.ReaderLive do
        selected_feed_id: nil,
        selected_category: category_slug,
        current_index: -1,
-       selected_article: nil
+       selected_article: nil,
+       show_feeds: false
      )
      |> load_articles_page(reset: true)}
   end
@@ -65,7 +77,8 @@ defmodule LibrarianWeb.ReaderLive do
      |> assign(
        selected_feed_id: nil,
        selected_category: nil,
-       current_index: -1
+       current_index: -1,
+       show_feeds: false
      )
      |> load_articles_page(reset: true)}
   end
@@ -81,6 +94,14 @@ defmodule LibrarianWeb.ReaderLive do
 
     {:noreply,
      assign(socket, selected_article: article, current_index: index, unread_counts: unread_counts)}
+  end
+
+  def handle_event("toggle_feeds", _params, socket) do
+    {:noreply, assign(socket, show_feeds: !socket.assigns.show_feeds)}
+  end
+
+  def handle_event("back_to_list", _params, socket) do
+    {:noreply, assign(socket, selected_article: nil)}
   end
 
   def handle_event("load_more", _params, socket) do

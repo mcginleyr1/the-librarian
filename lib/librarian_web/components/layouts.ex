@@ -35,7 +35,7 @@ defmodule LibrarianWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
+    <header class="navbar flex-wrap gap-y-2 px-4 sm:px-6 lg:px-8">
       <div class="flex-1">
         <a href="/" class="flex-1 flex w-fit items-center gap-2">
           <img src={~p"/images/logo.svg"} width="36" />
@@ -43,7 +43,7 @@ defmodule LibrarianWeb.Layouts do
         </a>
       </div>
       <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
+        <ul class="flex flex-wrap justify-end gap-x-4 gap-y-2 px-1 items-center">
           <li>
             <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
           </li>
@@ -62,7 +62,7 @@ defmodule LibrarianWeb.Layouts do
       </div>
     </header>
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
+    <main class="px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
       <div class="mx-auto max-w-2xl space-y-4">
         {render_slot(@inner_block)}
       </div>
@@ -92,7 +92,7 @@ defmodule LibrarianWeb.Layouts do
 
     ~H"""
     <nav class={[
-      "flex items-center gap-1 rounded-full bg-base-200",
+      "rail flex items-center gap-1 rounded-full bg-base-200 max-w-full",
       if(@compact, do: "p-0.5", else: "p-1"),
       @class
     ]}>
@@ -120,7 +120,7 @@ defmodule LibrarianWeb.Layouts do
       <span
         :if={@active == :graph}
         title="Knowledge graph"
-        class="rounded-full bg-base-100 shadow-sm px-1.5 py-1 grid place-items-center"
+        class="shrink-0 rounded-full bg-base-100 shadow-sm px-1.5 py-1 grid place-items-center"
       >
         <.icon name="hero-share" class={if(@compact, do: "size-3", else: "size-3.5")} />
       </span>
@@ -128,7 +128,7 @@ defmodule LibrarianWeb.Layouts do
         :if={@active != :graph}
         navigate="/vault/graph"
         title="Knowledge graph"
-        class="rounded-full px-1.5 py-1 grid place-items-center text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
+        class="shrink-0 rounded-full px-1.5 py-1 grid place-items-center text-base-content/60 hover:text-base-content hover:bg-base-100/60 transition"
       >
         <.icon name="hero-share" class={if(@compact, do: "size-3", else: "size-3.5")} />
       </.link>
@@ -136,8 +136,8 @@ defmodule LibrarianWeb.Layouts do
     """
   end
 
-  defp pill_size(true), do: "px-2 py-1 text-[11px]"
-  defp pill_size(false), do: "px-3 py-1 text-xs"
+  defp pill_size(true), do: "shrink-0 px-2 py-1 text-[11px]"
+  defp pill_size(false), do: "shrink-0 px-3 py-1 text-xs"
 
   attr :flash, :map, required: true
   slot :inner_block, required: true
