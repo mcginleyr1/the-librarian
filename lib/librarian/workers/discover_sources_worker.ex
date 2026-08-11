@@ -9,6 +9,14 @@ defmodule Librarian.Workers.DiscoverSourcesWorker do
 
   @impl Oban.Worker
   def perform(_job) do
+    if Librarian.Settings.discovery_paused?() do
+      :ok
+    else
+      run()
+    end
+  end
+
+  defp run do
     link_graph = Discovery.harvest_link_graph()
     aggregator = Discovery.harvest_aggregators()
 

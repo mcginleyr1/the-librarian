@@ -11,6 +11,7 @@ defmodule Librarian.Discovery.CandidateSource do
     field :status, :string, default: "pending"
     field :mention_count, :integer, default: 1
     field :sample_hit_rate, :float
+    field :intent_query, :string
 
     belongs_to :discovered_from_article, Librarian.Reader.Article
     belongs_to :user, Librarian.Accounts.User
@@ -27,6 +28,7 @@ defmodule Librarian.Discovery.CandidateSource do
       :status,
       :mention_count,
       :sample_hit_rate,
+      :intent_query,
       :discovered_from_article_id
     ])
     |> validate_required([:domain, :channel])

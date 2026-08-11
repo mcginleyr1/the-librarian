@@ -1,7 +1,8 @@
 defmodule LibrarianWeb.ForYouLive do
   use LibrarianWeb, :live_view
 
-  alias Librarian.{Interest, LinkPreview, Ranking, Reader, Settings, Stream}
+  alias Librarian.{Discovery, Interest, LinkPreview, LLM, Ranking, Reader, Settings, Stream}
+  alias Librarian.Workers.ExploreIntentWorker
 
   @impl true
   def mount(_params, _session, socket) do
@@ -15,7 +16,11 @@ defmodule LibrarianWeb.ForYouLive do
        topics: Ranking.available_topics(),
        lenses: Enum.filter(Settings.pinned_lenses(), &(&1 in categories)),
        active_topic: nil,
-       active_category: nil
+       active_category: nil,
+       show_discover: false,
+       discover_candidates: [],
+       discovery_paused: false,
+       llm_ready: false
      )
      |> load_stream()}
   end
@@ -42,6 +47,39 @@ defmodule LibrarianWeb.ForYouLive do
     {:noreply, socket}
   end
 
+  def handle_event("toggle_discover", _params, socket) do
+    if socket.assigns.show_discover do
+      {:noreply, assign(socket, show_discover: false)}
+    else
+      {:noreply, socket |> assign(show_discover: true) |> load_discover()}
+    end
+  end
+
+  def handle_event("explore_intent", %{"query" => query}, socket) do
+    case String.trim(query) do
+      "" ->
+        {:noreply, socket}
+
+      query ->
+        %{"query" => query} |> ExploreIntentWorker.new() |> Oban.insert()
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Exploring “#{query}” — sources will appear on probation shortly.")
+         |> load_discover()}
+    end
+  end
+
+  def handle_event("dismiss_candidate", %{"id" => id}, socket) do
+    Discovery.dismiss_candidate(String.to_integer(id))
+    {:noreply, load_discover(socket)}
+  end
+
+  def handle_event("toggle_discovery_paused", _params, socket) do
+    {:ok, _} = Settings.save_settings(%{discovery_paused: !socket.assigns.discovery_paused})
+    {:noreply, load_discover(socket)}
+  end
+
   def handle_event("filter_topic", %{"topic" => topic}, socket) do
     active = if socket.assigns.active_topic == topic, do: nil, else: topic
     {:noreply, socket |> assign(active_topic: active, active_category: nil) |> load_stream()}
@@ -50,6 +88,18 @@ defmodule LibrarianWeb.ForYouLive do
   def handle_event("filter_category", %{"category" => category}, socket) do
     active = if socket.assigns.active_category == category, do: nil, else: category
     {:noreply, socket |> assign(active_category: active, active_topic: nil) |> load_stream()}
+  end
+
+  defp candidate_status_class("accepted"), do: "bg-success/10 text-success"
+  defp candidate_status_class("rejected"), do: "bg-base-300 text-base-content/50"
+  defp candidate_status_class(_pending_or_vetting), do: "bg-warning/10 text-warning"
+
+  defp load_discover(socket) do
+    assign(socket,
+      discover_candidates: Discovery.recent_candidates(),
+      discovery_paused: Settings.discovery_paused?(),
+      llm_ready: LLM.configured?()
+    )
   end
 
   defp load_stream(socket) do

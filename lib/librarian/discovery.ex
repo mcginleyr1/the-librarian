@@ -5,6 +5,8 @@ defmodule Librarian.Discovery do
 
   - `harvest_link_graph/0` mines outbound links from articles the user liked/saved;
     recurring new domains become `CandidateSource`s.
+  - `explore/1` is the intent channel: the user names an area they want to
+    discover, the LLM proposes sources for it, and they enter the same pipeline.
   - `vet_candidate/1` runs the existing `FeedDiscoverer` on a candidate domain and,
     if a feed is found, subscribes it as a low-trust `discovered` feed on probation.
   - `recompute_like_rates/0` + `prune_sources/0` retire discovered feeds the user
@@ -13,6 +15,7 @@ defmodule Librarian.Discovery do
 
   import Ecto.Query
 
+  alias Librarian.LLM
   alias Librarian.Repo
   alias Librarian.Stream
   alias Librarian.Reader
@@ -41,6 +44,76 @@ defmodule Librarian.Discovery do
 
     aggregator_articles(limit)
     |> harvest_domains("aggregator")
+  end
+
+  @doc """
+  Intent channel: asks the LLM for strong sources covering `query` and registers
+  them as candidates for the usual vet -> probation -> prune pipeline. Accepted
+  feeds get `query` as their Reader category so the new area stays findable.
+  Returns `{:ok, candidates}` or `{:error, :no_api_key | :budget_exceeded | term}`.
+  """
+  def explore(query) do
+    query = String.trim(query)
+
+    with {:ok, %{"sources" => sources}} <-
+           LLM.complete(explore_prompt(query), explore_schema(), purpose: "explore") do
+      {:ok, register_intent_sources(sources, query)}
+    end
+  end
+
+  @doc false
+  def register_intent_sources(sources, query) do
+    existing = existing_domains()
+
+    sources
+    |> Enum.map(&normalize_domain(&1["domain"]))
+    |> Enum.reject(&(is_nil(&1) or MapSet.member?(existing, &1)))
+    |> Enum.uniq()
+    |> Enum.map(fn dom ->
+      {:ok, candidate} =
+        %CandidateSource{user_id: Librarian.Accounts.owner!().id}
+        |> CandidateSource.changeset(%{domain: dom, channel: "intent", intent_query: query})
+        |> Repo.insert(
+          on_conflict: [set: [intent_query: query]],
+          conflict_target: :domain
+        )
+
+      candidate
+    end)
+  end
+
+  defp explore_prompt(query) do
+    """
+    I use an RSS reader and want to start exploring a new area: "#{query}".
+
+    Suggest up to 10 established, currently active websites that publish
+    high-quality writing on this topic — blogs, magazines, newsletters,
+    institutional or practitioner sites — and are likely to offer an RSS or
+    Atom feed. Prefer independent voices and primary sources over aggregators,
+    social media, or link roundups. Return the bare domain for each.
+    """
+  end
+
+  defp explore_schema do
+    %{
+      type: "object",
+      properties: %{
+        sources: %{
+          type: "array",
+          items: %{
+            type: "object",
+            properties: %{
+              domain: %{type: "string", description: "bare domain, e.g. example.com"},
+              title: %{type: "string"}
+            },
+            required: ["domain", "title"],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ["sources"],
+      additionalProperties: false
+    }
   end
 
   defp harvest_domains(articles, channel) do
@@ -80,6 +153,17 @@ defmodule Librarian.Discovery do
     Repo.all(query)
   end
 
+  @doc "Recent candidates, newest activity first (for the Discover popup)."
+  def recent_candidates(limit \\ 20) do
+    Repo.all(from c in CandidateSource, order_by: [desc: c.updated_at], limit: ^limit)
+  end
+
+  @doc "Removes a candidate; a pending one is cleanly cancelled (its vet job no-ops)."
+  def dismiss_candidate(id) do
+    if candidate = Repo.get(CandidateSource, id), do: Repo.delete(candidate)
+    :ok
+  end
+
   @doc "Candidate counts grouped by status, e.g. %{\"pending\" => 4, \"accepted\" => 1}."
   def candidate_status_counts do
     Repo.all(from c in CandidateSource, group_by: c.status, select: {c.status, count(c.id)})
@@ -113,7 +197,7 @@ defmodule Librarian.Discovery do
   def vet_candidate(%CandidateSource{} = candidate) do
     case FeedDiscoverer.discover(candidate.domain) do
       {:ok, [%{url: feed_url} = feed | _]} ->
-        subscribe_discovered(feed_url, feed[:title] || candidate.domain)
+        subscribe_discovered(feed_url, feed[:title] || candidate.domain, candidate.intent_query)
         mark(candidate, %{status: "accepted", feed_url: feed_url})
         {:ok, :accepted}
 
@@ -158,10 +242,10 @@ defmodule Librarian.Discovery do
 
   # --- helpers ---
 
-  defp subscribe_discovered(feed_url, title) do
+  defp subscribe_discovered(feed_url, title, category) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    case Reader.upsert_feed(%{title: title, feed_url: feed_url}) do
+    case Reader.upsert_feed(%{title: title, feed_url: feed_url, category: category}) do
       {:ok, feed} ->
         feed
         |> Ecto.Changeset.change(origin: "discovered", trust_score: 0.3, discovered_at: now)
@@ -221,6 +305,18 @@ defmodule Librarian.Discovery do
   end
 
   def extract_domains(_), do: []
+
+  defp normalize_domain(str) when is_binary(str) do
+    case String.trim(str) do
+      "" ->
+        nil
+
+      trimmed ->
+        domain(if String.contains?(trimmed, "://"), do: trimmed, else: "https://#{trimmed}")
+    end
+  end
+
+  defp normalize_domain(_), do: nil
 
   defp domain(nil), do: nil
 

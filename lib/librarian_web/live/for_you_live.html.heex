@@ -31,6 +31,15 @@
           </span>
         </div>
 
+        <button
+          id="discover-open"
+          phx-click="toggle_discover"
+          class="press btn btn-ghost btn-sm gap-1.5"
+        >
+          <.icon name="hero-magnifying-glass-plus" class="size-4" />
+          <span class="hidden sm:inline">Discover</span>
+        </button>
+
         <Layouts.nav_pills active={:for_you} class="ml-auto" />
       </div>
 
@@ -273,6 +282,120 @@
             </div>
           </article>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <%!-- DISCOVER POPUP --%>
+  <div
+    :if={@show_discover}
+    id="discover-popup"
+    class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 md:pt-24"
+  >
+    <div
+      id="discover-backdrop"
+      class="absolute inset-0 bg-base-300/60 backdrop-blur-sm"
+      phx-click="toggle_discover"
+    >
+    </div>
+    <div class="relative w-full max-w-lg rounded-2xl border border-base-300 bg-base-100 shadow-xl">
+      <div class="flex items-center justify-between px-5 pt-4 pb-2">
+        <h2 class="text-base font-bold flex items-center gap-2">
+          <.icon name="hero-magnifying-glass-plus" class="size-4 text-primary" /> Discover
+        </h2>
+        <button
+          id="discover-close"
+          phx-click="toggle_discover"
+          class="btn btn-ghost btn-xs btn-square"
+          aria-label="Close"
+        >
+          <.icon name="hero-x-mark" class="size-4" />
+        </button>
+      </div>
+
+      <div class="px-5 pb-5 space-y-4">
+        <div>
+          <p class="text-xs text-base-content/50 mb-2">
+            Name an area to explore — sources are found, vetted, and subscribed on probation
+            under that category. Ones you ignore get pruned.
+          </p>
+          <form id="explore-intent-form" phx-submit="explore_intent" class="flex gap-2">
+            <input
+              type="text"
+              name="query"
+              placeholder="marine insurance, urban planning, woodworking…"
+              class="input input-bordered input-sm flex-1"
+              required
+              disabled={!@llm_ready}
+            />
+            <button
+              id="explore-intent-submit"
+              type="submit"
+              class="btn btn-primary btn-sm gap-1"
+              disabled={!@llm_ready}
+            >
+              <.icon name="hero-sparkles" class="w-4 h-4" /> Explore
+            </button>
+          </form>
+          <p :if={!@llm_ready} class="text-xs text-base-content/40 mt-1.5">
+            Needs an Anthropic API key — add one in Settings → AI.
+          </p>
+        </div>
+
+        <label class="flex items-center justify-between gap-3 rounded-lg bg-base-200 px-3 py-2 cursor-pointer">
+          <span class="text-sm">
+            Pause automatic discovery
+            <span class="block text-xs text-base-content/45">
+              Stops the nightly link-graph and aggregator mining. Exploring by name still works.
+            </span>
+          </span>
+          <input
+            id="discovery-pause-toggle"
+            type="checkbox"
+            class="toggle toggle-sm toggle-primary"
+            checked={@discovery_paused}
+            phx-click="toggle_discovery_paused"
+          />
+        </label>
+
+        <div :if={@discover_candidates != []}>
+          <p class="text-[11px] uppercase tracking-wider text-base-content/40 mb-1.5">
+            In the pipeline
+          </p>
+          <ul class="space-y-1 max-h-64 overflow-y-auto">
+            <li
+              :for={c <- @discover_candidates}
+              class="flex items-center gap-2 rounded-lg bg-base-200/60 px-3 py-1.5 text-sm"
+            >
+              <span class="truncate font-medium">{c.domain}</span>
+              <span
+                :if={c.channel == "intent" && c.intent_query}
+                class="truncate rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px]"
+              >
+                {c.intent_query}
+              </span>
+              <span class={[
+                "ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                candidate_status_class(c.status)
+              ]}>
+                {c.status}
+              </span>
+              <button
+                :if={c.status in ["pending", "vetting"]}
+                id={"dismiss-candidate-#{c.id}"}
+                phx-click="dismiss_candidate"
+                phx-value-id={c.id}
+                class="btn btn-ghost btn-xs btn-square shrink-0"
+                aria-label="Dismiss"
+              >
+                <.icon name="hero-x-mark" class="size-3.5" />
+              </button>
+            </li>
+          </ul>
+        </div>
+        <p :if={@discover_candidates == []} class="text-xs text-base-content/40">
+          Nothing in the pipeline right now.
+        </p>
       </div>
     </div>
   </div>

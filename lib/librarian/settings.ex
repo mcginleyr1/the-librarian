@@ -14,6 +14,7 @@ defmodule Librarian.Settings do
     field :pinned_lenses, {:array, :string}, default: []
     field :anthropic_api_key, :string
     field :llm_monthly_budget_cents, :integer, default: 2000
+    field :discovery_paused, :boolean, default: false
 
     belongs_to :user, Librarian.Accounts.User
 
@@ -29,7 +30,8 @@ defmodule Librarian.Settings do
       :category_order,
       :pinned_lenses,
       :anthropic_api_key,
-      :llm_monthly_budget_cents
+      :llm_monthly_budget_cents,
+      :discovery_paused
     ])
     |> validate_number(:llm_monthly_budget_cents, greater_than_or_equal_to: 0)
   end
@@ -51,6 +53,10 @@ defmodule Librarian.Settings do
       %{category_order: order} when is_list(order) -> order
       _ -> []
     end
+  end
+
+  def discovery_paused? do
+    match?(%{discovery_paused: true}, get_settings())
   end
 
   def pinned_lenses do

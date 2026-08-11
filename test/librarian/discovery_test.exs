@@ -67,4 +67,69 @@ defmodule Librarian.DiscoveryTest do
     Stream.record_interaction(article.id, :like)
     assert Discovery.prune_sources() == 0
   end
+
+  test "register_intent_sources normalizes domains, skips known feeds, tags with the query" do
+    {:ok, _feed} =
+      Reader.create_feed(%{
+        title: "Known",
+        site_url: "https://known.example",
+        feed_url: "https://known.example/rss"
+      })
+
+    sources = [
+      %{"domain" => "Insurancejournal.com", "title" => "Insurance Journal"},
+      %{"domain" => "https://www.riskandinsurance.com/feed", "title" => "R&I"},
+      %{"domain" => "known.example", "title" => "Already subscribed"},
+      %{"domain" => "insurancejournal.com", "title" => "Duplicate"},
+      %{"domain" => "  ", "title" => "Blank"}
+    ]
+
+    candidates = Discovery.register_intent_sources(sources, "marine insurance")
+
+    assert candidates |> Enum.map(& &1.domain) |> Enum.sort() ==
+             ["insurancejournal.com", "riskandinsurance.com"]
+
+    assert Enum.all?(candidates, &(&1.channel == "intent"))
+    assert Enum.all?(candidates, &(&1.intent_query == "marine insurance"))
+    assert Enum.all?(candidates, &(&1.status == "pending"))
+  end
+
+  test "re-exploring the same domain re-tags the existing candidate" do
+    [c1] =
+      Discovery.register_intent_sources(
+        [%{"domain" => "example.org", "title" => "E"}],
+        "area one"
+      )
+
+    [c2] =
+      Discovery.register_intent_sources(
+        [%{"domain" => "example.org", "title" => "E"}],
+        "area two"
+      )
+
+    assert c2.id == c1.id
+    assert Repo.get!(Librarian.Discovery.CandidateSource, c1.id).intent_query == "area two"
+  end
+
+  test "dismiss_candidate deletes the row and tolerates unknown ids" do
+    [candidate] =
+      Discovery.register_intent_sources([%{"domain" => "example.org", "title" => "E"}], "area")
+
+    assert Discovery.dismiss_candidate(candidate.id) == :ok
+    refute Repo.get(Librarian.Discovery.CandidateSource, candidate.id)
+    assert Discovery.dismiss_candidate(candidate.id) == :ok
+  end
+
+  test "DiscoverSourcesWorker no-ops while discovery is paused" do
+    article = article_with_links(~s(<a href="https://danluu.com/post">x</a>))
+    Stream.record_interaction(article.id, :like)
+
+    {:ok, _} = Librarian.Settings.save_settings(%{discovery_paused: true})
+    assert Librarian.Workers.DiscoverSourcesWorker.perform(%Oban.Job{}) == :ok
+    assert Discovery.list_candidates() == []
+
+    {:ok, _} = Librarian.Settings.save_settings(%{discovery_paused: false})
+    Librarian.Workers.DiscoverSourcesWorker.perform(%Oban.Job{})
+    assert Discovery.list_candidates() != []
+  end
 end
