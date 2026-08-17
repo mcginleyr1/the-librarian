@@ -8,6 +8,16 @@ Rebuilding the wrapper picks the changes up.
 
 ## Rebuild + reinstall (macOS)
 
+**Preferred: `just clipper`** (from the repo root). It builds Release with
+xcodebuild, signs with the configured dev team, installs to
+`/Applications/TheLibrarian.app`, and launches it once to register with
+Safari. A signed app in /Applications survives Safari's periodic purge of
+unsigned/DerivedData dev builds — this is why we stopped using plain ⌘R.
+Then: Safari → Settings → Extensions → enable, and paste the API token
+(app Settings → AI → API Access) into the popup.
+
+Manual fallback via Xcode:
+
 1. `open TheLibrarian/TheLibrarian.xcodeproj`
 2. In the scheme picker (top bar), select **TheLibrarian (macOS)** with
    destination **My Mac**.

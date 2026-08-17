@@ -237,3 +237,23 @@ k-import-evernote-dir DIR="enex":
 # Generate a new SECRET_KEY_BASE
 gen-secret:
     mix phx.gen.secret
+
+# Build the Safari clipper (Release, dev-signed) into /Applications so Safari
+# treats it as a real app instead of purging it as a weekly "dev thing".
+# After it launches once: Safari -> Settings -> Extensions -> enable, then
+# paste the API token (app Settings -> AI -> API Access) into the popup.
+clipper:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd safari-extension/TheLibrarian
+    xcodebuild -project TheLibrarian.xcodeproj -scheme "TheLibrarian (macOS)" \
+        -configuration Release -derivedDataPath build build
+    rm -rf /Applications/TheLibrarian.app
+    cp -R "build/Build/Products/Release/TheLibrarian.app" /Applications/
+    # xcodebuild registers the build-dir copy with LaunchServices, which shows
+    # up as a duplicate extension in Safari — unregister it and delete the dir.
+    /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister \
+        -u "$PWD/build/Build/Products/Release/TheLibrarian.app" || true
+    rm -rf build
+    open /Applications/TheLibrarian.app
+    echo "Installed /Applications/TheLibrarian.app — now enable it in Safari Settings -> Extensions"
