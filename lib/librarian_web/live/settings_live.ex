@@ -39,7 +39,8 @@ defmodule LibrarianWeb.SettingsLive do
        # AI tab
        ai_key_hint: api_key_hint(Settings.get_settings()),
        ai_budget_dollars: budget_dollars(Settings.get_settings()),
-       llm_spend_cents: LLM.month_spend_cents()
+       llm_spend_cents: LLM.month_spend_cents(),
+       api_token: nil
      )
      |> allow_upload(:opml,
        accept: :any,
@@ -229,6 +230,11 @@ defmodule LibrarianWeb.SettingsLive do
     {:noreply, assign(socket, feeds: Reader.list_all_feeds())}
   end
 
+  def handle_event("set_category_active", %{"category" => cat, "active" => active}, socket) do
+    Reader.set_category_active(cat, active == "true")
+    {:noreply, assign(socket, feeds: Reader.list_all_feeds())}
+  end
+
   def handle_event("delete_feed", %{"id" => id}, socket) do
     feed = Enum.find(socket.assigns.feeds, &(&1.id == String.to_integer(id)))
     Reader.delete_feed(feed)
@@ -355,6 +361,16 @@ defmodule LibrarianWeb.SettingsLive do
 
   # --- AI tab ---
 
+  def handle_event("reveal_api_token", _params, socket) do
+    user = Librarian.Accounts.ensure_api_token!(socket.assigns.current_user)
+    {:noreply, assign(socket, api_token: user.api_token, current_user: user)}
+  end
+
+  def handle_event("regenerate_api_token", _params, socket) do
+    user = Librarian.Accounts.regenerate_api_token!(socket.assigns.current_user)
+    {:noreply, assign(socket, api_token: user.api_token, current_user: user)}
+  end
+
   def handle_event("save_ai", params, socket) do
     cents =
       case Float.parse(params["budget_dollars"] || "") do
@@ -370,24 +386,32 @@ defmodule LibrarianWeb.SettingsLive do
         key -> Map.put(attrs, "anthropic_api_key", key)
       end
 
-    {:ok, settings} = Settings.save_settings(attrs)
+    case Settings.save_settings(attrs) do
+      {:ok, settings} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "AI settings saved")
+         |> assign(
+           ai_key_hint: api_key_hint(settings),
+           ai_budget_dollars: budget_dollars(settings)
+         )}
 
-    {:noreply,
-     socket
-     |> put_flash(:info, "AI settings saved")
-     |> assign(
-       ai_key_hint: api_key_hint(settings),
-       ai_budget_dollars: budget_dollars(settings)
-     )}
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not save AI settings — try again.")}
+    end
   end
 
   def handle_event("clear_api_key", _params, socket) do
-    {:ok, settings} = Settings.save_settings(%{"anthropic_api_key" => nil})
+    case Settings.save_settings(%{"anthropic_api_key" => nil}) do
+      {:ok, settings} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "API key removed")
+         |> assign(ai_key_hint: api_key_hint(settings))}
 
-    {:noreply,
-     socket
-     |> put_flash(:info, "API key removed")
-     |> assign(ai_key_hint: api_key_hint(settings))}
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not remove the key — try again.")}
+    end
   end
 
   def handle_event("build_graph_now", _params, socket) do
@@ -441,6 +465,10 @@ defmodule LibrarianWeb.SettingsLive do
   defp budget_dollars(settings) do
     cents = (settings && settings.llm_monthly_budget_cents) || 2000
     :erlang.float_to_binary(cents / 100, decimals: 2)
+  end
+
+  defp active_in_category(feeds, category) do
+    Enum.count(feeds, &(&1.category == category and &1.active))
   end
 
   # Saved order first (pruned to categories that still exist), new ones after.

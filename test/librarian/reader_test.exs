@@ -48,6 +48,56 @@ defmodule Librarian.ReaderTest do
     end
   end
 
+  describe "shared catalog + subscriptions" do
+    test "update_feed splits catalog and subscription attrs" do
+      {:ok, feed} = Reader.create_feed(feed_attrs())
+
+      {:ok, updated} = Reader.update_feed(feed, %{"title" => "Renamed", "category" => "Elixir"})
+
+      assert updated.title == "Renamed"
+      assert updated.category == "Elixir"
+      reloaded = Reader.get_feed!(feed.id)
+      assert reloaded.title == "Renamed"
+      assert reloaded.category == "Elixir"
+    end
+
+    test "upsert_feed routes discovery attrs to the subscription" do
+      {:ok, feed} =
+        Reader.upsert_feed(feed_attrs(%{origin: "discovered", trust_score: 0.3}))
+
+      assert feed.origin == "discovered"
+      reloaded = Reader.get_feed!(feed.id)
+      assert reloaded.origin == "discovered"
+      assert reloaded.trust_score == 0.3
+    end
+
+    test "delete_feed unsubscribes and deletes the orphaned catalog feed" do
+      {:ok, feed} = Reader.create_feed(feed_attrs())
+
+      assert {:ok, _} = Reader.delete_feed(feed)
+      assert Repo.all(Feed) == []
+      assert Repo.all(Librarian.Reader.Subscription) == []
+    end
+  end
+
+  describe "set_category_active/2" do
+    test "toggles every feed in the category and leaves others alone" do
+      {:ok, a} = Reader.create_feed(feed_attrs(%{feed_url: "https://a.example/rss"}))
+      {:ok, b} = Reader.create_feed(feed_attrs(%{feed_url: "https://b.example/rss"}))
+
+      {:ok, other} =
+        Reader.create_feed(feed_attrs(%{feed_url: "https://c.example/rss", category: "News"}))
+
+      assert Reader.set_category_active("Tech", false) == 2
+      refute Reader.get_feed!(a.id).active
+      refute Reader.get_feed!(b.id).active
+      assert Reader.get_feed!(other.id).active
+
+      assert Reader.set_category_active("Tech", true) == 2
+      assert Reader.get_feed!(a.id).active
+    end
+  end
+
   describe "list_active_feeds/0" do
     test "returns only active feeds" do
       {:ok, active} = Reader.create_feed(feed_attrs(%{feed_url: "https://a.com/feed"}))

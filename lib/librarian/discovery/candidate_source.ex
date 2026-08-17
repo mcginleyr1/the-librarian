@@ -33,6 +33,6 @@ defmodule Librarian.Discovery.CandidateSource do
     ])
     |> validate_required([:domain, :channel])
     |> validate_inclusion(:status, @statuses)
-    |> unique_constraint(:domain)
+    |> unique_constraint(:domain, name: :candidate_sources_user_id_domain_index)
   end
 end

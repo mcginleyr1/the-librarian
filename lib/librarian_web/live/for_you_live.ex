@@ -61,7 +61,9 @@ defmodule LibrarianWeb.ForYouLive do
         {:noreply, socket}
 
       query ->
-        %{"query" => query} |> ExploreIntentWorker.new() |> Oban.insert()
+        %{"query" => query, "user_id" => Librarian.Repo.user_id!()}
+        |> ExploreIntentWorker.new()
+        |> Oban.insert()
 
         {:noreply,
          socket

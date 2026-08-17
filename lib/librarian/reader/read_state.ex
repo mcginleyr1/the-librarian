@@ -17,6 +17,6 @@ defmodule Librarian.Reader.ReadState do
     read_state
     |> cast(attrs, [:article_id, :read_at, :starred, :saved_at])
     |> validate_required([:article_id])
-    |> unique_constraint(:article_id)
+    |> unique_constraint(:article_id, name: :read_states_user_id_article_id_index)
   end
 end

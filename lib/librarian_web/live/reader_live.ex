@@ -296,8 +296,8 @@ defmodule LibrarianWeb.ReaderLive do
 
     case filter do
       :starred ->
-        Reader.list_starred_articles()
-        |> Enum.filter(fn a -> a.feed && a.feed.category == actual_category end)
+        feed_ids = Reader.feed_ids_for_category(actual_category)
+        Reader.list_starred_articles() |> Enum.filter(&(&1.feed_id in feed_ids))
 
       :unread ->
         Reader.list_articles_by_category(actual_category,

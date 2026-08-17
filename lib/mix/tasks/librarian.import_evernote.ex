@@ -6,6 +6,7 @@ defmodule Mix.Tasks.Librarian.ImportEvernote do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
+    Librarian.Repo.put_user_id(Librarian.Accounts.owner!().id)
 
     {path, notebook_name} =
       case args do

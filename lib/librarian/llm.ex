@@ -107,7 +107,8 @@ defmodule Librarian.LLM do
       purpose: purpose,
       input_tokens: input,
       output_tokens: output,
-      cost_cents: cost_cents
+      cost_cents: cost_cents,
+      user_id: Repo.user_id!()
     })
   end
 

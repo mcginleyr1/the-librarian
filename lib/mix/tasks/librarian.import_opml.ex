@@ -6,6 +6,7 @@ defmodule Mix.Tasks.Librarian.ImportOpml do
   @impl Mix.Task
   def run([file_path]) do
     Mix.Task.run("app.start")
+    Librarian.Repo.put_user_id(Librarian.Accounts.owner!().id)
 
     contents = File.read!(file_path)
 

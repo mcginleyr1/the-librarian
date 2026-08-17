@@ -35,7 +35,7 @@ defmodule Librarian.Interest do
       k = min(@clusters, length(positives))
       {centroids, counts} = kmeans(positives, k)
       now = DateTime.utc_now() |> DateTime.truncate(:second)
-      owner_id = Librarian.Accounts.owner!().id
+      user_id = Repo.user_id!()
 
       # Drop empty clusters: their centroid is the zero vector, which makes
       # cosine distance undefined (NaN) in the SQL ranking.
@@ -49,7 +49,7 @@ defmodule Librarian.Interest do
             label: "Cluster #{i}",
             embedding: Pgvector.new(vector),
             member_count: count,
-            user_id: owner_id,
+            user_id: user_id,
             inserted_at: now,
             updated_at: now
           })

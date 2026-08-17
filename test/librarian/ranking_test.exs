@@ -69,6 +69,18 @@ defmodule Librarian.RankingTest do
     refute "Liked and gone" in titles
   end
 
+  test "articles from deactivated feeds drop out of the stream" do
+    shown = article(beam_vec(), "From active feed")
+    hidden = article(beam_vec(), "From deactivated feed")
+
+    feed = Librarian.Reader.get_feed!(hidden.feed_id)
+    {:ok, _} = Librarian.Reader.update_feed(feed, %{active: false})
+
+    titles = Ranking.rank_stream(limit: 10) |> Enum.map(& &1.article.title)
+    assert shown.title in titles
+    refute hidden.title in titles
+  end
+
   test "topic lens restricts the pool to articles carrying that topic" do
     article(beam_vec(), "Elixir thing")
     |> Ecto.Changeset.change(topics: ["elixir"])

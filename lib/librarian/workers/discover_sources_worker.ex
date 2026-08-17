@@ -9,11 +9,13 @@ defmodule Librarian.Workers.DiscoverSourcesWorker do
 
   @impl Oban.Worker
   def perform(_job) do
-    if Librarian.Settings.discovery_paused?() do
-      :ok
-    else
-      run()
+    for user_id <- Librarian.Accounts.list_user_ids() do
+      Librarian.Repo.with_user(user_id, fn ->
+        unless Librarian.Settings.discovery_paused?(), do: run()
+      end)
     end
+
+    :ok
   end
 
   defp run do

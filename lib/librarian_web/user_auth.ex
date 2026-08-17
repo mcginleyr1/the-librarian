@@ -35,7 +35,26 @@ defmodule LibrarianWeb.UserAuth do
         Accounts.get_user(user_id)
       end
 
+    if user, do: Librarian.Repo.put_user_id(user.id)
     assign(conn, :current_user, user)
+  end
+
+  @doc """
+  API auth: a per-user bearer token (Settings → API access). Sets the tenant
+  for the request on success, 401s otherwise.
+  """
+  def require_api_token(conn, _opts) do
+    with ["Bearer " <> token] <- get_req_header(conn, "authorization"),
+         user when not is_nil(user) <- Accounts.get_user_by_api_token(token) do
+      Librarian.Repo.put_user_id(user.id)
+      assign(conn, :current_user, user)
+    else
+      _ ->
+        conn
+        |> put_status(401)
+        |> Phoenix.Controller.json(%{error: "unauthorized"})
+        |> halt()
+    end
   end
 
   def require_authenticated_user(conn, _opts) do
@@ -63,7 +82,10 @@ defmodule LibrarianWeb.UserAuth do
         if user_id = session["user_id"], do: Accounts.get_user(user_id)
       end)
 
-    if socket.assigns.current_user do
+    if user = socket.assigns.current_user do
+      # The LiveView runs in its own process; handle_event/handle_info inherit
+      # this process state.
+      Librarian.Repo.put_user_id(user.id)
       {:cont, socket}
     else
       {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/login")}

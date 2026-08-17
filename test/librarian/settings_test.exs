@@ -19,7 +19,7 @@ defmodule Librarian.SettingsTest do
       }
 
       assert {:ok, settings} = Settings.save_settings(attrs)
-      assert settings.id == 1
+      assert settings.user_id == Librarian.Repo.user_id!()
       assert settings.b2_key_id == "key123"
       assert settings.b2_bucket_name == "my-bucket"
     end

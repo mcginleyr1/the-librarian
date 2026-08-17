@@ -10,7 +10,7 @@ defmodule Librarian.DemoSeed do
   """
 
   alias Librarian.Repo
-  alias Librarian.Reader.{Article, Feed}
+  alias Librarian.Reader.{Article, Feed, Subscription}
   alias Librarian.Vault.Note
   alias Librarian.Interest.Centroid
   alias Librarian.{Discovery, Stream, Tagging}
@@ -22,23 +22,26 @@ defmodule Librarian.DemoSeed do
     if Repo.aggregate(Feed, :count) > 0 do
       {:ok, :already_seeded}
     else
-      data = load()
-      now = DateTime.utc_now() |> DateTime.truncate(:second)
       owner_id = Librarian.Accounts.owner!().id
 
-      feeds = insert_feeds(data["feeds"], now, owner_id)
-      insert_articles(data["articles"], feeds, now)
-      insert_notes(data["notes"], now, owner_id)
-      insert_centroids(data["centroids"], now, owner_id)
+      Repo.with_user(owner_id, fn ->
+        data = load()
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-      Tagging.tag_untagged()
-      Discovery.harvest_link_graph()
+        feeds = insert_feeds(data["feeds"], now, owner_id)
+        insert_articles(data["articles"], feeds, now)
+        insert_notes(data["notes"], now, owner_id)
+        insert_centroids(data["centroids"], now, owner_id)
 
-      Logger.info(
-        "DemoSeed: seeded #{map_size(feeds)} feeds and #{length(data["articles"])} articles"
-      )
+        Tagging.tag_untagged()
+        Discovery.harvest_link_graph()
 
-      {:ok, :seeded}
+        Logger.info(
+          "DemoSeed: seeded #{map_size(feeds)} feeds and #{length(data["articles"])} articles"
+        )
+
+        {:ok, :seeded}
+      end)
     end
   end
 
@@ -57,14 +60,20 @@ defmodule Librarian.DemoSeed do
           title: f["title"],
           site_url: f["site_url"],
           feed_url: f["feed_url"],
-          category: f["category"],
-          origin: origin,
-          trust_score: if(origin == "discovered", do: 0.3, else: 0.5),
-          discovered_at: if(origin == "discovered", do: now, else: nil),
-          user_id: owner_id,
           inserted_at: now,
           updated_at: now
         })
+
+      Repo.insert!(%Subscription{
+        user_id: owner_id,
+        feed_id: feed.id,
+        category: f["category"],
+        origin: origin,
+        trust_score: if(origin == "discovered", do: 0.3, else: 0.5),
+        discovered_at: if(origin == "discovered", do: now, else: nil),
+        inserted_at: now,
+        updated_at: now
+      })
 
       {f["title"], feed}
     end)

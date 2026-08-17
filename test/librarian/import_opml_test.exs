@@ -60,7 +60,8 @@ defmodule Librarian.ImportOpmlTest do
       feed = Repo.get_by(Feed, feed_url: "http://lambda-the-ultimate.org/rss.xml")
       assert feed != nil
       assert feed.title == "Lambda the Ultimate"
-      assert feed.category == "Tech"
+      # category is per-user state, visible through the subscription view
+      assert Reader.get_feed!(feed.id).category == "Tech"
     end
 
     test "imported feed has correct site_url" do

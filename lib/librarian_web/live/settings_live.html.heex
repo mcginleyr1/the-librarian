@@ -351,6 +351,30 @@
               >
                 <.icon name="hero-bolt" class="w-3.5 h-3.5" />
               </button>
+              <%= if active_in_category(@feeds, cat) > 0 do %>
+                <button
+                  id={"deactivate-category-#{String.replace(cat, ~r/\W+/, "-")}"}
+                  phx-click="set_category_active"
+                  phx-value-category={cat}
+                  phx-value-active="false"
+                  data-confirm={"Deactivate all #{active_in_category(@feeds, cat)} feeds in #{cat}? They stop fetching and drop out of Reader and For You, but keep their articles and history."}
+                  class="btn btn-ghost btn-xs text-base-content/30"
+                  title="Deactivate all feeds in this category"
+                >
+                  <.icon name="hero-pause" class="w-3.5 h-3.5" />
+                </button>
+              <% else %>
+                <button
+                  id={"activate-category-#{String.replace(cat, ~r/\W+/, "-")}"}
+                  phx-click="set_category_active"
+                  phx-value-category={cat}
+                  phx-value-active="true"
+                  class="btn btn-ghost btn-xs text-success"
+                  title="Reactivate all feeds in this category"
+                >
+                  <.icon name="hero-play" class="w-3.5 h-3.5" />
+                </button>
+              <% end %>
               <button
                 phx-click="move_category"
                 phx-value-category={cat}
@@ -770,6 +794,42 @@
             <button phx-click="build_graph_now" class="btn btn-outline gap-2">
               <.icon name="hero-share" class="w-4 h-4" /> Build Graph Now
             </button>
+          </div>
+        </div>
+      </div>
+
+      <%!-- API access (web clipper) --%>
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <h2 class="card-title text-lg">
+            <.icon name="hero-key" class="w-5 h-5" /> API Access
+          </h2>
+          <p class="text-sm text-base-content/60">
+            The clip API requires a bearer token. Paste it into the web clipper's settings;
+            regenerating invalidates the old one immediately.
+          </p>
+          <div class="mt-3 flex items-center gap-2 flex-wrap">
+            <%= if @api_token do %>
+              <code id="api-token-value" class="text-xs bg-base-100 rounded px-2 py-1 break-all">
+                {@api_token}
+              </code>
+              <button
+                id="regenerate-api-token"
+                phx-click="regenerate_api_token"
+                data-confirm="Regenerate the token? The clipper stops working until you paste the new one."
+                class="btn btn-outline btn-sm"
+              >
+                Regenerate
+              </button>
+            <% else %>
+              <button
+                id="reveal-api-token"
+                phx-click="reveal_api_token"
+                class="btn btn-outline btn-sm"
+              >
+                Show token
+              </button>
+            <% end %>
           </div>
         </div>
       </div>

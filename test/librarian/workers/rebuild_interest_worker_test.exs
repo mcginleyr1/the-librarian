@@ -50,6 +50,6 @@ defmodule Librarian.Workers.RebuildInterestWorkerTest do
   end
 
   test "perform runs a rebuild and returns :ok" do
-    assert :ok = perform_job(RebuildInterestWorker, %{})
+    assert :ok = perform_job(RebuildInterestWorker, %{"user_id" => Librarian.Repo.user_id!()})
   end
 end

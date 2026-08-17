@@ -16,6 +16,7 @@ defmodule LibrarianWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug :require_api_token
   end
 
   scope "/", LibrarianWeb do

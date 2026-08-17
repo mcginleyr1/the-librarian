@@ -19,7 +19,7 @@ defmodule Librarian.Discovery do
   alias Librarian.Repo
   alias Librarian.Stream
   alias Librarian.Reader
-  alias Librarian.Reader.{Article, Feed}
+  alias Librarian.Reader.{Article, Feed, Subscription}
   alias Librarian.Reader.FeedDiscoverer
   alias Librarian.Discovery.CandidateSource
   alias Librarian.Stream.Interaction
@@ -71,11 +71,11 @@ defmodule Librarian.Discovery do
     |> Enum.uniq()
     |> Enum.map(fn dom ->
       {:ok, candidate} =
-        %CandidateSource{user_id: Librarian.Accounts.owner!().id}
+        %CandidateSource{user_id: Repo.user_id!()}
         |> CandidateSource.changeset(%{domain: dom, channel: "intent", intent_query: query})
         |> Repo.insert(
           on_conflict: [set: [intent_query: query]],
-          conflict_target: :domain
+          conflict_target: [:user_id, :domain]
         )
 
       candidate
@@ -131,9 +131,11 @@ defmodule Librarian.Discovery do
   defp aggregator_articles(limit) do
     feed_ids =
       Repo.all(
-        from f in Feed,
+        from s in Subscription,
+          join: f in Feed,
+          on: f.id == s.feed_id,
           where:
-            f.category == "aggregators" or
+            s.category == "aggregators" or
               fragment("split_part(?, '/', 3)", f.feed_url) in ^@aggregator_hosts,
           select: f.id
       )
@@ -174,9 +176,9 @@ defmodule Librarian.Discovery do
   def source_counts do
     rows =
       Repo.all(
-        from f in Feed,
-          group_by: [f.origin, f.active],
-          select: {f.origin, f.active, count(f.id)}
+        from s in Subscription,
+          group_by: [s.origin, s.active],
+          select: {s.origin, s.active, count(s.id)}
       )
 
     %{
@@ -207,14 +209,14 @@ defmodule Librarian.Discovery do
     end
   end
 
-  @doc "Recomputes each feed's like_rate from interactions on its articles."
+  @doc "Recomputes each subscription's like_rate from interactions on its feed's articles."
   def recompute_like_rates do
-    for feed <- Repo.all(Feed) do
-      stats = feed_signal_stats(feed.id)
+    for sub <- Repo.all(Subscription) do
+      stats = feed_signal_stats(sub.feed_id)
       total = stats.positive + stats.negative + stats.opens
 
       rate = if total > 0, do: (stats.positive - stats.negative) / total, else: nil
-      feed |> Ecto.Changeset.change(like_rate: rate) |> Repo.update!()
+      sub |> Ecto.Changeset.change(like_rate: rate) |> Repo.update!()
     end
   end
 
@@ -224,13 +226,13 @@ defmodule Librarian.Discovery do
 
     {count, _} =
       Repo.update_all(
-        from(f in Feed,
+        from(s in Subscription,
           where:
-            f.origin == "discovered" and f.active == true and
-              not is_nil(f.like_rate) and f.like_rate < @prune_threshold and
+            s.origin == "discovered" and s.active == true and
+              not is_nil(s.like_rate) and s.like_rate < @prune_threshold and
               fragment(
                 "(SELECT count(*) FROM interactions i JOIN articles a ON a.id = i.article_id WHERE a.feed_id = ? AND i.kind = 'open') >= ?",
-                f.id,
+                s.feed_id,
                 @prune_min_opens
               )
         ),
@@ -245,19 +247,18 @@ defmodule Librarian.Discovery do
   defp subscribe_discovered(feed_url, title, category) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    case Reader.upsert_feed(%{title: title, feed_url: feed_url, category: category}) do
-      {:ok, feed} ->
-        feed
-        |> Ecto.Changeset.change(origin: "discovered", trust_score: 0.3, discovered_at: now)
-        |> Repo.update()
-
-      other ->
-        other
-    end
+    Reader.upsert_feed(%{
+      title: title,
+      feed_url: feed_url,
+      category: category,
+      origin: "discovered",
+      trust_score: 0.3,
+      discovered_at: now
+    })
   end
 
   defp upsert_candidate(domain, channel, article_id, mentions) do
-    %CandidateSource{user_id: Librarian.Accounts.owner!().id}
+    %CandidateSource{user_id: Repo.user_id!()}
     |> CandidateSource.changeset(%{
       domain: domain,
       channel: channel,
@@ -266,7 +267,7 @@ defmodule Librarian.Discovery do
     })
     |> Repo.insert(
       on_conflict: [set: [mention_count: mentions]],
-      conflict_target: :domain
+      conflict_target: [:user_id, :domain]
     )
   end
 
@@ -282,8 +283,15 @@ defmodule Librarian.Discovery do
     )
   end
 
+  # Domains the current user already subscribes to (catalog rows other users
+  # own shouldn't block this user's discovery).
   defp existing_domains do
-    Repo.all(from f in Feed, select: {f.site_url, f.feed_url})
+    Repo.all(
+      from s in Subscription,
+        join: f in Feed,
+        on: f.id == s.feed_id,
+        select: {f.site_url, f.feed_url}
+    )
     |> Enum.flat_map(fn {site, feed} -> [domain(site), domain(feed)] end)
     |> Enum.reject(&is_nil/1)
     |> MapSet.new()

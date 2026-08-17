@@ -2,18 +2,21 @@ const DEFAULT_API_URL = "https://librarian.<your-tailnet>.ts.net";
 
 let selectedMode = "selection";
 let apiUrl = DEFAULT_API_URL;
+let apiToken = "";
 
 // --- Init ---
 
 document.addEventListener("DOMContentLoaded", async () => {
   // Load saved API URL
   try {
-    const stored = await chrome.storage.local.get("apiUrl");
+    const stored = await chrome.storage.local.get(["apiUrl", "apiToken"]);
     apiUrl = stored.apiUrl || DEFAULT_API_URL;
+    apiToken = stored.apiToken || "";
   } catch (_) {
     apiUrl = DEFAULT_API_URL;
   }
   document.getElementById("api-url").value = apiUrl;
+  document.getElementById("api-token").value = apiToken;
 
   // Load current tab title
   try {
@@ -23,7 +26,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Load notebooks
   try {
-    const res = await fetch(`${apiUrl}/api/notebooks`);
+    const res = await fetch(`${apiUrl}/api/notebooks`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
     if (res.ok) {
       const notebooks = await res.json();
       const sel = document.getElementById("notebook");
@@ -49,6 +54,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("api-url").addEventListener("change", async e => {
     apiUrl = e.target.value.trim().replace(/\/$/, "");
     try { await chrome.storage.local.set({ apiUrl }); } catch (_) {}
+  });
+
+  // Save API token on change
+  document.getElementById("api-token").addEventListener("change", async e => {
+    apiToken = e.target.value.trim();
+    try { await chrome.storage.local.set({ apiToken }); } catch (_) {}
   });
 
   // Save button
@@ -79,6 +90,7 @@ async function saveClip() {
       notebookId,
       tags,
       apiUrl,
+      apiToken,
     });
 
     if (response && response.status === "ok") {

@@ -13,7 +13,8 @@ defmodule Librarian.LLMTest do
       purpose: "test",
       input_tokens: 1,
       output_tokens: 1,
-      cost_cents: cents
+      cost_cents: cents,
+      user_id: Repo.user_id!()
     })
   end
 

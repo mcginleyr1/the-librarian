@@ -7,7 +7,6 @@ defmodule Librarian.Stream do
 
   import Ecto.Query
 
-  alias Librarian.Accounts
   alias Librarian.Repo
   alias Librarian.Stream.Interaction
   alias Librarian.Workers.RebuildInterestWorker
@@ -37,7 +36,7 @@ defmodule Librarian.Stream do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     result =
-      %Interaction{user_id: Accounts.owner!().id}
+      %Interaction{user_id: Repo.user_id!()}
       |> Interaction.changeset(
         Map.merge(%{article_id: article_id, kind: to_string(kind), occurred_at: now}, attrs)
       )

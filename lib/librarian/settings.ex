@@ -1,9 +1,9 @@
 defmodule Librarian.Settings do
   use Ecto.Schema
   import Ecto.Changeset
+  import Ecto.Query, only: [from: 2]
   alias Librarian.Repo
 
-  @primary_key {:id, :id, autogenerate: false}
   schema "settings" do
     field :b2_key_id, :string
     field :b2_application_key, :string
@@ -34,14 +34,15 @@ defmodule Librarian.Settings do
       :discovery_paused
     ])
     |> validate_number(:llm_monthly_budget_cents, greater_than_or_equal_to: 0)
+    |> unique_constraint(:user_id, name: :settings_user_id_unique_index)
   end
 
   def get_settings do
-    Repo.get(__MODULE__, 1)
+    Repo.one(from s in __MODULE__, limit: 1)
   end
 
   def save_settings(attrs) do
-    existing = get_settings() || %__MODULE__{id: 1, user_id: Librarian.Accounts.owner!().id}
+    existing = get_settings() || %__MODULE__{user_id: Repo.user_id!()}
 
     existing
     |> changeset(attrs)

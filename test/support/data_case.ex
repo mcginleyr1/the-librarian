@@ -33,11 +33,14 @@ defmodule Librarian.DataCase do
   end
 
   @doc """
-  Sets up the sandbox based on the test tags.
+  Sets up the sandbox based on the test tags, and sets the tenant to the
+  seeded owner so tenanted queries work without ceremony. Tests exercising
+  isolation switch users with `Librarian.Repo.with_user/2`.
   """
   def setup_sandbox(tags) do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Librarian.Repo, shared: not tags[:async])
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+    Librarian.Repo.put_user_id(Librarian.Accounts.owner!().id)
   end
 
   @doc """

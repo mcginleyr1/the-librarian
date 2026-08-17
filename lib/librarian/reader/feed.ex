@@ -2,25 +2,33 @@ defmodule Librarian.Reader.Feed do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @moduledoc """
+  A catalog feed, shared across users and fetched once. Per-user state
+  (category, active, discovery/probation fields) lives on `Subscription`;
+  Reader's queries merge it onto the virtual fields below so callers see
+  "their" feed.
+  """
+
   schema "feeds" do
     field :title, :string
     field :site_url, :string
     field :feed_url, :string
-    field :category, :string
     field :etag, :string
     field :last_modified, :string
     field :last_fetched_at, :utc_datetime
     field :fetch_error, :string
-    field :active, :boolean, default: true
     field :fetch_interval_minutes, :integer, default: 120
 
-    # Discovery (P4): the self-managing source pool
-    field :origin, :string, default: "manual"
-    field :trust_score, :float, default: 0.5
-    field :like_rate, :float
-    field :discovered_at, :utc_datetime
+    # The current user's subscription view, populated by Reader's queries.
+    field :subscription_id, :integer, virtual: true
+    field :category, :string, virtual: true
+    field :active, :boolean, virtual: true, default: true
+    field :origin, :string, virtual: true, default: "manual"
+    field :trust_score, :float, virtual: true
+    field :like_rate, :float, virtual: true
+    field :discovered_at, :utc_datetime, virtual: true
 
-    belongs_to :user, Librarian.Accounts.User
+    has_many :subscriptions, Librarian.Reader.Subscription
     has_many :articles, Librarian.Reader.Article
 
     timestamps(type: :utc_datetime)
@@ -32,12 +40,10 @@ defmodule Librarian.Reader.Feed do
       :title,
       :site_url,
       :feed_url,
-      :category,
       :etag,
       :last_modified,
       :last_fetched_at,
       :fetch_error,
-      :active,
       :fetch_interval_minutes
     ])
     |> validate_required([:title, :feed_url])

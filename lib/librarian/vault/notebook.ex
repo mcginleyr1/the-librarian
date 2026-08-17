@@ -16,6 +16,6 @@ defmodule Librarian.Vault.Notebook do
     notebook
     |> cast(attrs, [:name, :description])
     |> validate_required([:name])
-    |> unique_constraint(:name)
+    |> unique_constraint(:name, name: :notebooks_user_id_name_index)
   end
 end

@@ -12,17 +12,19 @@ defmodule Librarian.Workers.RebuildInterestWorker do
 
   @debounce 1800
 
-  @doc "Schedules a debounced rebuild; a burst of signals collapses into one job."
+  @doc "Schedules a debounced rebuild; a burst of one user's signals collapses into one job."
   def enqueue do
-    %{}
+    %{"user_id" => Librarian.Repo.user_id!()}
     |> new(schedule_in: @debounce, unique: [period: @debounce, states: [:available, :scheduled]])
     |> Oban.insert()
   end
 
   @impl Oban.Worker
-  def perform(_job) do
-    {:ok, k} = Librarian.Interest.rebuild()
-    Logger.info("RebuildInterestWorker: rebuilt #{k} interest centroids")
-    :ok
+  def perform(%Oban.Job{args: %{"user_id" => user_id}}) do
+    Librarian.Repo.with_user(user_id, fn ->
+      {:ok, k} = Librarian.Interest.rebuild()
+      Logger.info("RebuildInterestWorker: rebuilt #{k} interest centroids")
+      :ok
+    end)
   end
 end

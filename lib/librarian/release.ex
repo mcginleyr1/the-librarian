@@ -27,6 +27,7 @@ defmodule Librarian.Release do
 
     {:ok, removed, _} =
       Ecto.Migrator.with_repo(Librarian.Repo, fn _repo ->
+        Librarian.Repo.put_user_id(Librarian.Accounts.owner!().id)
         before = Librarian.Vault.duplicate_note_count()
         removed = Librarian.Vault.dedupe_notes()
 
@@ -84,6 +85,8 @@ defmodule Librarian.Release do
 
     {:ok, result, _} =
       Ecto.Migrator.with_repo(Librarian.Repo, fn _repo ->
+        Librarian.Repo.put_user_id(Librarian.Accounts.owner!().id)
+
         notes =
           embed_rows(serving, from(n in Librarian.Vault.Note, where: is_nil(n.embedding)), fn n ->
             "#{n.title}\n\n#{n.body}"
@@ -136,6 +139,7 @@ defmodule Librarian.Release do
 
     {:ok, result, _} =
       Ecto.Migrator.with_repo(Librarian.Repo, fn _repo ->
+        Librarian.Repo.put_user_id(Librarian.Accounts.owner!().id)
         contents = File.read!(file_path)
 
         case Saxy.SimpleForm.parse_string(contents) do
@@ -177,6 +181,7 @@ defmodule Librarian.Release do
 
     {:ok, result, _} =
       Ecto.Migrator.with_repo(Librarian.Repo, fn _repo ->
+        Librarian.Repo.put_user_id(Librarian.Accounts.owner!().id)
         name = notebook_name || Path.basename(file_path, ".enex")
         notebook_id = Mix.Tasks.Librarian.ImportEvernote.find_or_create_notebook(name)
 

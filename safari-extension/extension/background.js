@@ -5,7 +5,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-async function handleClip({ mode, title, notebookId, tags, apiUrl }) {
+async function handleClip({ mode, title, notebookId, tags, apiUrl, apiToken }) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const sourceUrl = tab.url;
   const finalTitle = title || tab.title;
@@ -92,7 +92,10 @@ async function handleClip({ mode, title, notebookId, tags, apiUrl }) {
 
   const res = await fetch(`${apiUrl}/api/clips`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiToken || ""}`,
+    },
     body: JSON.stringify(payload),
   });
 

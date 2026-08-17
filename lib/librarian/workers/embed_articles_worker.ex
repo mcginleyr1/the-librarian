@@ -24,8 +24,9 @@ defmodule Librarian.Workers.EmbedArticlesWorker do
   end
 
   defp embed_missing(schema, to_text) do
+    # system pass over every user's rows: embedding is content processing
     from(r in schema, where: is_nil(r.embedding), limit: @batch)
-    |> Repo.all()
+    |> Repo.all(skip_tenant: true)
     |> Enum.reduce(0, fn row, acc ->
       case Embeddings.embed(to_text.(row)) do
         {:ok, vector} ->

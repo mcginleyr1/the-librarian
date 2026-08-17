@@ -27,17 +27,17 @@ defmodule Librarian.Ranking do
   WITH pool AS (
     SELECT a.id, a.embedding, a.published_at
     FROM articles a
-    JOIN feeds f ON f.id = a.feed_id
+    JOIN subscriptions s ON s.feed_id = a.feed_id AND s.active = TRUE AND s.user_id = $9
     WHERE a.embedding IS NOT NULL
       AND ($1::text IS NULL OR $1 = ANY(a.topics))
-      AND ($8::text IS NULL OR f.category = $8)
+      AND ($8::text IS NULL OR s.category = $8)
       AND NOT EXISTS (
         SELECT 1 FROM interactions i
-        WHERE i.article_id = a.id AND i.kind = ANY($2::text[])
+        WHERE i.article_id = a.id AND i.user_id = $9 AND i.kind = ANY($2::text[])
       )
       AND NOT EXISTS (
         SELECT 1 FROM read_states rs
-        WHERE rs.article_id = a.id AND rs.read_at IS NOT NULL
+        WHERE rs.article_id = a.id AND rs.user_id = $9 AND rs.read_at IS NOT NULL
       )
     ORDER BY a.published_at DESC NULLS LAST
     LIMIT $4
@@ -45,12 +45,13 @@ defmodule Librarian.Ranking do
   neg AS (
     SELECT DISTINCT a.embedding
     FROM articles a
-    JOIN interactions i ON i.article_id = a.id
+    JOIN interactions i ON i.article_id = a.id AND i.user_id = $9
     WHERE i.kind = ANY($3::text[]) AND a.embedding IS NOT NULL
   ),
   aff AS (
     SELECT p.id, MAX(1 - (p.embedding <=> c.embedding)) AS affinity
     FROM pool p CROSS JOIN interest_centroids c
+    WHERE c.user_id = $9
     GROUP BY p.id
   ),
   pen AS (
@@ -114,9 +115,14 @@ defmodule Librarian.Ranking do
   what's actually in front of you rather than all-time topic frequencies.
   """
   def available_topics do
+    # explicit user filter: this runs as a subquery, which prepare_query
+    # doesn't see
     pool =
-      from a in Article,
-        where: not is_nil(a.embedding),
+      from s in Librarian.Reader.Subscription,
+        join: a in Article,
+        on: a.feed_id == s.feed_id,
+        where: s.user_id == ^Repo.user_id!(),
+        where: not is_nil(a.embedding) and s.active == true,
         order_by: [desc_nulls_last: a.published_at],
         limit: @pool_size,
         select: %{topics: a.topics}
@@ -138,7 +144,8 @@ defmodule Librarian.Ranking do
         @penalty_weight,
         @recency_weight,
         fetch,
-        category
+        category,
+        Repo.user_id!()
       ])
 
     Enum.map(rows, fn [id, affinity, penalty, recency] ->

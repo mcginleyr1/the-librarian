@@ -13,6 +13,28 @@ defmodule Librarian.Accounts do
     Repo.one!(from u in User, order_by: [asc: u.id], limit: 1)
   end
 
+  def list_user_ids do
+    Repo.all(from u in User, select: u.id, order_by: u.id)
+  end
+
+  def get_user_by_api_token(token) when is_binary(token) and token != "" do
+    Repo.get_by(User, api_token: token)
+  end
+
+  def get_user_by_api_token(_token), do: nil
+
+  @doc "Returns the user's API token, generating and persisting one if absent."
+  def ensure_api_token!(%User{api_token: token} = user) when is_binary(token), do: user
+
+  def ensure_api_token!(%User{} = user) do
+    token = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
+    user |> Ecto.Changeset.change(api_token: token) |> Repo.update!()
+  end
+
+  def regenerate_api_token!(%User{} = user) do
+    ensure_api_token!(%{user | api_token: nil})
+  end
+
   def allowed_email?(email) when is_binary(email) do
     String.downcase(email) in Application.fetch_env!(:librarian, :allowed_emails)
   end

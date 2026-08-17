@@ -8,6 +8,8 @@ defmodule Librarian.LLM.Usage do
     field :output_tokens, :integer
     field :cost_cents, :float
 
+    belongs_to :user, Librarian.Accounts.User
+
     timestamps(type: :utc_datetime, updated_at: false)
   end
 end

@@ -15,6 +15,6 @@ defmodule Librarian.Vault.Tag do
     tag
     |> cast(attrs, [:name])
     |> validate_required([:name])
-    |> unique_constraint(:name)
+    |> unique_constraint(:name, name: :tags_user_id_name_index)
   end
 end

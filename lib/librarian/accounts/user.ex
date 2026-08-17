@@ -8,6 +8,7 @@ defmodule Librarian.Accounts.User do
     field :avatar_url, :string
     field :provider, :string, default: "google"
     field :provider_uid, :string
+    field :api_token, :string, redact: true
 
     timestamps(type: :utc_datetime)
   end

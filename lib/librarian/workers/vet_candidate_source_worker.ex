@@ -10,14 +10,16 @@ defmodule Librarian.Workers.VetCandidateSourceWorker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"id" => id}}) do
-    case Repo.get(CandidateSource, id) do
+    case Repo.get(CandidateSource, id, skip_tenant: true) do
       nil ->
         :ok
 
       candidate ->
-        {:ok, outcome} = Discovery.vet_candidate(candidate)
-        Logger.info("VetCandidateSourceWorker: #{candidate.domain} -> #{outcome}")
-        :ok
+        Repo.with_user(candidate.user_id, fn ->
+          {:ok, outcome} = Discovery.vet_candidate(candidate)
+          Logger.info("VetCandidateSourceWorker: #{candidate.domain} -> #{outcome}")
+          :ok
+        end)
     end
   end
 end

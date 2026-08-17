@@ -1,6 +1,5 @@
 defmodule Librarian.Vault do
   import Ecto.Query
-  alias Librarian.Accounts
   alias Librarian.Repo
   alias Librarian.Vault.{Annotation, Edge, Note, Notebook, Tag}
   alias Librarian.Workers.RebuildInterestWorker
@@ -12,7 +11,7 @@ defmodule Librarian.Vault do
   def get_notebook!(id), do: Repo.get!(Notebook, id)
 
   def create_notebook(attrs) do
-    %Notebook{user_id: Accounts.owner!().id}
+    %Notebook{user_id: Repo.user_id!()}
     |> Notebook.changeset(attrs)
     |> Repo.insert()
   end
@@ -45,7 +44,7 @@ defmodule Librarian.Vault do
     tag_records = find_or_create_tags(tags)
 
     result =
-      %Note{user_id: Accounts.owner!().id}
+      %Note{user_id: Repo.user_id!()}
       |> Note.changeset(attrs)
       |> Ecto.Changeset.put_assoc(:tags, tag_records)
       |> Repo.insert()
@@ -58,7 +57,7 @@ defmodule Librarian.Vault do
     tag_records = find_or_create_tags(tags)
 
     changeset =
-      %Note{user_id: Accounts.owner!().id}
+      %Note{user_id: Repo.user_id!()}
       |> Note.changeset(attrs)
       |> Ecto.Changeset.put_assoc(:tags, tag_records)
 
@@ -102,14 +101,18 @@ defmodule Librarian.Vault do
   @doc "Number of surplus copies among identical (notebook, title, body) notes."
   def duplicate_note_count do
     %{rows: [[n]]} =
-      Repo.query!("""
-      SELECT COALESCE(SUM(c - 1), 0)::bigint FROM (
-        SELECT COUNT(*) AS c
-        FROM notes
-        GROUP BY notebook_id, title, md5(coalesce(body, ''))
-        HAVING COUNT(*) > 1
-      ) dupes
-      """)
+      Repo.query!(
+        """
+        SELECT COALESCE(SUM(c - 1), 0)::bigint FROM (
+          SELECT COUNT(*) AS c
+          FROM notes
+          WHERE user_id = $1
+          GROUP BY notebook_id, title, md5(coalesce(body, ''))
+          HAVING COUNT(*) > 1
+        ) dupes
+        """,
+        [Repo.user_id!()]
+      )
 
     n
   end
@@ -123,11 +126,15 @@ defmodule Librarian.Vault do
     {:ok, removed} =
       Repo.transaction(fn ->
         %{rows: rows} =
-          Repo.query!("""
-          SELECT id,
-                 MIN(id) OVER (PARTITION BY notebook_id, title, md5(coalesce(body, ''))) AS survivor
-          FROM notes
-          """)
+          Repo.query!(
+            """
+            SELECT id,
+                   MIN(id) OVER (PARTITION BY notebook_id, title, md5(coalesce(body, ''))) AS survivor
+            FROM notes
+            WHERE user_id = $1
+            """,
+            [Repo.user_id!()]
+          )
 
         dupes = for [id, survivor] <- rows, id != survivor, do: {id, survivor}
 
@@ -252,14 +259,14 @@ defmodule Librarian.Vault do
 
   def upsert_edges(entries) when is_list(entries) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
-    owner_id = Accounts.owner!().id
+    user_id = Repo.user_id!()
 
     rows =
       entries
       |> Enum.filter(fn e ->
         e.kind in Edge.kinds() and e.source_note_id != e.target_note_id
       end)
-      |> Enum.map(&Map.merge(&1, %{user_id: owner_id, inserted_at: now, updated_at: now}))
+      |> Enum.map(&Map.merge(&1, %{user_id: user_id, inserted_at: now, updated_at: now}))
 
     Repo.insert_all(Edge, rows,
       on_conflict: {:replace, [:reason, :weight, :origin, :updated_at]},
@@ -284,8 +291,8 @@ defmodule Librarian.Vault do
 
     {filter_sql, params} =
       if note_filter,
-        do: {"AND n.id = $3", [k, threshold, note_filter]},
-        else: {"", [k, threshold]}
+        do: {"AND n.id = $4", [k, threshold, Repo.user_id!(), note_filter]},
+        else: {"", [k, threshold, Repo.user_id!()]}
 
     {:ok, %{num_rows: count}} =
       Repo.query(
@@ -297,11 +304,11 @@ defmodule Librarian.Vault do
         JOIN LATERAL (
           SELECT m2.id, 1 - (m2.embedding <=> n.embedding) AS sim
           FROM notes m2
-          WHERE m2.id != n.id AND m2.embedding IS NOT NULL
+          WHERE m2.id != n.id AND m2.embedding IS NOT NULL AND m2.user_id = n.user_id
           ORDER BY m2.embedding <=> n.embedding
           LIMIT $1
         ) m ON m.sim >= $2
-        WHERE n.embedding IS NOT NULL #{filter_sql}
+        WHERE n.embedding IS NOT NULL AND n.user_id = $3 #{filter_sql}
         ON CONFLICT (source_note_id, target_note_id, kind)
         DO UPDATE SET weight = EXCLUDED.weight, updated_at = now()
         """,
@@ -326,7 +333,7 @@ defmodule Librarian.Vault do
   end
 
   def create_annotation(note_id, body) do
-    %Annotation{user_id: Accounts.owner!().id}
+    %Annotation{user_id: Repo.user_id!()}
     |> Annotation.changeset(%{note_id: note_id, body: body})
     |> Repo.insert()
   end
@@ -413,14 +420,14 @@ defmodule Librarian.Vault do
   defp find_or_create_tags([]), do: []
 
   defp find_or_create_tags(names) when is_list(names) do
-    owner_id = Accounts.owner!().id
+    user_id = Repo.user_id!()
 
     Enum.map(names, fn name ->
       name = String.downcase(String.trim(name))
 
-      Repo.insert!(%Tag{name: name, user_id: owner_id},
+      Repo.insert!(%Tag{name: name, user_id: user_id},
         on_conflict: :nothing,
-        conflict_target: :name
+        conflict_target: [:user_id, :name]
       )
 
       Repo.get_by!(Tag, name: name)

@@ -18,6 +18,14 @@ defmodule Librarian.Workers.BuildGraphWorker do
 
   @impl Oban.Worker
   def perform(_job) do
+    for user_id <- Librarian.Accounts.list_user_ids() do
+      Repo.with_user(user_id, fn -> run() end)
+    end
+
+    :ok
+  end
+
+  defp run do
     {:ok, similarity_count} = Vault.generate_similarity_edges()
 
     enqueued =

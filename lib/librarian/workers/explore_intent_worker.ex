@@ -8,7 +8,11 @@ defmodule Librarian.Workers.ExploreIntentWorker do
   alias Librarian.Workers.VetCandidateSourceWorker
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"query" => query}}) do
+  def perform(%Oban.Job{args: %{"query" => query, "user_id" => user_id}}) do
+    Librarian.Repo.with_user(user_id, fn -> explore(query) end)
+  end
+
+  defp explore(query) do
     case Discovery.explore(query) do
       {:ok, candidates} ->
         Logger.info("ExploreIntentWorker: #{length(candidates)} candidates for #{inspect(query)}")
