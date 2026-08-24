@@ -1,7 +1,7 @@
 defmodule Librarian.Vault do
   import Ecto.Query
   alias Librarian.Repo
-  alias Librarian.Vault.{Annotation, Edge, Note, Notebook, Tag}
+  alias Librarian.Vault.{Annotation, Edge, Note, Notebook, Tag, Wikilink}
   alias Librarian.Workers.RebuildInterestWorker
 
   def list_notebooks do
@@ -49,7 +49,11 @@ defmodule Librarian.Vault do
       |> Ecto.Changeset.put_assoc(:tags, tag_records)
       |> Repo.insert()
 
-    if match?({:ok, _}, result), do: RebuildInterestWorker.enqueue()
+    with {:ok, note} <- result do
+      sync_wikilink_edges(note)
+      RebuildInterestWorker.enqueue()
+    end
+
     result
   end
 
@@ -170,7 +174,11 @@ defmodule Librarian.Vault do
         changeset
       end
 
-    Repo.update(changeset)
+    result = Repo.update(changeset)
+
+    with {:ok, updated} <- result, do: sync_wikilink_edges(updated)
+
+    result
   end
 
   def delete_note(%Note{} = note), do: Repo.delete(note)
@@ -212,6 +220,31 @@ defmodule Librarian.Vault do
         from n in query, where: n.notebook_id == ^notebook_id
       else
         query
+      end
+
+    Repo.all(query)
+  end
+
+  @doc """
+  Title-substring note suggestions (case-insensitive), newest first — powers
+  the quick switcher and `[[` autocomplete. An empty query returns the most
+  recent titled notes.
+  """
+  def suggest_notes(query_str, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 8)
+    q = query_str |> to_string() |> String.trim() |> String.downcase()
+
+    base =
+      from n in Note,
+        where: not is_nil(n.title),
+        order_by: [desc: n.inserted_at],
+        limit: ^limit
+
+    query =
+      if q == "" do
+        base
+      else
+        from n in base, where: fragment("position(? in lower(?)) > 0", ^q, n.title)
       end
 
     Repo.all(query)
@@ -268,15 +301,128 @@ defmodule Librarian.Vault do
       end)
       |> Enum.map(&Map.merge(&1, %{user_id: user_id, inserted_at: now, updated_at: now}))
 
-    Repo.insert_all(Edge, rows,
-      on_conflict: {:replace, [:reason, :weight, :origin, :updated_at]},
-      conflict_target: [:source_note_id, :target_note_id, :kind]
-    )
+    case rows do
+      [] ->
+        {0, nil}
+
+      rows ->
+        Repo.insert_all(Edge, rows,
+          on_conflict: {:replace, [:reason, :weight, :origin, :updated_at]},
+          conflict_target: [:source_note_id, :target_note_id, :kind]
+        )
+    end
   end
 
   def delete_edge(id) do
     Repo.delete_all(from e in Edge, where: e.id == ^id)
     :ok
+  end
+
+  @doc "Manually connects two notes (an explicit, user-authored edge)."
+  def link_notes(source_note_id, target_note_id, kind \\ "references") do
+    upsert_edges([
+      %{
+        source_note_id: source_note_id,
+        target_note_id: target_note_id,
+        kind: kind,
+        reason: nil,
+        weight: 1.0,
+        origin: "user"
+      }
+    ])
+
+    :ok
+  end
+
+  @doc """
+  Resolves the `[[Title]]` links in a body to notes: a map of downcased
+  title -> note id. Titles match case-insensitively; ties go to the oldest note.
+  """
+  def wikilink_targets(body) do
+    body |> Wikilink.extract_titles() |> resolve_titles()
+  end
+
+  defp resolve_titles([]), do: %{}
+
+  defp resolve_titles(titles) do
+    lowered = titles |> Enum.map(&String.downcase/1) |> Enum.uniq()
+
+    Repo.all(
+      from n in Note,
+        where: fragment("lower(?)", n.title) in ^lowered,
+        # oldest note wins a title tie: Map.new keeps the last row it sees
+        order_by: [desc: n.id],
+        select: {fragment("lower(?)", n.title), n.id}
+    )
+    |> Map.new()
+  end
+
+  @doc """
+  Mirrors the body's `[[Title]]` links into `references` edges with origin
+  `wikilink`. The set is replaced on every save, so removing a link from the
+  body removes its edge — similarity/llm/user edges are never touched.
+  """
+  def sync_wikilink_edges(%Note{} = note) do
+    target_ids =
+      note.body
+      |> wikilink_targets()
+      |> Map.values()
+      |> Enum.reject(&(&1 == note.id))
+
+    Repo.delete_all(
+      from e in Edge,
+        where:
+          e.source_note_id == ^note.id and e.origin == "wikilink" and
+            e.target_note_id not in ^target_ids
+    )
+
+    target_ids
+    |> Enum.map(
+      &%{
+        source_note_id: note.id,
+        target_note_id: &1,
+        kind: "references",
+        reason: nil,
+        weight: 1.0,
+        origin: "wikilink"
+      }
+    )
+    |> upsert_edges()
+
+    :ok
+  end
+
+  @doc """
+  Notes whose body mentions this note's title without any edge between the
+  two — Obsidian's \"unlinked mentions\". Trivially short titles are skipped
+  to avoid noise.
+  """
+  def unlinked_mentions(%Note{} = note, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 6)
+    title = note.title && String.trim(note.title)
+
+    if is_nil(title) or String.length(title) < 3 do
+      []
+    else
+      connected_ids =
+        Repo.all(
+          from e in Edge,
+            where: e.source_note_id == ^note.id or e.target_note_id == ^note.id,
+            select: {e.source_note_id, e.target_note_id}
+        )
+        |> Enum.flat_map(fn {s, t} -> [s, t] end)
+
+      exclude = [note.id | connected_ids]
+
+      Repo.all(
+        from n in Note,
+          where: n.id not in ^exclude,
+          where:
+            fragment("position(? in lower(coalesce(?, ''))) > 0", ^String.downcase(title), n.body),
+          order_by: [desc: n.inserted_at],
+          limit: ^limit
+      )
+    end
   end
 
   @doc """
