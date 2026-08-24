@@ -26,8 +26,10 @@ defmodule Mix.Tasks.Librarian.EmbedBackfill do
   end
 
   defp backfill(schema, to_text) do
+    # System maintenance pass over every user's rows — content processing, not
+    # a tenant-scoped read (mirrors EmbedArticlesWorker).
     from(r in schema, where: is_nil(r.embedding))
-    |> Repo.all()
+    |> Repo.all(skip_tenant: true)
     |> Task.async_stream(
       fn row -> embed_row(row, to_text.(row)) end,
       max_concurrency: 4,

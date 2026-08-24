@@ -18,11 +18,7 @@ defmodule Librarian.Workers.BuildGraphWorker do
 
   @impl Oban.Worker
   def perform(_job) do
-    for user_id <- Librarian.Accounts.list_user_ids() do
-      Repo.with_user(user_id, fn -> run() end)
-    end
-
-    :ok
+    Librarian.Accounts.each_user(&run/0)
   end
 
   defp run do

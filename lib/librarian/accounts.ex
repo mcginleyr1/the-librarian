@@ -17,6 +17,14 @@ defmodule Librarian.Accounts do
     Repo.all(from u in User, select: u.id, order_by: u.id)
   end
 
+  @doc """
+  Runs `fun` once per user with that user's tenant set — the entry point for
+  cross-user maintenance passes (cron workers that touch every tenant's data).
+  """
+  def each_user(fun) when is_function(fun, 0) do
+    Enum.each(list_user_ids(), fn user_id -> Repo.with_user(user_id, fun) end)
+  end
+
   def get_user_by_api_token(token) when is_binary(token) and token != "" do
     Repo.get_by(User, api_token: token)
   end

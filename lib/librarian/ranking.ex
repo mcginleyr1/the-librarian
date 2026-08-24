@@ -135,6 +135,8 @@ defmodule Librarian.Ranking do
   end
 
   defp scored_rows(topic, category, fetch) do
+    # scoped: every tenanted table in @scored_sql is filtered by user_id ($9)
+    # credo:disable-for-next-line Librarian.CredoChecks.RawSQL
     %{rows: rows} =
       Repo.query!(@scored_sql, [
         topic,

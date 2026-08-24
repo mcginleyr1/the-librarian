@@ -1,6 +1,7 @@
 defmodule LibrarianWeb.GraphLive do
   use LibrarianWeb, :live_view
 
+  alias Librarian.Repo
   alias Librarian.Vault
 
   # Mid-tone branch palette — readable on both light and dark themes.
@@ -20,7 +21,7 @@ defmodule LibrarianWeb.GraphLive do
 
     socket =
       if connected?(socket) do
-        start_async(socket, :mind_map, fn -> Vault.mind_map() end)
+        start_async(socket, :mind_map, Repo.bind_tenant(&Vault.mind_map/0))
       else
         socket
       end

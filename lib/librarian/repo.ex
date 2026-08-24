@@ -44,6 +44,13 @@ defmodule Librarian.Repo do
     Librarian.LLM.Usage
   ]
 
+  @doc """
+  The schemas this Repo enforces tenancy on. `tenancy_enforcement_test.exs`
+  asserts every schema with a `user_id` field is in this list, so a new
+  tenanted schema can't silently ship unscoped.
+  """
+  def tenanted_schemas, do: @tenanted
+
   def put_user_id(user_id), do: Process.put(@tenant_key, user_id)
 
   def user_id! do
@@ -63,6 +70,19 @@ defmodule Librarian.Repo do
         do: Process.put(@tenant_key, previous),
         else: Process.delete(@tenant_key)
     end
+  end
+
+  @doc """
+  Captures the current tenant and returns a zero-arity function that
+  re-establishes it before invoking `fun`. Use this to hand tenanted work to a
+  freshly spawned process — `start_async`, `Task.start`, `Task.async_stream` —
+  which does not inherit the caller's process-dictionary tenant.
+
+      start_async(socket, :mind_map, Repo.bind_tenant(&Vault.mind_map/0))
+  """
+  def bind_tenant(fun) when is_function(fun, 0) do
+    user_id = user_id!()
+    fn -> with_user(user_id, fun) end
   end
 
   # The tenant travels in the query opts (not just the process dictionary)

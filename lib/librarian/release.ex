@@ -139,35 +139,43 @@ defmodule Librarian.Release do
 
     {:ok, result, _} =
       Ecto.Migrator.with_repo(Librarian.Repo, fn _repo ->
-        Librarian.Repo.put_user_id(Librarian.Accounts.owner!().id)
-        contents = File.read!(file_path)
-
-        case Saxy.SimpleForm.parse_string(contents) do
-          {:ok, {"opml", _attrs, children}} ->
-            body =
-              Enum.find(children, fn
-                {"body", _, _} -> true
-                _ -> false
-              end)
-
-            {"body", _attrs, outlines} = body
-            feeds = extract_opml_feeds(outlines)
-            {imported, skipped} = import_opml_feeds(feeds)
-            categories = feeds |> Enum.map(& &1.category) |> Enum.uniq() |> length()
-
-            IO.puts(
-              "Imported #{imported} feeds across #{categories} categories (#{skipped} skipped as duplicates)"
-            )
-
-            %{imported: imported, skipped: skipped, categories: categories}
-
-          _ ->
-            IO.puts("Error: not a valid OPML file")
-            %{imported: 0, skipped: 0, categories: 0}
-        end
+        Librarian.Repo.with_user(Librarian.Accounts.owner!().id, fn ->
+          run_opml_import(File.read!(file_path))
+        end)
       end)
 
     result
+  end
+
+  @doc """
+  Imports OPML feeds into the **current tenant**. The caller must have set the
+  tenant (via the auth plug/LiveView mount, or `Repo.with_user/2`). Console
+  entrypoints go through `import_opml/1`, which sets the owner.
+  """
+  def run_opml_import(contents) do
+    case Saxy.SimpleForm.parse_string(contents) do
+      {:ok, {"opml", _attrs, children}} ->
+        body =
+          Enum.find(children, fn
+            {"body", _, _} -> true
+            _ -> false
+          end)
+
+        {"body", _attrs, outlines} = body
+        feeds = extract_opml_feeds(outlines)
+        {imported, skipped} = import_opml_feeds(feeds)
+        categories = feeds |> Enum.map(& &1.category) |> Enum.uniq() |> length()
+
+        IO.puts(
+          "Imported #{imported} feeds across #{categories} categories (#{skipped} skipped as duplicates)"
+        )
+
+        %{imported: imported, skipped: skipped, categories: categories}
+
+      _ ->
+        IO.puts("Error: not a valid OPML file")
+        %{imported: 0, skipped: 0, categories: 0}
+    end
   end
 
   @doc """
@@ -181,44 +189,54 @@ defmodule Librarian.Release do
 
     {:ok, result, _} =
       Ecto.Migrator.with_repo(Librarian.Repo, fn _repo ->
-        Librarian.Repo.put_user_id(Librarian.Accounts.owner!().id)
-        name = notebook_name || Path.basename(file_path, ".enex")
-        notebook_id = Mix.Tasks.Librarian.ImportEvernote.find_or_create_notebook(name)
-
-        initial_state = %{
-          current_note: Mix.Tasks.Librarian.ImportEvernote.empty_note(),
-          current_resource: %{},
-          in_field: nil,
-          in_note_attributes: false,
-          in_resource_attributes: false,
-          text_buf: "",
-          notes_count: 0,
-          attachments_count: 0,
-          errors: 0,
-          notebook_id: notebook_id
-        }
-
-        stream = Mix.Tasks.Librarian.ImportEvernote.cdata_fixing_stream(file_path)
-
-        case Saxy.parse_stream(stream, Mix.Tasks.Librarian.ImportEvernote.Handler, initial_state) do
-          {:ok, state} ->
-            IO.puts(
-              "Imported #{state.notes_count} notes, #{state.attachments_count} attachments (#{state.errors} errors)"
-            )
-
-            %{
-              notes_count: state.notes_count,
-              attachments_count: state.attachments_count,
-              errors: state.errors
-            }
-
-          {:error, reason} ->
-            IO.puts("Error: #{inspect(reason)}")
-            %{notes_count: 0, attachments_count: 0, errors: 1}
-        end
+        Librarian.Repo.with_user(Librarian.Accounts.owner!().id, fn ->
+          run_evernote_import(file_path, notebook_name)
+        end)
       end)
 
     result
+  end
+
+  @doc """
+  Imports an Evernote `.enex` file into the **current tenant**. The caller must
+  have set the tenant (via the auth plug/LiveView mount, or `Repo.with_user/2`).
+  Console entrypoints go through `import_evernote/2`, which sets the owner.
+  """
+  def run_evernote_import(file_path, notebook_name \\ nil) do
+    name = notebook_name || Path.basename(file_path, ".enex")
+    notebook_id = Mix.Tasks.Librarian.ImportEvernote.find_or_create_notebook(name)
+
+    initial_state = %{
+      current_note: Mix.Tasks.Librarian.ImportEvernote.empty_note(),
+      current_resource: %{},
+      in_field: nil,
+      in_note_attributes: false,
+      in_resource_attributes: false,
+      text_buf: "",
+      notes_count: 0,
+      attachments_count: 0,
+      errors: 0,
+      notebook_id: notebook_id
+    }
+
+    stream = Mix.Tasks.Librarian.ImportEvernote.cdata_fixing_stream(file_path)
+
+    case Saxy.parse_stream(stream, Mix.Tasks.Librarian.ImportEvernote.Handler, initial_state) do
+      {:ok, state} ->
+        IO.puts(
+          "Imported #{state.notes_count} notes, #{state.attachments_count} attachments (#{state.errors} errors)"
+        )
+
+        %{
+          notes_count: state.notes_count,
+          attachments_count: state.attachments_count,
+          errors: state.errors
+        }
+
+      {:error, reason} ->
+        IO.puts("Error: #{inspect(reason)}")
+        %{notes_count: 0, attachments_count: 0, errors: 1}
+    end
   end
 
   defp extract_opml_feeds(outlines) do

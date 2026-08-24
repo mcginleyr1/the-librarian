@@ -67,7 +67,7 @@ defmodule LibrarianWeb.SettingsLive do
   def handle_event("import_opml", _params, socket) do
     result =
       consume_uploaded_entries(socket, :opml, fn %{path: path}, _entry ->
-        {:ok, Librarian.Release.import_opml(path)}
+        {:ok, Librarian.Release.run_opml_import(File.read!(path))}
       end)
 
     case result do
@@ -104,11 +104,16 @@ defmodule LibrarianWeb.SettingsLive do
 
     lv = self()
 
-    Task.start(fn ->
-      result = Librarian.Release.import_evernote(path, notebook)
-      File.rm(path)
-      send(lv, {:enex_done, result})
-    end)
+    # Task.start spawns a fresh process that does not inherit this LiveView's
+    # tenant; bind_tenant re-establishes the current user so the import lands
+    # in their vault, not the owner's.
+    Task.start(
+      Repo.bind_tenant(fn ->
+        result = Librarian.Release.run_evernote_import(path, notebook)
+        File.rm(path)
+        send(lv, {:enex_done, result})
+      end)
+    )
 
     {:noreply, assign(socket, importing_enex: true, import_result: nil)}
   end
