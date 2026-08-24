@@ -2,7 +2,7 @@ defmodule LibrarianWeb.VaultLive do
   use LibrarianWeb, :live_view
 
   alias Librarian.Vault
-  alias Librarian.Vault.Note
+  alias Librarian.Vault.{Note, Wikilink}
 
   @page_size 50
 
@@ -26,8 +26,17 @@ defmodule LibrarianWeb.VaultLive do
        more_notes?: false,
        related: [],
        annotations: [],
+       mentions: [],
+       rendered_body: nil,
        note_changeset: Note.changeset(%Note{}, %{}),
-       show_notebooks: false
+       show_notebooks: false,
+       draft_body: "",
+       editor_tab: :write,
+       preview_html: nil,
+       switcher_open: false,
+       switcher_query: "",
+       switcher_results: [],
+       switcher_index: 0
      )
      |> stream(:notes, [])}
   end
@@ -133,6 +142,8 @@ defmodule LibrarianWeb.VaultLive do
        selected_note: nil,
        editing: true,
        tags_input: "",
+       draft_body: "",
+       editor_tab: :write,
        note_changeset: Note.changeset(%Note{}, %{})
      )}
   end
@@ -145,8 +156,34 @@ defmodule LibrarianWeb.VaultLive do
      assign(socket,
        editing: true,
        tags_input: tags_str,
+       draft_body: note.body || "",
+       editor_tab: :write,
        note_changeset: Note.changeset(note, %{})
      )}
+  end
+
+  def handle_event("editor_change", %{"note" => %{"body" => body}}, socket) do
+    {:noreply, assign(socket, draft_body: body)}
+  end
+
+  def handle_event("set_editor_tab", %{"tab" => "preview"}, socket) do
+    html =
+      render_note_body(%Note{clip_mode: "markdown", body: socket.assigns.draft_body})
+
+    {:noreply, assign(socket, editor_tab: :preview, preview_html: html)}
+  end
+
+  def handle_event("set_editor_tab", %{"tab" => _}, socket) do
+    {:noreply, assign(socket, editor_tab: :write)}
+  end
+
+  def handle_event("wikilink_suggest", %{"q" => q}, socket) do
+    suggestions =
+      Vault.suggest_notes(q, limit: 6)
+      |> Enum.reject(&(socket.assigns.selected_note && &1.id == socket.assigns.selected_note.id))
+      |> Enum.map(&%{id: &1.id, title: &1.title})
+
+    {:reply, %{suggestions: suggestions}, socket}
   end
 
   def handle_event("cancel_edit", _params, socket) do
@@ -164,7 +201,8 @@ defmodule LibrarianWeb.VaultLive do
 
     result =
       case socket.assigns.selected_note do
-        nil -> Vault.create_note(attrs, tags)
+        # Notes authored in the app are markdown; clips/imports keep their mode.
+        nil -> Vault.create_note(Map.put(attrs, "clip_mode", "markdown"), tags)
         note -> Vault.update_note(note, attrs, tags)
       end
 
@@ -278,6 +316,72 @@ defmodule LibrarianWeb.VaultLive do
 
   def handle_event("create_notebook", _params, socket), do: {:noreply, socket}
 
+  def handle_event("link_mention", %{"id" => id}, socket) do
+    note = socket.assigns.selected_note
+    :ok = Vault.link_notes(String.to_integer(id), note.id)
+
+    {:noreply,
+     assign(socket,
+       related: Vault.related_notes(note.id),
+       mentions: Vault.unlinked_mentions(note)
+     )}
+  end
+
+  def handle_event("open_switcher", _params, socket) do
+    {:noreply,
+     assign(socket,
+       switcher_open: true,
+       switcher_query: "",
+       switcher_results: Vault.suggest_notes(""),
+       switcher_index: 0
+     )}
+  end
+
+  def handle_event("close_switcher", _params, socket) do
+    {:noreply, assign(socket, switcher_open: false)}
+  end
+
+  def handle_event("switcher_search", %{"q" => q}, socket) do
+    {:noreply,
+     assign(socket,
+       switcher_query: q,
+       switcher_results: Vault.suggest_notes(q),
+       switcher_index: 0
+     )}
+  end
+
+  def handle_event("switcher_keydown", %{"key" => "ArrowDown"}, socket) do
+    max = max(length(socket.assigns.switcher_results) - 1, 0)
+    {:noreply, assign(socket, switcher_index: min(socket.assigns.switcher_index + 1, max))}
+  end
+
+  def handle_event("switcher_keydown", %{"key" => "ArrowUp"}, socket) do
+    {:noreply, assign(socket, switcher_index: max(socket.assigns.switcher_index - 1, 0))}
+  end
+
+  def handle_event("switcher_keydown", %{"key" => "Escape"}, socket) do
+    {:noreply, assign(socket, switcher_open: false)}
+  end
+
+  def handle_event("switcher_keydown", _params, socket), do: {:noreply, socket}
+
+  def handle_event("switcher_submit", _params, socket) do
+    {:noreply,
+     switcher_go(socket, Enum.at(socket.assigns.switcher_results, socket.assigns.switcher_index))}
+  end
+
+  def handle_event("switcher_select", %{"id" => id}, socket) do
+    {:noreply, switcher_go(socket, %{id: String.to_integer(id)})}
+  end
+
+  defp switcher_go(socket, nil), do: assign(socket, switcher_open: false)
+
+  defp switcher_go(socket, %{id: id}) do
+    socket
+    |> assign(switcher_open: false)
+    |> push_patch(to: "/vault/note/#{id}")
+  end
+
   defp select_note(socket, id) do
     note = Vault.get_note!(id)
 
@@ -285,7 +389,9 @@ defmodule LibrarianWeb.VaultLive do
       selected_note: note,
       editing: false,
       related: Vault.related_notes(id),
-      annotations: Vault.list_annotations(id)
+      annotations: Vault.list_annotations(id),
+      mentions: Vault.unlinked_mentions(note),
+      rendered_body: render_note_body(note)
     )
   end
 
@@ -328,9 +434,17 @@ defmodule LibrarianWeb.VaultLive do
   end
 
   defp render_note_body(%Note{clip_mode: "markdown", body: body}) when is_binary(body) do
-    MDEx.to_html!(body)
+    body
+    |> Wikilink.to_markdown_links(Vault.wikilink_targets(body))
+    |> MDEx.to_html!()
   end
 
-  defp render_note_body(%Note{body: body}) when is_binary(body), do: body
+  defp render_note_body(%Note{body: body}) when is_binary(body) do
+    Wikilink.to_html_links(body, Vault.wikilink_targets(body))
+  end
+
   defp render_note_body(_), do: "<p class='text-base-content/40 italic'>No content</p>"
+
+  defp markdown_note?(nil), do: true
+  defp markdown_note?(%Note{clip_mode: mode}), do: mode == "markdown"
 end
