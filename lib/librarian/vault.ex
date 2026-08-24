@@ -104,6 +104,8 @@ defmodule Librarian.Vault do
 
   @doc "Number of surplus copies among identical (notebook, title, body) notes."
   def duplicate_note_count do
+    # scoped: WHERE user_id = $1 with Repo.user_id!()
+    # credo:disable-for-next-line Librarian.CredoChecks.RawSQL
     %{rows: [[n]]} =
       Repo.query!(
         """
@@ -129,6 +131,8 @@ defmodule Librarian.Vault do
   def dedupe_notes do
     {:ok, removed} =
       Repo.transaction(fn ->
+        # scoped: WHERE user_id = $1 with Repo.user_id!()
+        # credo:disable-for-next-line Librarian.CredoChecks.RawSQL
         %{rows: rows} =
           Repo.query!(
             """
@@ -440,6 +444,8 @@ defmodule Librarian.Vault do
         do: {"AND n.id = $4", [k, threshold, Repo.user_id!(), note_filter]},
         else: {"", [k, threshold, Repo.user_id!()]}
 
+    # scoped: WHERE n.user_id = $3, lateral join on m2.user_id = n.user_id, stamps n.user_id
+    # credo:disable-for-next-line Librarian.CredoChecks.RawSQL
     {:ok, %{num_rows: count}} =
       Repo.query(
         """

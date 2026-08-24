@@ -86,7 +86,8 @@ defmodule Librarian.MixProject do
       # In-BEAM text embeddings (no external server)
       {:bumblebee, "~> 0.6"},
       {:nx, "~> 0.9"},
-      {:exla, "~> 0.9"}
+      {:exla, "~> 0.9"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 

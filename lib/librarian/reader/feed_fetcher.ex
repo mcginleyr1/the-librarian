@@ -98,10 +98,13 @@ defmodule Librarian.Reader.FeedFetcher do
     Enum.count(guids, &(not MapSet.member?(known, &1)))
   end
 
-  defp conditional_headers(%Feed{etag: etag, last_modified: lm}) do
-    []
-    |> then(fn h -> if etag, do: [{"if-none-match", etag} | h], else: h end)
-    |> then(fn h -> if lm, do: [{"if-modified-since", lm} | h], else: h end)
+  # Conditional GETs use ETag only. Last-Modified from feed proxies (hnrss.org,
+  # FeedBurner, Cloudflare caches) is unreliable — hnrss.org serves a *frozen*
+  # Last-Modified with fresh content, so honoring it as If-Modified-Since makes
+  # the upstream answer 304 forever and the feed silently stops ingesting.
+  # ETag is content-derived; feeds without one simply do a full (cheap) fetch.
+  defp conditional_headers(%Feed{etag: etag}) do
+    if etag, do: [{"if-none-match", etag}], else: []
   end
 
   defp get_header(%{headers: headers}, name) do
