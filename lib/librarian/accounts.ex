@@ -43,11 +43,32 @@ defmodule Librarian.Accounts do
     ensure_api_token!(%{user | api_token: nil})
   end
 
+  @doc """
+  Whether the email is on the operator allowlist (`ALLOWED_EMAILS`). With
+  billing disabled this is the sign-in gate; with billing enabled these
+  accounts are comped (no subscription needed) and act as admins.
+  """
   def allowed_email?(email) when is_binary(email) do
     String.downcase(email) in Application.fetch_env!(:librarian, :allowed_emails)
   end
 
   def allowed_email?(_), do: false
+
+  def admin?(%User{email: email}), do: allowed_email?(email)
+  def admin?(_), do: false
+
+  def get_user_by_stripe_customer_id(customer_id) when is_binary(customer_id) do
+    Repo.get_by(User, stripe_customer_id: customer_id)
+  end
+
+  def get_user_by_stripe_customer_id(_), do: nil
+
+  @doc "Persists Stripe subscription state on the user (billing fields only)."
+  def update_subscription!(%User{} = user, attrs) do
+    user
+    |> User.subscription_changeset(attrs)
+    |> Repo.update!()
+  end
 
   @doc """
   Finds or creates the user for a completed `Ueberauth.Auth`. Matches by

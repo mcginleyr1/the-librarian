@@ -11,5 +11,13 @@ data:
   STORAGE_PATH: "/data/librarian"
   # Tailscale terminates TLS — disable Phoenix's internal force_ssl redirect
   DISABLE_FORCE_SSL: "true"
-  # Google accounts allowed to sign in (comma-separated)
+  # Operator accounts (comma-separated): the sign-in allowlist when billing is
+  # off; comped admin accounts when billing is on.
   ALLOWED_EMAILS: "owner@example.com"
+  # Hosted mode (optional): uncomment with real Stripe price ids to enable
+  # billing (also needs the stripe-secret-key secret — see k8s/secrets.yaml).
+  # STRIPE_PRICE_ID_MONTHLY: "price_..."
+  # STRIPE_PRICE_ID_YEARLY: "price_..."
+  # BILLING_MONTHLY_PRICE_USD: "12"
+  # BILLING_YEARLY_PRICE_USD: "96"
+  # PLATFORM_LLM_BUDGET_CENTS: "500"

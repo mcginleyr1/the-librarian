@@ -4,7 +4,7 @@ A self-hosted personal knowledge base combining an RSS feed reader with web clip
 
 ## Features
 
-- **Google Sign-In** — Ueberauth-based OAuth; access restricted to an email allowlist
+- **Google Sign-In** — Ueberauth-based OAuth; email allowlist (self-hosted) or open sign-up with Stripe subscriptions (hosted)
 - **RSS Reader** — Subscribe to feeds, organize by category, track read/starred state, keyboard navigation
 - **Note Vault** — Capture web clips, create markdown notes, organize into notebooks with tags
 - **Wiki-Links & Knowledge Graph** — `[[Note Title]]` links with editor autocomplete, AI-typed connections between related notes, unlinked-mention detection, and a mind-map graph view
@@ -41,10 +41,18 @@ Visit [http://localhost:4000](http://localhost:4000).
 ### Authentication
 
 All browser routes require signing in with Google (the `/api` clip endpoints used
-by the Safari extension stay open). Only emails on the allowlist may sign in —
-it defaults to `owner@example.com` and is overridden with the comma-separated
-`ALLOWED_EMAILS` env var. Data created by background workers and the clip API is
-bound to the deployment owner (the first user).
+by the Safari extension authenticate with per-user bearer tokens). Who may sign
+in depends on the mode:
+
+- **Self-hosted (default):** only emails on the allowlist may sign in — it
+  defaults to `owner@example.com` and is overridden with the comma-separated
+  `ALLOWED_EMAILS` env var.
+- **Hosted (billing enabled):** anyone may sign in; using the app requires an
+  active subscription (see Billing below). Allowlisted emails are the operator
+  accounts: comped (no subscription) and admin (Oban dashboard).
+
+Data created by background workers and the clip API is bound to the deployment
+owner (the first user).
 
 Creating the OAuth client is a one-time manual step — Google exposes no API or
 gcloud command for standard OAuth 2.0 web clients. `just oauth-setup` walks it:
@@ -66,6 +74,43 @@ just import-opml FILE.opml
 just import-evernote FILE.enex [NOTEBOOK_NAME]
 just import-evernote-dir DIR/
 ```
+
+## Billing (hosted, multi-user mode)
+
+Billing is off by default and everything above describes the self-hosted
+experience. Setting `STRIPE_SECRET_KEY` and `STRIPE_PRICE_ID_MONTHLY` switches
+the deployment into hosted mode:
+
+- `/` becomes a public landing page with pricing and a Google sign-in CTA
+- sign-up is open; unsubscribed users land on `/subscribe` (Stripe Checkout,
+  14-day trial) and manage their plan through the Stripe billing portal from
+  Settings → Billing
+- Stripe webhooks (`POST /webhooks/stripe`) keep subscription state in sync —
+  point a webhook endpoint at it with the `checkout.session.completed` and
+  `customer.subscription.*` events, and set `STRIPE_WEBHOOK_SECRET`
+
+**Pricing rationale:** the default display prices are $12/month / $96/year.
+The two tools this replaces cost more individually (Feedly Pro+ $12.99/mo,
+Evernote from $14.99/mo — ~$28/mo combined). The actual amounts charged live
+on the Stripe prices; keep `BILLING_MONTHLY_PRICE_USD`/`BILLING_YEARLY_PRICE_USD`
+in sync if you change them.
+
+**LLM cost protection:** set `ANTHROPIC_API_KEY` to serve AI features to
+subscribers who haven't added their own key. Platform-keyed usage is hard-capped
+per user per month by `PLATFORM_LLM_BUDGET_CENTS` (default `500` = $5), so
+worst-case LLM spend per subscriber stays well under the fee. Users can add
+their own key in Settings → AI to raise their cap at their own expense.
+
+| Variable | Description |
+|---|---|
+| `STRIPE_SECRET_KEY` | Enables billing (with the monthly price id) |
+| `STRIPE_WEBHOOK_SECRET` | Webhook signing secret (`whsec_...`) |
+| `STRIPE_PRICE_ID_MONTHLY` | Stripe price id for the monthly plan |
+| `STRIPE_PRICE_ID_YEARLY` | Stripe price id for the yearly plan (optional) |
+| `BILLING_MONTHLY_PRICE_USD` | Display price, default `12` |
+| `BILLING_YEARLY_PRICE_USD` | Display price, default `96` |
+| `ANTHROPIC_API_KEY` | Platform LLM key for subscribers without their own |
+| `PLATFORM_LLM_BUDGET_CENTS` | Included AI allowance per user/month, default `500` |
 
 ## Docker (Full Stack)
 
@@ -125,7 +170,9 @@ just k-import-evernote-dir DIR/
 | `PORT` | Default `4000` |
 | `GOOGLE_CLIENT_ID` | Google OAuth 2.0 client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 client secret |
-| `ALLOWED_EMAILS` | Comma-separated sign-in allowlist (default `owner@example.com`) |
+| `ALLOWED_EMAILS` | Comma-separated allowlist: sign-in gate (self-hosted) or comped admins (hosted) |
+
+Hosted-mode variables (Stripe, platform LLM key) are listed under Billing above.
 
 ## Importing Data
 

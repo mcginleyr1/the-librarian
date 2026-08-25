@@ -46,6 +46,17 @@ defmodule LibrarianWeb.AuthControllerTest do
       refute Librarian.Repo.get_by(Accounts.User, email: "intruder@example.com")
     end
 
+    test "with billing enabled, anyone may sign up (the paywall gates access)", %{conn: conn} do
+      Librarian.BillingHelpers.enable_billing()
+
+      conn = callback_with(conn, google_auth("stranger@example.com"))
+
+      assert redirected_to(conn) == ~p"/"
+      user = Librarian.Repo.get_by(Accounts.User, email: "stranger@example.com")
+      assert get_session(conn, :user_id) == user.id
+      refute Librarian.Billing.active?(user)
+    end
+
     test "provider failure redirects to login", %{conn: conn} do
       conn =
         conn

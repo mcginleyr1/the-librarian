@@ -16,8 +16,28 @@ config :librarian,
 # Register the pgvector type so Postgrex can encode/decode vector columns
 config :librarian, Librarian.Repo, types: Librarian.PostgrexTypes
 
-# Google sign-in. Only these emails may log in (override with ALLOWED_EMAILS).
+# Operator allowlist (override with ALLOWED_EMAILS). With billing disabled
+# only these emails may log in; with billing enabled they are the comped
+# admin accounts and anyone else may sign up and subscribe.
 config :librarian, :allowed_emails, ["owner@example.com"]
+
+# Stripe billing. Unset secret key / price ids = self-hosted mode: no landing
+# page, no payments, sign-in restricted to :allowed_emails. The *_usd values
+# are display-only — keep them in sync with the Stripe prices.
+config :librarian, :billing,
+  stripe_secret_key: nil,
+  stripe_webhook_secret: nil,
+  monthly_price_id: nil,
+  yearly_price_id: nil,
+  monthly_price_usd: 12,
+  yearly_price_usd: 96,
+  trial_days: 14
+
+# Platform Anthropic key: used for users who haven't set their own key in
+# Settings, capped per user per month by :platform_llm_budget_cents so LLM
+# spend can never outrun the subscription fee.
+config :librarian, :platform_anthropic_api_key, nil
+config :librarian, :platform_llm_budget_cents, 500
 
 config :ueberauth, Ueberauth,
   providers: [

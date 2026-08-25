@@ -41,7 +41,11 @@
     </div>
 
     <p class="mt-6 text-center text-xs text-base-content/40">
-      Access is restricted to approved accounts.
+      <%= if Librarian.Billing.enabled?() do %>
+        New here? Signing in creates your account and starts your free trial.
+      <% else %>
+        Access is restricted to approved accounts.
+      <% end %>
     </p>
   </div>
 </Layouts.auth>

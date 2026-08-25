@@ -39,3 +39,7 @@ config :phoenix,
   sort_verified_routes_query_params: true
 
 config :librarian, Oban, testing: :manual
+
+# Route Stripe API calls through Req.Test (see Librarian.BillingTest);
+# billing itself stays disabled unless a test configures Stripe keys.
+config :librarian, :stripe_req_options, plug: {Req.Test, Librarian.Billing.Stripe}
