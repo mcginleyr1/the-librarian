@@ -17,20 +17,49 @@ defmodule Librarian.Workers.EmbedArticlesWorker do
 
   @impl Oban.Worker
   def perform(_job) do
-    notes = embed_missing(Note, fn n -> text([n.title, n.body]) end)
-    articles = embed_missing(Article, fn a -> text([a.title, a.summary, a.content]) end)
+    # Truncate wide, TOASTed columns (note body, article content) in SQL to the
+    # embedding cap, so Postgres de-TOASTs only the ~8 KB prefix the model reads
+    # instead of decompressing multi-MB bodies into one backend and OOMing it.
+    max = Embeddings.max_chars()
+
+    notes =
+      from(n in Note,
+        where: is_nil(n.embedding),
+        limit: @batch,
+        select: %{id: n.id, title: n.title, body: fragment("left(?, ?)", n.body, ^max)}
+      )
+      |> embed_missing(Note, fn r -> text([r.title, r.body]) end)
+
+    articles =
+      from(a in Article,
+        where: is_nil(a.embedding),
+        limit: @batch,
+        select: %{
+          id: a.id,
+          title: a.title,
+          summary: fragment("left(?, ?)", a.summary, ^max),
+          content: fragment("left(?, ?)", a.content, ^max)
+        }
+      )
+      |> embed_missing(Article, fn r -> text([r.title, r.summary, r.content]) end)
+
     Logger.info("EmbedArticlesWorker: embedded #{notes} notes, #{articles} articles")
     :ok
   end
 
-  defp embed_missing(schema, to_text) do
-    # system pass over every user's rows: embedding is content processing
-    from(r in schema, where: is_nil(r.embedding), limit: @batch)
+  # system pass over every user's rows: embedding is content processing
+  defp embed_missing(query, schema, to_text) do
+    query
     |> Repo.all(skip_tenant: true)
     |> Enum.reduce(0, fn row, acc ->
       case Embeddings.embed(to_text.(row)) do
         {:ok, vector} ->
-          row |> Ecto.Changeset.change(embedding: vector) |> Repo.update!()
+          Repo.update_all(
+            from(r in schema, where: r.id == ^row.id),
+            [set: [embedding: vector]],
+            skip_tenant: true
+          )
+
           acc + 1
 
         {:error, _reason} ->

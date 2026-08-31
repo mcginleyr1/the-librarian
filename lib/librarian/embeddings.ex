@@ -16,6 +16,14 @@ defmodule Librarian.Embeddings do
 
   def dimensions, do: @dimensions
 
+  @doc """
+  Character cap applied to text before embedding. Callers that read wide,
+  TOASTed columns should truncate in SQL to this (`left(col, ?)`) so Postgres
+  never de-TOASTs a whole multi-MB body just to embed its first #{@max_chars}
+  chars — the model's 512-token window only ever sees the leading prefix anyway.
+  """
+  def max_chars, do: @max_chars
+
   @doc "Child spec that loads the model and builds the embedding serving."
   def child_spec(_opts) do
     repo = Application.fetch_env!(:librarian, :embedding_model)
