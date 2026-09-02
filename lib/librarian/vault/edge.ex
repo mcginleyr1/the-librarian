@@ -3,7 +3,7 @@ defmodule Librarian.Vault.Edge do
   import Ecto.Changeset
 
   @kinds ~w(related extends contradicts example_of references same_topic)
-  @origins ~w(similarity llm user wikilink)
+  @origins ~w(similarity llm user wikilink canvas)
 
   schema "note_edges" do
     field :kind, :string

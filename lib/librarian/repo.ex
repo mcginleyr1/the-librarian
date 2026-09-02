@@ -37,6 +37,7 @@ defmodule Librarian.Repo do
     Librarian.Vault.Tag,
     Librarian.Vault.Annotation,
     Librarian.Vault.Edge,
+    Librarian.Canvas.Page,
     Librarian.Interest.Centroid,
     Librarian.Interest.Affinity,
     Librarian.Discovery.CandidateSource,

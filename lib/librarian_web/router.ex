@@ -74,6 +74,9 @@ defmodule LibrarianWeb.Router do
       live "/vault/note/:note_id", VaultLive, :note
       live "/vault/graph", GraphLive, :index
 
+      live "/canvas", CanvasLive, :index
+      live "/canvas/:id", CanvasLive, :show
+
       live "/search", SearchLive, :index
 
       live "/settings", SettingsLive, :index

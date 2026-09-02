@@ -76,6 +76,7 @@ defmodule LibrarianWeb.Layouts do
     {:for_you, "For You", "/foryou"},
     {:reader, "Reader", "/reader"},
     {:vault, "Vault", "/vault"},
+    {:canvas, "Canvas", "/canvas"},
     {:dashboard, "Dashboard", "/dashboard"}
   ]
 
@@ -83,7 +84,10 @@ defmodule LibrarianWeb.Layouts do
   The app-wide section switcher. `compact` fits the narrow reader/vault
   sidebars; the default matches the For You / Dashboard top bars.
   """
-  attr :active, :atom, required: true, values: [:for_you, :reader, :vault, :dashboard, :graph]
+  attr :active, :atom,
+    required: true,
+    values: [:for_you, :reader, :vault, :canvas, :dashboard, :graph]
+
   attr :compact, :boolean, default: false
   attr :class, :string, default: nil
 

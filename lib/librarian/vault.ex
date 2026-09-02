@@ -294,9 +294,12 @@ defmodule Librarian.Vault do
     |> Enum.uniq_by(fn %{edge: e, note: n} -> {e.kind, n.id} end)
   end
 
-  def upsert_edges(entries) when is_list(entries) do
+  def upsert_edges(entries, opts \\ []) when is_list(entries) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     user_id = Repo.user_id!()
+
+    on_conflict =
+      Keyword.get(opts, :on_conflict, {:replace, [:reason, :weight, :origin, :updated_at]})
 
     rows =
       entries
@@ -311,7 +314,7 @@ defmodule Librarian.Vault do
 
       rows ->
         Repo.insert_all(Edge, rows,
-          on_conflict: {:replace, [:reason, :weight, :origin, :updated_at]},
+          on_conflict: on_conflict,
           conflict_target: [:source_note_id, :target_note_id, :kind]
         )
     end
@@ -337,6 +340,19 @@ defmodule Librarian.Vault do
 
     :ok
   end
+
+  @doc "The note body as HTML: markdown is rendered, clipped HTML gets its wiki-links resolved."
+  def render_note_html(%Note{clip_mode: "markdown", body: body}) when is_binary(body) do
+    body
+    |> Wikilink.to_markdown_links(wikilink_targets(body))
+    |> MDEx.to_html!()
+  end
+
+  def render_note_html(%Note{body: body}) when is_binary(body) do
+    Wikilink.to_html_links(body, wikilink_targets(body))
+  end
+
+  def render_note_html(_), do: "<p class='text-base-content/40 italic'>No content</p>"
 
   @doc """
   Resolves the `[[Title]]` links in a body to notes: a map of downcased

@@ -40,6 +40,19 @@ defmodule LibrarianWeb.VaultLiveTest do
     end
   end
 
+  describe "compose" do
+    test "opens a new canvas page rooted at the note", %{conn: conn} do
+      {:ok, note} = Vault.create_note(%{title: "Seed", body: "x"})
+      {:ok, view, _html} = live(conn, "/vault/note/#{note.id}")
+
+      view |> element("#compose-page") |> render_click()
+
+      assert [page] = Librarian.Canvas.list_pages()
+      assert page.root_note_id == note.id
+      assert_redirect(view, "/canvas/#{page.id}")
+    end
+  end
+
   describe "wikilinks" do
     test "resolved [[links]] render as anchors to the target note", %{conn: conn} do
       {:ok, target} = Vault.create_note(%{title: "OTP Supervision", body: "trees"})

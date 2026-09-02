@@ -1,0 +1,293 @@
+<Layouts.reader flash={@flash}>
+  <%= if @live_action == :index do %>
+    <div class="flex flex-col h-full overflow-hidden bg-base-100">
+      <header class="shrink-0 border-b border-base-300 bg-gradient-to-r from-primary/10 via-base-100 to-base-100 px-4 md:px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div class="flex items-center gap-2.5">
+          <div class="size-9 rounded-xl bg-primary/15 text-primary grid place-items-center">
+            <.icon name="hero-squares-plus" class="size-5" />
+          </div>
+          <div class="leading-tight">
+            <h1 class="text-base font-bold tracking-tight">Canvas</h1>
+            <p class="text-[11px] text-base-content/50">
+              {length(@pages)} {if length(@pages) == 1, do: "page", else: "pages"}
+            </p>
+          </div>
+        </div>
+        <button id="new-page" phx-click="new_page" class="press btn btn-primary btn-sm gap-1.5">
+          <.icon name="hero-plus" class="size-4" /> New page
+        </button>
+        <Layouts.nav_pills active={:canvas} class="ml-auto" />
+      </header>
+
+      <main class="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
+        <div
+          :if={@pages == []}
+          class="h-full grid place-items-center text-base-content/40 select-none"
+        >
+          <div class="text-center max-w-sm">
+            <div class="size-16 mx-auto rounded-2xl bg-base-200 grid place-items-center mb-4">
+              <.icon name="hero-squares-plus" class="size-8" />
+            </div>
+            <p class="text-lg font-medium">No pages yet</p>
+            <p class="text-sm mt-1">
+              Start a page here, or open a note in the vault and hit Compose.
+            </p>
+          </div>
+        </div>
+
+        <div :if={@pages != []} class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div
+            :for={page <- @pages}
+            id={"page-#{page.id}"}
+            class="stream-card group relative rounded-2xl border border-base-300 bg-base-100 p-4"
+          >
+            <.link navigate={"/canvas/#{page.id}"} class="block min-w-0">
+              <h2 class="font-semibold truncate pr-8">{page.title}</h2>
+              <p class="text-xs text-base-content/50 mt-1">
+                {card_count(page.doc)} {if card_count(page.doc) == 1, do: "card", else: "cards"} · {Calendar.strftime(
+                  page.updated_at,
+                  "%b %-d"
+                )}
+              </p>
+              <p
+                :if={page.root_note}
+                class="mt-3 flex items-center gap-1.5 text-xs text-base-content/60 truncate"
+              >
+                <.icon name="hero-document-text" class="size-3.5 shrink-0 text-primary" />
+                {page.root_note.title || "(Untitled)"}
+              </p>
+            </.link>
+            <button
+              phx-click="delete_page"
+              phx-value-id={page.id}
+              data-confirm="Delete this page? Notes on it stay in the vault."
+              title="Delete page"
+              class="press btn btn-ghost btn-xs btn-square absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity hover:text-error"
+            >
+              <.icon name="hero-trash" class="size-3.5" />
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  <% else %>
+    <div class="flex flex-col h-full overflow-hidden bg-base-100">
+      <header class="shrink-0 border-b border-base-300 bg-gradient-to-r from-primary/10 via-base-100 to-base-100 px-4 md:px-6 py-2.5 flex items-center gap-3">
+        <.link navigate="/canvas" class="press btn btn-ghost btn-xs rounded-full gap-1 shrink-0">
+          <.icon name="hero-arrow-left" class="size-3" /> Pages
+        </.link>
+        <form
+          id="page-title-form"
+          phx-change="rename"
+          phx-submit="rename"
+          class="min-w-0 flex-1 max-w-md"
+        >
+          <input
+            id="page-title"
+            name="title"
+            value={@page.title}
+            phx-debounce="500"
+            autocomplete="off"
+            class="w-full bg-transparent font-bold tracking-tight text-base truncate border-b border-transparent focus:border-primary/40 focus:outline-none"
+          />
+        </form>
+        <Layouts.nav_pills active={:canvas} class="ml-auto max-md:hidden" />
+      </header>
+
+      <div class="flex-1 min-h-0 relative overflow-hidden canvas-grid">
+        <div
+          id="canvas-board"
+          phx-hook="Canvas"
+          data-page-id={@page.id}
+          class="absolute inset-0 overflow-hidden touch-none select-none text-base-content"
+        >
+          <div data-viewport class="absolute top-0 left-0 origin-top-left will-change-transform">
+            <svg
+              id="canvas-edges"
+              phx-update="ignore"
+              data-edges={Jason.encode!(@doc["edges"])}
+              class="absolute top-0 left-0 overflow-visible pointer-events-none"
+              width="1"
+              height="1"
+            >
+            </svg>
+
+            <div
+              :for={node <- ordered_nodes(@doc)}
+              id={"node-#{node["id"]}"}
+              data-node-id={node["id"]}
+              data-node-type={node["type"]}
+              data-x={node["x"]}
+              data-y={node["y"]}
+              data-resize={
+                if(framed?(node, @notes[Canvas.note_id(node)]), do: "both", else: "width")
+              }
+              class={[
+                "absolute top-0 left-0 group rounded-xl transition-[box-shadow,border-color] duration-150",
+                card_chrome(node["type"])
+              ]}
+              style={card_style(node, @notes[Canvas.note_id(node)])}
+            >
+              <div
+                data-handle="move"
+                title="Drag to move"
+                class="absolute -top-1.5 inset-x-3 h-3 rounded-full cursor-grab opacity-0 group-hover:opacity-100 transition-opacity bg-base-content/15 hover:bg-primary/60 z-10"
+              >
+              </div>
+              <div
+                data-handle="resize"
+                title="Drag to resize"
+                class="absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-8 rounded-full cursor-ew-resize opacity-0 group-hover:opacity-100 transition-opacity bg-base-content/15 hover:bg-primary/60 z-10"
+              >
+              </div>
+
+              <%= case node["type"] do %>
+                <% "text" -> %>
+                  <%= if @editing_node_id == node["id"] do %>
+                    <form id={"text-form-#{node["id"]}"} phx-change="update_text" class="p-3">
+                      <input type="hidden" name="node_id" value={node["id"]} />
+                      <textarea
+                        id={"text-input-#{node["id"]}"}
+                        name="text"
+                        rows="1"
+                        placeholder="Type here…"
+                        phx-hook=".AutoGrow"
+                        phx-debounce="400"
+                        phx-blur="stop_editing"
+                        phx-keydown="stop_editing"
+                        phx-key="Escape"
+                        phx-value-id={node["id"]}
+                        class="w-full resize-none bg-transparent text-sm leading-relaxed focus:outline-none select-text"
+                      >{node["text"]}</textarea>
+                    </form>
+                  <% else %>
+                    <div
+                      data-body
+                      phx-dblclick="edit_text"
+                      phx-value-id={node["id"]}
+                      title="Double-click to edit"
+                      class="note-body p-3 text-sm leading-relaxed select-text min-h-10 cursor-text"
+                    >
+                      {text_html(node["text"])}
+                    </div>
+                  <% end %>
+                <% "file" -> %>
+                  <%= if note = @notes[Canvas.note_id(node)] do %>
+                    <div class="flex items-center gap-2 px-3 py-2 border-b border-base-300/70 shrink-0">
+                      <.icon name={clip_icon(note)} class="size-3.5 text-primary shrink-0" />
+                      <h3 class="text-sm font-semibold truncate flex-1 select-text">
+                        {note.title || "(Untitled)"}
+                      </h3>
+                      <.link
+                        navigate={"/vault/note/#{note.id}"}
+                        title="Open in vault"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-primary"
+                      >
+                        <.icon name="hero-arrow-top-right-on-square" class="size-3.5" />
+                      </.link>
+                    </div>
+                    <div data-body class="select-text flex-1 min-h-0">
+                      <%= cond do %>
+                        <% note.clip_mode == "pdf" -> %>
+                          <iframe
+                            src={Storage.url(note.storage_key)}
+                            title={note.title}
+                            class="block w-full h-full rounded-b-xl"
+                          >
+                          </iframe>
+                        <% note.clip_mode == "full_page" -> %>
+                          <iframe
+                            sandbox
+                            src={Storage.url(note.storage_key)}
+                            title={note.title}
+                            class="block w-full h-full rounded-b-xl bg-white"
+                          >
+                          </iframe>
+                        <% note.clip_mode in ~w(screenshot image) -> %>
+                          <img
+                            src={Storage.url(note.storage_key)}
+                            alt={note.title}
+                            class="block w-full rounded-b-xl"
+                          />
+                        <% true -> %>
+                          <div class="note-body p-3 text-sm leading-relaxed max-h-96 overflow-y-auto">
+                            {note_html(note)}
+                          </div>
+                      <% end %>
+                    </div>
+                  <% else %>
+                    <div class="p-3 text-sm text-base-content/40 italic">Note not found</div>
+                  <% end %>
+                <% "link" -> %>
+                  <a
+                    data-body
+                    href={node["url"]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="block p-3 select-text"
+                  >
+                    <span class="flex items-center gap-1.5 text-xs text-base-content/50">
+                      <.icon name="hero-link" class="size-3.5" /> {URI.parse(node["url"]).host}
+                    </span>
+                    <span class="block text-sm text-primary truncate mt-1">{node["url"]}</span>
+                  </a>
+                <% "group" -> %>
+                  <div class="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary/70 select-text">
+                    {node["label"]}
+                  </div>
+              <% end %>
+            </div>
+          </div>
+
+          <div data-ui class="absolute top-3 right-3 z-10 flex flex-col gap-1">
+            <button
+              data-zoom="in"
+              title="Zoom in"
+              class="btn btn-sm btn-square border border-base-300 bg-base-100/90 backdrop-blur shadow"
+            >
+              <.icon name="hero-plus" class="size-4" />
+            </button>
+            <button
+              data-zoom="out"
+              title="Zoom out"
+              class="btn btn-sm btn-square border border-base-300 bg-base-100/90 backdrop-blur shadow"
+            >
+              <.icon name="hero-minus" class="size-4" />
+            </button>
+            <button
+              data-zoom="fit"
+              title="Fit everything"
+              class="btn btn-sm btn-square border border-base-300 bg-base-100/90 backdrop-blur shadow"
+            >
+              <.icon name="hero-viewfinder-circle" class="size-4" />
+            </button>
+          </div>
+
+          <p
+            data-ui
+            class="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] text-base-content/40 pointer-events-none max-md:hidden"
+          >
+            click anywhere to type · drag a card's top edge to move · scroll to pan · ⌘ scroll to zoom
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".AutoGrow">
+      export default {
+        mounted() {
+          this.grow()
+          this.el.addEventListener("input", () => this.grow())
+          this.el.focus()
+          const end = this.el.value.length
+          this.el.setSelectionRange(end, end)
+        },
+        updated() { this.grow() },
+        grow() {
+          this.el.style.height = "auto"
+          this.el.style.height = this.el.scrollHeight + "px"
+        }
+      }
+    </script>
+  <% end %>
+</Layouts.reader>

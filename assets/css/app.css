@@ -163,3 +163,18 @@
   .prism-in { animation: none; }
   .stream-card:hover, .stat-card:hover { transform: none; }
 }
+
+/* Canvas pages: dotted paper, and the hook-drawn connector layer. */
+.canvas-grid {
+  background-image: radial-gradient(color-mix(in oklab, var(--color-base-content) 10%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.edge-line { fill: none; stroke-width: 1.75; stroke-opacity: 0.75; }
+.edge-temp { stroke-dasharray: 5 4; stroke-opacity: 0.6; }
+.edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.edge-hit.selected + .edge-line { stroke-width: 3; stroke-opacity: 1; }
+.edge-label {
+  font-size: 11px; font-weight: 600; fill: currentColor; text-anchor: middle; dominant-baseline: middle;
+  paint-order: stroke; stroke: var(--color-base-100); stroke-width: 4px; stroke-linejoin: round;
+  pointer-events: auto; cursor: pointer;
+}

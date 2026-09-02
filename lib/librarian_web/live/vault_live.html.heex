@@ -481,6 +481,14 @@
             {@selected_note.title || "(Untitled)"}
           </h1>
           <div class="flex items-center gap-1 shrink-0">
+            <button
+              id="compose-page"
+              phx-click="compose"
+              title="Open on a canvas page"
+              class="press btn btn-ghost btn-sm gap-1.5"
+            >
+              <.icon name="hero-squares-plus" class="size-4" /> Compose
+            </button>
             <button phx-click="edit_note" class="press btn btn-ghost btn-sm gap-1.5">
               <.icon name="hero-pencil" class="size-4" /> Edit
             </button>

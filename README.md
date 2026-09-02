@@ -8,6 +8,7 @@ A self-hosted personal knowledge base combining an RSS feed reader with web clip
 - **RSS Reader** — Subscribe to feeds, organize by category, track read/starred state, keyboard navigation
 - **Note Vault** — Capture web clips, create markdown notes, organize into notebooks with tags
 - **Wiki-Links & Knowledge Graph** — `[[Note Title]]` links with editor autocomplete, AI-typed connections between related notes, unlinked-mention detection, and a mind-map graph view
+- **Canvas Pages** — OneNote-style infinite pages: click anywhere to type, drop vault notes on as cards, embed clipped PDFs and web pages, and draw arrows between cards that become knowledge-graph edges (stored as [JSON Canvas](https://jsoncanvas.org))
 - **Quick Switcher** — `⌘K` jump-to-note by title from anywhere in the vault
 - **Full-Text Search** — PostgreSQL-backed search across all articles and notes
 - **Browser Extension** — One-click clipping in five modes (selection, full article, full page, screenshot, PDF); works in Safari, Chrome, and Orion

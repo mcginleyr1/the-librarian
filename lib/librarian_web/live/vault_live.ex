@@ -1,8 +1,8 @@
 defmodule LibrarianWeb.VaultLive do
   use LibrarianWeb, :live_view
 
-  alias Librarian.Vault
-  alias Librarian.Vault.{Note, Wikilink}
+  alias Librarian.{Canvas, Vault}
+  alias Librarian.Vault.Note
 
   @page_size 50
 
@@ -168,7 +168,7 @@ defmodule LibrarianWeb.VaultLive do
 
   def handle_event("set_editor_tab", %{"tab" => "preview"}, socket) do
     html =
-      render_note_body(%Note{clip_mode: "markdown", body: socket.assigns.draft_body})
+      Vault.render_note_html(%Note{clip_mode: "markdown", body: socket.assigns.draft_body})
 
     {:noreply, assign(socket, editor_tab: :preview, preview_html: html)}
   end
@@ -184,6 +184,11 @@ defmodule LibrarianWeb.VaultLive do
       |> Enum.map(&%{id: &1.id, title: &1.title})
 
     {:reply, %{suggestions: suggestions}, socket}
+  end
+
+  def handle_event("compose", _params, socket) do
+    {:ok, page} = Canvas.create_page_for_note(socket.assigns.selected_note)
+    {:noreply, push_navigate(socket, to: "/canvas/#{page.id}")}
   end
 
   def handle_event("cancel_edit", _params, socket) do
@@ -391,7 +396,7 @@ defmodule LibrarianWeb.VaultLive do
       related: Vault.related_notes(id),
       annotations: Vault.list_annotations(id),
       mentions: Vault.unlinked_mentions(note),
-      rendered_body: render_note_body(note)
+      rendered_body: Vault.render_note_html(note)
     )
   end
 
@@ -432,18 +437,6 @@ defmodule LibrarianWeb.VaultLive do
     |> assign(note_offset: offset + length(notes), more_notes?: length(notes) == @page_size)
     |> stream(:notes, notes, reset: reset)
   end
-
-  defp render_note_body(%Note{clip_mode: "markdown", body: body}) when is_binary(body) do
-    body
-    |> Wikilink.to_markdown_links(Vault.wikilink_targets(body))
-    |> MDEx.to_html!()
-  end
-
-  defp render_note_body(%Note{body: body}) when is_binary(body) do
-    Wikilink.to_html_links(body, Vault.wikilink_targets(body))
-  end
-
-  defp render_note_body(_), do: "<p class='text-base-content/40 italic'>No content</p>"
 
   defp markdown_note?(nil), do: true
   defp markdown_note?(%Note{clip_mode: mode}), do: mode == "markdown"
