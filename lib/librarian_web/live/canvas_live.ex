@@ -2,7 +2,7 @@ defmodule LibrarianWeb.CanvasLive do
   use LibrarianWeb, :live_view
 
   alias Librarian.{Canvas, Storage, Vault}
-  alias Librarian.Vault.Note
+  alias Librarian.Vault.{Edge, Note}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -12,7 +12,8 @@ defmodule LibrarianWeb.CanvasLive do
        page: nil,
        doc: Canvas.empty_doc(),
        notes: %{},
-       editing_node_id: nil
+       editing_node_id: nil,
+       edge_editor: nil
      )}
   end
 
@@ -26,7 +27,8 @@ defmodule LibrarianWeb.CanvasLive do
        doc: page.doc,
        notes: Canvas.notes_for(page.doc),
        page_title: page.title,
-       editing_node_id: nil
+       editing_node_id: nil,
+       edge_editor: nil
      )}
   end
 
@@ -105,6 +107,50 @@ defmodule LibrarianWeb.CanvasLive do
      |> assign(editing_node_id: nil)}
   end
 
+  # ---- connectors -----------------------------------------------------------
+
+  def handle_event("add_edge", %{"from" => from, "to" => to} = params, socket) do
+    edge =
+      %{"fromNode" => from, "toNode" => to}
+      |> put_side("fromSide", params["fromSide"])
+      |> put_side("toSide", params["toSide"])
+
+    {:noreply, save(socket, Canvas.add_edge(socket.assigns.doc, edge))}
+  end
+
+  def handle_event("delete_edge", %{"id" => id}, socket) do
+    {:noreply,
+     socket
+     |> save(Canvas.remove_edge(socket.assigns.doc, id))
+     |> assign(edge_editor: nil)}
+  end
+
+  def handle_event("edit_edge", %{"id" => id, "x" => x, "y" => y}, socket) do
+    editor = if Canvas.find_edge(socket.assigns.doc, id), do: %{id: id, x: x, y: y}
+    {:noreply, assign(socket, edge_editor: editor)}
+  end
+
+  def handle_event("update_edge", %{"edge_id" => id, "label" => label}, socket) do
+    attrs =
+      case String.trim(label) do
+        "" -> %{"label" => nil}
+        label -> %{"label" => label}
+      end
+
+    doc = Canvas.update_edge(socket.assigns.doc, id, attrs)
+    doc = %{doc | "edges" => Enum.map(doc["edges"], &Map.reject(&1, fn {_k, v} -> is_nil(v) end))}
+    {:noreply, socket |> save(doc) |> assign(edge_editor: nil)}
+  end
+
+  def handle_event("close_edge_editor", _params, socket) do
+    {:noreply, assign(socket, edge_editor: nil)}
+  end
+
+  defp put_side(edge, key, side) when side in ~w(top right bottom left),
+    do: Map.put(edge, key, side)
+
+  defp put_side(edge, _key, _side), do: edge
+
   defp save(socket, doc) do
     if doc == socket.assigns.doc do
       socket
@@ -154,6 +200,8 @@ defmodule LibrarianWeb.CanvasLive do
     do: "hero-globe-alt"
 
   defp clip_icon(_note), do: "hero-document-text"
+
+  defp edge_kinds, do: Edge.kinds() -- ["related"]
 
   defp card_count(%{"nodes" => nodes}), do: length(nodes)
   defp card_count(_doc), do: 0

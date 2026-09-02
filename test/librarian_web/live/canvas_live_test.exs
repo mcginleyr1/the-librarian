@@ -122,6 +122,56 @@ defmodule LibrarianWeb.CanvasLiveTest do
       assert Canvas.get_page!(page.id).doc["nodes"] == []
     end
 
+    test "connecting two note cards draws an arrow and mirrors a canvas edge", %{conn: conn} do
+      a = note!(%{title: "A"})
+      b = note!(%{title: "B"})
+      from = Canvas.note_node(a.id, 0, 0)
+      to = Canvas.note_node(b.id, 600, 0)
+
+      {:ok, page} =
+        Canvas.create_page(%{title: "Board", doc: %{"nodes" => [from, to], "edges" => []}})
+
+      {:ok, view, _html} = live(conn, "/canvas/#{page.id}")
+
+      view
+      |> element("#canvas-board")
+      |> render_hook("add_edge", %{
+        "from" => from["id"],
+        "fromSide" => "right",
+        "to" => to["id"],
+        "toSide" => "left"
+      })
+
+      assert [edge] = Canvas.get_page!(page.id).doc["edges"]
+      assert %{"fromSide" => "right", "toSide" => "left", "toEnd" => "arrow"} = edge
+      assert has_element?(view, "#canvas-edges[data-edges*='#{edge["id"]}']")
+      assert [%{edge: %{origin: "canvas", kind: "references"}}] = Vault.related_notes(a.id)
+
+      view
+      |> element("#canvas-board")
+      |> render_hook("edit_edge", %{"id" => edge["id"], "x" => 300, "y" => 40})
+
+      assert has_element?(view, "#edge-editor")
+
+      view |> element("#edge-editor button", "contradicts") |> render_click()
+      refute has_element?(view, "#edge-editor")
+      assert [%{"label" => "contradicts"}] = Canvas.get_page!(page.id).doc["edges"]
+      assert [%{edge: %{kind: "contradicts"}}] = Vault.related_notes(a.id)
+
+      render_hook(view, "edit_edge", %{"id" => edge["id"], "x" => 300, "y" => 40})
+
+      view
+      |> element("#edge-label-form")
+      |> render_submit(%{"edge_id" => edge["id"], "label" => "builds on"})
+
+      assert [%{"label" => "builds on"}] = Canvas.get_page!(page.id).doc["edges"]
+      assert [%{edge: %{kind: "references", reason: "builds on"}}] = Vault.related_notes(a.id)
+
+      view |> element("#canvas-board") |> render_hook("delete_edge", %{"id" => edge["id"]})
+      assert Canvas.get_page!(page.id).doc["edges"] == []
+      assert Vault.related_notes(a.id) == []
+    end
+
     test "renames the page", %{conn: conn} do
       {:ok, page} = Canvas.create_page(%{title: "Untitled page"})
       {:ok, view, _html} = live(conn, "/canvas/#{page.id}")

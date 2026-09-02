@@ -140,6 +140,21 @@
                 class="absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-8 rounded-full cursor-ew-resize opacity-0 group-hover:opacity-100 transition-opacity bg-base-content/15 hover:bg-primary/60 z-10"
               >
               </div>
+              <button
+                :for={side <- ~w(top right bottom left)}
+                :if={node["type"] != "group"}
+                type="button"
+                data-port={side}
+                title="Drag to connect"
+                class={[
+                  "absolute size-3 rounded-full border-2 border-primary bg-base-100 cursor-crosshair opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 hover:bg-primary z-20",
+                  side == "top" && "-top-1.5 left-1/2 -translate-x-1/2",
+                  side == "bottom" && "-bottom-1.5 left-1/2 -translate-x-1/2",
+                  side == "left" && "-left-1.5 top-1/2 -translate-y-1/2",
+                  side == "right" && "-right-1.5 top-1/2 -translate-y-1/2"
+                ]}
+              >
+              </button>
 
               <%= case node["type"] do %>
                 <% "text" -> %>
@@ -237,6 +252,62 @@
                   </div>
               <% end %>
             </div>
+          </div>
+
+          <div
+            :if={@edge_editor}
+            id="edge-editor"
+            data-ui
+            phx-click-away="close_edge_editor"
+            class="absolute z-30 w-64 rounded-xl border border-base-300 bg-base-100/95 backdrop-blur shadow-xl p-2 prism-in"
+            style={"left:#{@edge_editor.x}px;top:#{@edge_editor.y}px;transform:translate(-50%, 12px)"}
+          >
+            <div class="flex flex-wrap gap-1 mb-2">
+              <button
+                :for={kind <- edge_kinds()}
+                type="button"
+                phx-click="update_edge"
+                phx-value-edge_id={@edge_editor.id}
+                phx-value-label={kind}
+                class={[
+                  "press rounded-full px-2 py-0.5 text-[11px] font-medium border transition",
+                  if(Canvas.find_edge(@doc, @edge_editor.id)["label"] == kind,
+                    do: "bg-primary text-primary-content border-primary",
+                    else: "border-base-300 hover:border-primary/50 hover:text-primary"
+                  )
+                ]}
+              >
+                {String.replace(kind, "_", " ")}
+              </button>
+            </div>
+            <form id="edge-label-form" phx-submit="update_edge" class="flex items-center gap-1">
+              <input type="hidden" name="edge_id" value={@edge_editor.id} />
+              <input
+                id="edge-label"
+                name="label"
+                value={Canvas.find_edge(@doc, @edge_editor.id)["label"]}
+                placeholder="Label this arrow…"
+                autocomplete="off"
+                phx-mounted={JS.focus()}
+                class="flex-1 min-w-0 rounded-lg border border-base-300 bg-base-100 px-2 py-1 text-xs focus:outline-none focus:border-primary/50"
+              />
+              <button
+                type="submit"
+                title="Save label"
+                class="press btn btn-primary btn-xs btn-square"
+              >
+                <.icon name="hero-check" class="size-3.5" />
+              </button>
+              <button
+                type="button"
+                phx-click="delete_edge"
+                phx-value-id={@edge_editor.id}
+                title="Remove arrow"
+                class="press btn btn-ghost btn-xs btn-square hover:text-error"
+              >
+                <.icon name="hero-trash" class="size-3.5" />
+              </button>
+            </form>
           </div>
 
           <div data-ui class="absolute top-3 right-3 z-10 flex flex-col gap-1">

@@ -160,7 +160,9 @@ export default {
     this.el.addEventListener("pointerup", (e) => this.onPointerUp(e))
     this.el.addEventListener("pointercancel", (e) => this.onPointerUp(e))
     this.el.addEventListener("dblclick", (e) => {
-      if (!e.target.closest("[data-node-id], [data-ui], [data-edge-id]")) this.fit()
+      const edge = e.target.closest("[data-edge-id]")
+      if (edge) return this.editEdge(edge.dataset.edgeId)
+      if (!e.target.closest("[data-node-id], [data-ui]")) this.fit()
     })
   },
 
@@ -351,9 +353,19 @@ export default {
     return `M ${from.x} ${from.y} C ${from.x + from.nx * d} ${from.y + from.ny * d}, ${to.x + to.nx * d} ${to.y + to.ny * d}, ${to.x} ${to.y}`
   },
 
+  // The editor popover is server-rendered in screen space, so hand it the
+  // arrow's midpoint projected through the current view.
+  editEdge(id) {
+    const mid = this.edgeMid?.get(id)
+    if (!mid) return
+    this.select("edge", id)
+    this.pushEvent("edit_edge", {id, x: Math.round(mid.x * this.k + this.tx), y: Math.round(mid.y * this.k + this.ty)})
+  },
+
   drawEdges() {
     const layer = this.edgeLayer
     layer.replaceChildren(this.defs())
+    this.edgeMid = new Map()
     for (const edge of this.edges()) {
       const a = this.card(edge.fromNode), b = this.card(edge.toNode)
       if (!a || !b) continue
@@ -377,8 +389,9 @@ export default {
       if (edge.fromEnd === "arrow") line.setAttribute("marker-start", "url(#canvas-arrow-start)")
       layer.appendChild(line)
 
+      const mid = this.midpoint(from, to)
+      this.edgeMid.set(edge.id, mid)
       if (edge.label) {
-        const mid = this.midpoint(from, to)
         const text = document.createElementNS(SVG, "text")
         text.setAttribute("x", mid.x)
         text.setAttribute("y", mid.y)
