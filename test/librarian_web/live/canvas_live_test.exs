@@ -172,6 +172,64 @@ defmodule LibrarianWeb.CanvasLiveTest do
       assert Vault.related_notes(a.id) == []
     end
 
+    test "the drawer finds vault notes and drops them on the page", %{conn: conn} do
+      raft = note!(%{title: "Raft consensus"})
+      _other = note!(%{title: "Postgres tuning"})
+      {:ok, page} = Canvas.create_page(%{title: "Board"})
+      {:ok, view, _html} = live(conn, "/canvas/#{page.id}")
+
+      refute has_element?(view, "#vault-drawer")
+      view |> element("#drawer-toggle") |> render_click()
+      assert has_element?(view, "#vault-drawer [data-drawer-note='#{raft.id}']")
+
+      view |> element("#vault-drawer form") |> render_change(%{"q" => "raft"})
+      assert has_element?(view, "#drawer-results button", "Raft consensus")
+      refute has_element?(view, "#drawer-results button", "Postgres tuning")
+
+      view
+      |> element("#canvas-board")
+      |> render_hook("add_note_node", %{"note_id" => raft.id, "x" => 200, "y" => 120})
+
+      assert [%{"type" => "file", "x" => 200, "y" => 120}] =
+               Canvas.get_page!(page.id).doc["nodes"]
+
+      assert has_element?(view, "[data-node-type='file'] h3", "Raft consensus")
+    end
+
+    test "pasted links become link cards and text cards can be saved as notes", %{conn: conn} do
+      {:ok, page} = Canvas.create_page(%{title: "Board"})
+      {:ok, view, _html} = live(conn, "/canvas/#{page.id}")
+
+      view
+      |> element("#canvas-board")
+      |> render_hook("add_link_node", %{"url" => "https://example.com/post", "x" => 10, "y" => 10})
+
+      assert has_element?(view, "[data-node-type='link'] a[href='https://example.com/post']")
+
+      view
+      |> element("#canvas-board")
+      |> render_hook("add_text_node", %{"x" => 400, "y" => 10, "text" => "Fresh idea\n\nDetails"})
+
+      [_link, text] = Canvas.get_page!(page.id).doc["nodes"]
+      render_hook(view, "stop_editing", %{"id" => text["id"]})
+
+      view |> element("#node-#{text["id"]} button[phx-click='promote_node']") |> render_click()
+
+      assert [note] = Vault.list_notes()
+      assert note.title == "Fresh idea"
+      assert has_element?(view, "#node-#{text["id"]}[data-node-type='file'] h3", "Fresh idea")
+      assert Canvas.get_page!(page.id).root_note_id == note.id
+    end
+
+    test "text cards get [[ suggestions", %{conn: conn} do
+      _note = note!(%{title: "OTP Supervision"})
+      {:ok, page} = Canvas.create_page(%{title: "Board"})
+      {:ok, view, _html} = live(conn, "/canvas/#{page.id}")
+
+      assert render_hook(view, "wikilink_suggest", %{"q" => "otp"})
+      assert has_element?(view, "#canvas-board")
+    end
+
     test "renames the page", %{conn: conn} do
       {:ok, page} = Canvas.create_page(%{title: "Untitled page"})
       {:ok, view, _html} = live(conn, "/canvas/#{page.id}")

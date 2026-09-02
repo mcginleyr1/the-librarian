@@ -159,14 +159,20 @@
               <%= case node["type"] do %>
                 <% "text" -> %>
                   <%= if @editing_node_id == node["id"] do %>
-                    <form id={"text-form-#{node["id"]}"} phx-change="update_text" class="p-3">
+                    <form
+                      id={"text-form-#{node["id"]}"}
+                      phx-change="update_text"
+                      class="relative p-3"
+                    >
                       <input type="hidden" name="node_id" value={node["id"]} />
                       <textarea
                         id={"text-input-#{node["id"]}"}
                         name="text"
                         rows="1"
-                        placeholder="Type here…"
-                        phx-hook=".AutoGrow"
+                        placeholder="Type here…  [[ links a note"
+                        phx-hook="WikilinkComplete"
+                        data-menu={"wikilink-menu-#{node["id"]}"}
+                        phx-mounted={JS.focus()}
                         phx-debounce="400"
                         phx-blur="stop_editing"
                         phx-keydown="stop_editing"
@@ -174,6 +180,12 @@
                         phx-value-id={node["id"]}
                         class="w-full resize-none bg-transparent text-sm leading-relaxed focus:outline-none select-text"
                       >{node["text"]}</textarea>
+                      <div
+                        id={"wikilink-menu-#{node["id"]}"}
+                        phx-update="ignore"
+                        class="hidden absolute left-2 right-2 top-full z-30 rounded-xl border border-base-300 bg-base-100 shadow-xl p-1 max-h-56 overflow-y-auto"
+                      >
+                      </div>
                     </form>
                   <% else %>
                     <div
@@ -185,6 +197,15 @@
                     >
                       {text_html(node["text"])}
                     </div>
+                    <button
+                      type="button"
+                      phx-click="promote_node"
+                      phx-value-id={node["id"]}
+                      title="Save this card as a vault note"
+                      class="press absolute -top-3 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity rounded-full border border-base-300 bg-base-100 shadow px-2 py-0.5 text-[10px] font-semibold text-base-content/60 hover:text-primary hover:border-primary/50 flex items-center gap-1"
+                    >
+                      <.icon name="hero-document-plus" class="size-3" /> Save as note
+                    </button>
                   <% end %>
                 <% "file" -> %>
                   <%= if note = @notes[Canvas.note_id(node)] do %>
@@ -312,6 +333,17 @@
 
           <div data-ui class="absolute top-3 right-3 z-10 flex flex-col gap-1">
             <button
+              id="drawer-toggle"
+              phx-click="toggle_drawer"
+              title="Add a note from the vault"
+              class={[
+                "btn btn-sm btn-square border border-base-300 backdrop-blur shadow",
+                if(@drawer_open, do: "bg-primary text-primary-content", else: "bg-base-100/90")
+              ]}
+            >
+              <.icon name="hero-document-plus" class="size-4" />
+            </button>
+            <button
               data-zoom="in"
               title="Zoom in"
               class="btn btn-sm btn-square border border-base-300 bg-base-100/90 backdrop-blur shadow"
@@ -334,31 +366,76 @@
             </button>
           </div>
 
+          <aside
+            :if={@drawer_open}
+            id="vault-drawer"
+            data-ui
+            class="absolute top-3 bottom-3 right-14 z-20 w-72 max-w-[calc(100%-5rem)] flex flex-col rounded-2xl border border-base-300 bg-base-100/95 backdrop-blur shadow-xl prism-in"
+          >
+            <form
+              phx-change="drawer_search"
+              phx-submit="drawer_search"
+              class="p-2 border-b border-base-300"
+            >
+              <div class="relative">
+                <.icon
+                  name="hero-magnifying-glass"
+                  class="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none"
+                />
+                <input
+                  id="drawer-search"
+                  name="q"
+                  value={@drawer_query}
+                  placeholder="Find a note to add…"
+                  autocomplete="off"
+                  phx-debounce="150"
+                  phx-mounted={JS.focus()}
+                  class="w-full rounded-full border border-base-300 bg-base-100 pl-8 pr-3 py-1.5 text-sm placeholder:text-base-content/40 focus:outline-none focus:border-primary/50"
+                />
+              </div>
+            </form>
+            <ul id="drawer-results" class="flex-1 min-h-0 overflow-y-auto p-1">
+              <li
+                :if={@drawer_results == []}
+                class="px-3 py-6 text-center text-xs text-base-content/40"
+              >
+                No notes match
+              </li>
+              <li :for={note <- @drawer_results}>
+                <button
+                  type="button"
+                  draggable="true"
+                  data-drawer-note={note.id}
+                  title="Click to add at the centre, or drag onto the page"
+                  class="w-full text-left flex items-start gap-2 rounded-xl px-3 py-2 hover:bg-primary/10 cursor-grab active:cursor-grabbing"
+                >
+                  <.icon name={clip_icon(note)} class="size-3.5 mt-0.5 shrink-0 text-primary" />
+                  <span class="min-w-0">
+                    <span class="block text-sm font-medium truncate">{note.title}</span>
+                    <span class="block text-[11px] text-base-content/50">
+                      {Calendar.strftime(note.inserted_at, "%b %-d, %Y")}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            </ul>
+            <p class="px-3 py-2 border-t border-base-300 text-[11px] text-base-content/40">
+              Or paste an image, a link, or text anywhere on the page.
+            </p>
+          </aside>
+
+          <form id="canvas-upload" phx-change="validate_upload" class="hidden">
+            <.live_file_input upload={@uploads.images} />
+          </form>
+
           <p
             data-ui
             class="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] text-base-content/40 pointer-events-none max-md:hidden"
           >
-            click anywhere to type · drag a card's top edge to move · scroll to pan · ⌘ scroll to zoom
+            click anywhere to type · drag a card's top edge to move · drag a side dot to connect · scroll to pan · ⌘ scroll to zoom
           </p>
         </div>
       </div>
     </div>
-
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".AutoGrow">
-      export default {
-        mounted() {
-          this.grow()
-          this.el.addEventListener("input", () => this.grow())
-          this.el.focus()
-          const end = this.el.value.length
-          this.el.setSelectionRange(end, end)
-        },
-        updated() { this.grow() },
-        grow() {
-          this.el.style.height = "auto"
-          this.el.style.height = this.el.scrollHeight + "px"
-        }
-      }
-    </script>
   <% end %>
 </Layouts.reader>

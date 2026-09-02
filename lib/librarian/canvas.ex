@@ -10,6 +10,7 @@ defmodule Librarian.Canvas do
 
   alias Librarian.Canvas.Page
   alias Librarian.Repo
+  alias Librarian.Storage
   alias Librarian.Vault
   alias Librarian.Vault.Edge
   alias Librarian.Vault.Note
@@ -225,6 +226,66 @@ defmodule Librarian.Canvas do
 
       ids ->
         Repo.all(from n in Note, where: n.id in ^ids, preload: [:tags]) |> Map.new(&{&1.id, &1})
+    end
+  end
+
+  # ---- bringing things in ---------------------------------------------------
+
+  @doc """
+  Turns a text card into a vault note: the first line becomes the title, the
+  card becomes a note card, and a page without a root note adopts it.
+  """
+  def promote_text_node(%Page{} = page, node_id) do
+    with %{"type" => "text", "text" => text} = node <- find_node(page.doc, node_id),
+         {:ok, note} <-
+           Vault.create_note(%{title: first_line(text), body: text, clip_mode: "markdown"}) do
+      doc =
+        update_node(page.doc, node_id, %{
+          "type" => "file",
+          "file" => "note:#{note.id}",
+          "width" => max(node["width"], @note_width)
+        })
+
+      attrs = %{doc: doc, root_note_id: page.root_note_id || note.id}
+
+      with {:ok, doc} <- normalize_doc(doc),
+           {:ok, saved} <- page |> Page.changeset(%{attrs | doc: doc}) |> Repo.update() do
+        sync_edges()
+        {:ok, saved}
+      end
+    else
+      nil -> {:error, :not_a_text_node}
+      %{} -> {:error, :not_a_text_node}
+      error -> error
+    end
+  end
+
+  defp first_line(text) do
+    text
+    |> String.split("\n", trim: true)
+    |> List.first()
+    |> Kernel.||("Untitled")
+    |> String.replace(~r/^[#>\s*-]+/, "")
+    |> String.slice(0, 120)
+  end
+
+  @doc """
+  Stores an uploaded image as a vault note (so the file route and backup cover
+  it) and drops it on the page at the given point.
+  """
+  def attach_image(%Page{} = page, %{path: path, client_name: name}, %{x: x, y: y}) do
+    ext = name |> Path.extname() |> String.downcase()
+    key = "clips/#{System.unique_integer([:positive, :monotonic])}#{ext}"
+
+    with :ok <- Storage.put(key, File.read!(path)),
+         {:ok, note} <-
+           Vault.create_note(%{
+             title: Path.rootname(name),
+             clip_mode: "image",
+             storage_key: key
+           }) do
+      node = %{note_node(note.id, x, y) | "width" => 320}
+      save_doc(page, add_node(page.doc, node))
     end
   end
 

@@ -193,6 +193,16 @@ Full fidelity import: notes, tags, timestamps, source URLs, and attachments. Use
 mix librarian.import_evernote path/to/export.enex "Notebook Name"
 ```
 
+## Canvas Pages
+
+`/canvas` holds OneNote-style pages for composing ideas out of vault notes.
+
+- **Compose** on any vault note starts a page rooted at that note; **New page** starts blank.
+- Click anywhere to type. Blank cards disappear on blur; **Save as note** turns a text card into a markdown note in the vault. `[[` autocompletes wiki-links inside a card.
+- Drag a card's top edge to move it, the right edge to resize it, and a side dot onto another card to draw an arrow. Double-click an arrow to give it a kind (`extends`, `contradicts`, ...) or a free label. Arrows between two note cards land in `note_edges` with origin `canvas`, so they show up under a note's connections and on the knowledge map.
+- The drawer (document icon, top right) searches the vault; click a result to drop it at the centre or drag it onto the page. Pasting or dropping an image stores it as an `image` note; pasting a `/vault/note/:id` URL adds that note; any other URL becomes a link card. PDF and full-page clips render inline in a (sandboxed) iframe.
+- Pages are stored as [JSON Canvas](https://jsoncanvas.org) documents and backed up to B2 as `vault/canvas/<id>-<slug>.canvas`, with note cards pointing at the notes' markdown in the same backup, so a backup opens directly in Obsidian.
+
 ## Browser Extension
 
 The extension is a standard Manifest V3 WebExtension in `safari-extension/extension/`. It reads the configured API endpoint and lets you clip the current page into a notebook. Supports five clip modes:

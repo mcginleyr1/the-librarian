@@ -205,6 +205,56 @@ defmodule Librarian.CanvasTest do
     end
   end
 
+  describe "promote_text_node/2" do
+    test "turns a text card into a vault note and adopts it as the root" do
+      text = Canvas.text_node(40, 40, "# Cache invalidation\n\nis hard")
+
+      {:ok, page} =
+        Canvas.create_page(%{title: "Scratch", doc: %{"nodes" => [text], "edges" => []}})
+
+      assert {:ok, page} = Canvas.promote_text_node(page, text["id"])
+
+      assert [%{"id" => id, "type" => "file", "file" => "note:" <> note_id}] = page.doc["nodes"]
+      assert id == text["id"]
+      note = Vault.get_note!(String.to_integer(note_id))
+      assert note.title == "Cache invalidation"
+      assert note.body == "# Cache invalidation\n\nis hard"
+      assert note.clip_mode == "markdown"
+      assert page.root_note_id == note.id
+    end
+
+    test "keeps an existing root and mirrors connectors once both ends are notes" do
+      root = note!("Root")
+      root_node = Canvas.note_node(root.id, 0, 0)
+      text = Canvas.text_node(500, 0, "a thought")
+      edge = %{"id" => "e1", "fromNode" => root_node["id"], "toNode" => text["id"]}
+
+      {:ok, page} =
+        Canvas.create_page(%{
+          title: "Board",
+          root_note_id: root.id,
+          doc: %{"nodes" => [root_node, text], "edges" => [edge]}
+        })
+
+      assert Vault.related_notes(root.id) == []
+
+      assert {:ok, page} = Canvas.promote_text_node(page, text["id"])
+      assert page.root_note_id == root.id
+
+      assert [%{edge: %{origin: "canvas"}, note: %{title: "a thought"}}] =
+               Vault.related_notes(root.id)
+    end
+
+    test "refuses cards that are not text" do
+      note = note!("N")
+      {:ok, page} = Canvas.create_page_for_note(note)
+      [node] = page.doc["nodes"]
+
+      assert {:error, :not_a_text_node} = Canvas.promote_text_node(page, node["id"])
+      assert {:error, :not_a_text_node} = Canvas.promote_text_node(page, "missing")
+    end
+  end
+
   describe "document helpers" do
     test "remove_node/2 also drops the node's connectors" do
       a = Canvas.text_node(0, 0, "a")

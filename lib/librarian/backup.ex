@@ -1,11 +1,12 @@
 defmodule Librarian.Backup do
   require Logger
-  alias Librarian.{Repo, Storage}
+  import Ecto.Query
+
+  alias Librarian.{Canvas, Repo, Storage}
+  alias Librarian.Canvas.Page
   alias Librarian.Vault.Note
 
   def run(settings) do
-    import Ecto.Query
-
     query =
       case settings.last_backup_at do
         nil ->
@@ -24,6 +25,14 @@ defmodule Librarian.Backup do
       :erlang.garbage_collect()
     end)
 
+    pages =
+      case settings.last_backup_at do
+        nil -> from p in Page, order_by: p.id
+        since -> from p in Page, where: p.updated_at > ^since, order_by: p.id
+      end
+
+    Enum.each(Repo.all(pages), &backup_page(&1, settings))
+
     settings
     |> Ecto.Changeset.change(last_backup_at: DateTime.truncate(started_at, :second))
     |> Repo.update()
@@ -40,6 +49,33 @@ defmodule Librarian.Backup do
     slug = "#{note.id}-#{slugify(note.title)}"
     ext = Path.extname(note.storage_key || "")
     "vault/#{slugify(notebook_name)}/#{slug}/attachment#{ext}"
+  end
+
+  def page_key(page), do: "vault/canvas/#{page.id}-#{slugify(page.title)}.canvas"
+
+  @doc """
+  The page as an Obsidian-openable `.canvas` file: note cards point at the
+  note's markdown in this same backup instead of the app's `note:<id>` refs.
+  """
+  def render_canvas(page) do
+    ids = Canvas.note_ids(page.doc)
+
+    paths =
+      Repo.all(from n in Note, where: n.id in ^ids, preload: [:notebook])
+      |> Map.new(fn note ->
+        notebook_name = if note.notebook, do: note.notebook.name, else: "Unsorted"
+        {note.id, note_key(note, notebook_name)}
+      end)
+
+    nodes =
+      Enum.map(page.doc["nodes"] || [], fn node ->
+        case Canvas.note_id(node) do
+          nil -> node
+          id -> Map.put(node, "file", Map.get(paths, id, node["file"]))
+        end
+      end)
+
+    Jason.encode!(%{"nodes" => nodes, "edges" => page.doc["edges"] || []}, pretty: true)
   end
 
   def render_markdown(note, notebook_name) do
@@ -104,6 +140,12 @@ defmodule Librarian.Backup do
     after
       :erlang.garbage_collect()
     end
+  end
+
+  defp backup_page(page, settings) do
+    b2_put(page_key(page), render_canvas(page), "application/json", settings)
+  rescue
+    e -> Logger.warning("Backup: failed to back up page #{page.id}: #{inspect(e)}")
   end
 
   defp b2_put(key, data, content_type, settings) do

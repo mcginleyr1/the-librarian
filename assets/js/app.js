@@ -26,12 +26,13 @@ import {hooks as colocatedHooks} from "phoenix-colocated/librarian"
 import topbar from "../vendor/topbar"
 import MindMap from "./graph"
 import Canvas from "./canvas"
+import WikilinkComplete from "./wikilink_complete"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, MindMap, Canvas},
+  hooks: {...colocatedHooks, MindMap, Canvas, WikilinkComplete},
 })
 
 // Show progress bar on live navigation and form submits

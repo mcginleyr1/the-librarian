@@ -26,7 +26,9 @@ export default {
     this.bindPointer()
     this.bindKeys()
     this.bindUi()
+    this.bindClipboard()
     this.observeCards()
+    this.growTextareas()
     this.drawEdges()
   },
 
@@ -34,6 +36,7 @@ export default {
     this.applyTransform()
     this.applySelection()
     this.observeCards()
+    this.growTextareas()
     this.drawEdges()
   },
 
@@ -340,6 +343,88 @@ export default {
 
   observeCards() {
     for (const c of this.cards()) this.resizeObserver.observe(c)
+  },
+
+  // Text cards grow with their content, like OneNote containers.
+  growTextareas() {
+    for (const t of this.el.querySelectorAll("[data-node-id] textarea")) this.grow(t)
+  },
+
+  grow(textarea) {
+    textarea.style.height = "auto"
+    textarea.style.height = `${textarea.scrollHeight}px`
+  },
+
+  // ---- bringing things in ---------------------------------------------------
+
+  bindClipboard() {
+    this.el.addEventListener("input", (e) => {
+      if (e.target.matches("[data-node-id] textarea")) this.grow(e.target)
+    })
+
+    this.el.addEventListener("paste", (e) => {
+      if (e.target.closest("input, textarea, [contenteditable]")) return
+      const at = this.selected?.kind === "node" ? this.besideSelected() : this.center()
+      if (this.acceptFiles(e.clipboardData, at)) return e.preventDefault()
+      const text = e.clipboardData?.getData("text/plain")?.trim()
+      if (text) { e.preventDefault(); this.dropText(text, at) }
+    })
+
+    this.el.addEventListener("dragover", (e) => {
+      const types = e.dataTransfer?.types || []
+      if (types.includes("Files") || types.includes("text/x-note-id") || types.includes("text/plain")) {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = "copy"
+      }
+    })
+
+    this.el.addEventListener("drop", (e) => {
+      if (e.target.closest("[data-ui]")) return
+      e.preventDefault()
+      const at = this.toWorld(e.clientX, e.clientY)
+      if (this.acceptFiles(e.dataTransfer, at)) return
+      const noteId = e.dataTransfer.getData("text/x-note-id")
+      if (noteId) return this.pushEvent("add_note_node", {note_id: noteId, x: Math.round(at.x), y: Math.round(at.y)})
+      const text = e.dataTransfer.getData("text/plain")?.trim()
+      if (text) this.dropText(text, at)
+    })
+
+    // Drawer entries: click drops at the viewport centre, drag drops where released.
+    this.el.addEventListener("click", (e) => {
+      const entry = e.target.closest("[data-drawer-note]")
+      if (!entry) return
+      const at = this.center()
+      this.pushEvent("add_note_node", {note_id: entry.dataset.drawerNote, x: Math.round(at.x - 180), y: Math.round(at.y - 60)})
+    })
+    this.el.addEventListener("dragstart", (e) => {
+      const entry = e.target.closest("[data-drawer-note]")
+      if (!entry) return
+      e.dataTransfer.setData("text/x-note-id", entry.dataset.drawerNote)
+      e.dataTransfer.effectAllowed = "copy"
+    })
+  },
+
+  acceptFiles(transfer, at) {
+    const files = [...(transfer?.files || [])].filter((f) => f.type.startsWith("image/"))
+    if (files.length === 0) return false
+    this.pushEvent("drop_position", {x: Math.round(at.x), y: Math.round(at.y)})
+    this.upload("images", files)
+    return true
+  },
+
+  dropText(text, at) {
+    const point = {x: Math.round(at.x), y: Math.round(at.y)}
+    const note = text.match(/^https?:\/\/[^/]+\/vault\/note\/(\d+)\/?$/) || text.match(/^\/vault\/note\/(\d+)\/?$/)
+    if (note) return this.pushEvent("add_note_node", {note_id: note[1], ...point})
+    if (/^https?:\/\/\S+$/.test(text)) return this.pushEvent("add_link_node", {url: text, ...point})
+    this.pushEvent("add_text_node", {text, ...point})
+  },
+
+  besideSelected() {
+    const card = this.card(this.selected.id)
+    if (!card) return this.center()
+    const r = this.rect(card)
+    return {x: r.x + r.w + 40, y: r.y}
   },
 
   // ---- connectors -----------------------------------------------------------

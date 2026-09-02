@@ -7,13 +7,25 @@ defmodule LibrarianWeb.CanvasLive do
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
-     assign(socket,
+     socket
+     |> assign(
        pages: [],
        page: nil,
        doc: Canvas.empty_doc(),
        notes: %{},
        editing_node_id: nil,
-       edge_editor: nil
+       edge_editor: nil,
+       drawer_open: false,
+       drawer_query: "",
+       drawer_results: [],
+       pending_drop: nil
+     )
+     |> allow_upload(:images,
+       accept: ~w(.png .jpg .jpeg .gif .webp),
+       max_entries: 5,
+       max_file_size: 20_000_000,
+       auto_upload: true,
+       progress: &handle_progress/3
      )}
   end
 
@@ -107,6 +119,55 @@ defmodule LibrarianWeb.CanvasLive do
      |> assign(editing_node_id: nil)}
   end
 
+  # ---- bringing things in ---------------------------------------------------
+
+  def handle_event("toggle_drawer", _params, socket) do
+    open? = !socket.assigns.drawer_open
+    results = if open?, do: Vault.suggest_notes(socket.assigns.drawer_query, limit: 12), else: []
+    {:noreply, assign(socket, drawer_open: open?, drawer_results: results)}
+  end
+
+  def handle_event("drawer_search", %{"q" => q}, socket) do
+    {:noreply, assign(socket, drawer_query: q, drawer_results: Vault.suggest_notes(q, limit: 12))}
+  end
+
+  def handle_event("add_note_node", %{"note_id" => note_id, "x" => x, "y" => y}, socket) do
+    node = Canvas.note_node(note_id, x, y)
+
+    {:noreply,
+     socket
+     |> save(Canvas.add_node(socket.assigns.doc, node))
+     |> reload_notes()}
+  end
+
+  def handle_event("add_link_node", %{"url" => url, "x" => x, "y" => y}, socket) do
+    {:noreply, save(socket, Canvas.add_node(socket.assigns.doc, Canvas.link_node(url, x, y)))}
+  end
+
+  def handle_event("promote_node", %{"id" => id}, socket) do
+    case Canvas.promote_text_node(socket.assigns.page, id) do
+      {:ok, page} ->
+        {:noreply,
+         socket
+         |> assign(page: page, doc: page.doc, editing_node_id: nil)
+         |> reload_notes()}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Couldn't turn that card into a note")}
+    end
+  end
+
+  def handle_event("wikilink_suggest", %{"q" => q}, socket) do
+    suggestions = q |> Vault.suggest_notes(limit: 6) |> Enum.map(&%{id: &1.id, title: &1.title})
+    {:reply, %{suggestions: suggestions}, socket}
+  end
+
+  def handle_event("drop_position", %{"x" => x, "y" => y}, socket) do
+    {:noreply, assign(socket, pending_drop: %{x: x, y: y})}
+  end
+
+  def handle_event("validate_upload", _params, socket), do: {:noreply, socket}
+
   # ---- connectors -----------------------------------------------------------
 
   def handle_event("add_edge", %{"from" => from, "to" => to} = params, socket) do
@@ -150,6 +211,32 @@ defmodule LibrarianWeb.CanvasLive do
     do: Map.put(edge, key, side)
 
   defp put_side(edge, _key, _side), do: edge
+
+  defp handle_progress(:images, entry, socket) do
+    if entry.done? do
+      at = socket.assigns.pending_drop || %{x: 0, y: 0}
+
+      [page] =
+        consume_uploaded_entries(socket, :images, fn %{path: path}, entry ->
+          Canvas.attach_image(
+            socket.assigns.page,
+            %{path: path, client_name: entry.client_name},
+            at
+          )
+        end)
+
+      {:noreply,
+       socket
+       |> assign(page: page, doc: page.doc, pending_drop: nil)
+       |> reload_notes()}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp reload_notes(socket) do
+    assign(socket, notes: Canvas.notes_for(socket.assigns.doc))
+  end
 
   defp save(socket, doc) do
     if doc == socket.assigns.doc do

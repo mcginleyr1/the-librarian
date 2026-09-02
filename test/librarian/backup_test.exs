@@ -50,6 +50,44 @@ defmodule Librarian.BackupTest do
     end
   end
 
+  describe "canvas pages" do
+    test "page_key/1 names the page as an Obsidian canvas file" do
+      page = %Librarian.Canvas.Page{id: 9, title: "Q3 Reading Plan"}
+      assert Backup.page_key(page) == "vault/canvas/9-q3-reading-plan.canvas"
+    end
+
+    test "render_canvas/1 points note cards at the notes' backup paths" do
+      {:ok, notebook} =
+        Librarian.Vault.create_notebook(%{name: "Research #{System.unique_integer([:positive])}"})
+
+      {:ok, note} =
+        Librarian.Vault.create_note(%{title: "Raft", body: "x", notebook_id: notebook.id})
+
+      note_node = Librarian.Canvas.note_node(note.id, 0, 0)
+      text_node = Librarian.Canvas.text_node(400, 0, "hello")
+
+      edge = %{
+        "id" => "e1",
+        "fromNode" => note_node["id"],
+        "toNode" => text_node["id"],
+        "label" => "extends"
+      }
+
+      {:ok, page} =
+        Librarian.Canvas.create_page(%{
+          title: "Board",
+          doc: %{"nodes" => [note_node, text_node], "edges" => [edge]}
+        })
+
+      assert %{"nodes" => [file, text], "edges" => [^edge]} =
+               Jason.decode!(Backup.render_canvas(page))
+
+      assert file["file"] == Backup.note_key(note, notebook.name)
+      assert file["type"] == "file"
+      assert text == text_node
+    end
+  end
+
   describe "render_markdown/2" do
     test "renders note with all fields" do
       note = %Note{
