@@ -190,10 +190,19 @@ defmodule LibrarianWeb.CanvasLiveTest do
       |> element("#canvas-board")
       |> render_hook("add_note_node", %{"note_id" => raft.id, "x" => 200, "y" => 120})
 
-      assert [%{"type" => "file", "x" => 200, "y" => 120}] =
+      assert [%{"type" => "file", "x" => 200, "y" => 120, "height" => 120}] =
                Canvas.get_page!(page.id).doc["nodes"]
 
       assert has_element?(view, "[data-node-type='file'] h3", "Raft consensus")
+
+      pdf = note!(%{title: "Paper", clip_mode: "pdf", storage_key: "clips/2.pdf"})
+
+      view
+      |> element("#canvas-board")
+      |> render_hook("add_note_node", %{"note_id" => pdf.id, "x" => 0, "y" => 0})
+
+      assert [_raft, %{"height" => 480}] = Canvas.get_page!(page.id).doc["nodes"]
+      assert has_element?(view, "[data-node-id][style*='height:480px'] iframe")
     end
 
     test "pasted links become link cards and text cards can be saved as notes", %{conn: conn} do
@@ -228,6 +237,16 @@ defmodule LibrarianWeb.CanvasLiveTest do
 
       assert render_hook(view, "wikilink_suggest", %{"q" => "otp"})
       assert has_element?(view, "#canvas-board")
+    end
+
+    test "deletes the page from its own header", %{conn: conn} do
+      {:ok, page} = Canvas.create_page(%{title: "Scratch"})
+      {:ok, view, _html} = live(conn, "/canvas/#{page.id}")
+
+      view |> element("#delete-page") |> render_click()
+
+      assert_redirect(view, "/canvas")
+      assert Canvas.list_pages() == []
     end
 
     test "renames the page", %{conn: conn} do

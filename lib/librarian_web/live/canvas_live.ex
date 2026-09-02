@@ -4,6 +4,9 @@ defmodule LibrarianWeb.CanvasLive do
   alias Librarian.{Canvas, Storage, Vault}
   alias Librarian.Vault.{Edge, Note}
 
+  # PDFs and full-page clips render in an iframe, so they open tall enough to read.
+  @frame_height 480
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -58,7 +61,11 @@ defmodule LibrarianWeb.CanvasLive do
 
   def handle_event("delete_page", %{"id" => id}, socket) do
     {:ok, _page} = Canvas.delete_page(Canvas.get_page!(id))
-    {:noreply, assign(socket, pages: Canvas.list_pages())}
+
+    case socket.assigns.live_action do
+      :index -> {:noreply, assign(socket, pages: Canvas.list_pages())}
+      :show -> {:noreply, push_navigate(socket, to: "/canvas")}
+    end
   end
 
   # ---- page -----------------------------------------------------------------
@@ -133,6 +140,8 @@ defmodule LibrarianWeb.CanvasLive do
 
   def handle_event("add_note_node", %{"note_id" => note_id, "x" => x, "y" => y}, socket) do
     node = Canvas.note_node(note_id, x, y)
+    note = Canvas.notes_for(%{"nodes" => [node]})[Canvas.note_id(node)]
+    node = if framed?(node, note), do: Map.put(node, "height", @frame_height), else: node
 
     {:noreply,
      socket

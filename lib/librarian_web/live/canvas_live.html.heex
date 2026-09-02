@@ -62,7 +62,7 @@
               phx-value-id={page.id}
               data-confirm="Delete this page? Notes on it stay in the vault."
               title="Delete page"
-              class="press btn btn-ghost btn-xs btn-square absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity hover:text-error"
+              class="press btn btn-ghost btn-xs btn-square absolute top-2 right-2 opacity-50 group-hover:opacity-100 transition-opacity hover:text-error"
             >
               <.icon name="hero-trash" class="size-3.5" />
             </button>
@@ -92,6 +92,16 @@
           />
         </form>
         <Layouts.nav_pills active={:canvas} class="ml-auto max-md:hidden" />
+        <button
+          id="delete-page"
+          phx-click="delete_page"
+          phx-value-id={@page.id}
+          data-confirm="Delete this page? Notes on it stay in the vault."
+          title="Delete page"
+          class="press btn btn-ghost btn-xs btn-square shrink-0 text-base-content/50 hover:text-error"
+        >
+          <.icon name="hero-trash" class="size-4" />
+        </button>
       </header>
 
       <div class="flex-1 min-h-0 relative overflow-hidden canvas-grid">
@@ -147,11 +157,11 @@
                 data-port={side}
                 title="Drag to connect"
                 class={[
-                  "absolute size-3 rounded-full border-2 border-primary bg-base-100 cursor-crosshair opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 hover:bg-primary z-20",
-                  side == "top" && "-top-1.5 left-1/2 -translate-x-1/2",
-                  side == "bottom" && "-bottom-1.5 left-1/2 -translate-x-1/2",
-                  side == "left" && "-left-1.5 top-1/2 -translate-y-1/2",
-                  side == "right" && "-right-1.5 top-1/2 -translate-y-1/2"
+                  "absolute size-4 rounded-full border-2 border-primary bg-base-100 cursor-crosshair opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 hover:bg-primary z-20",
+                  side == "top" && "-top-6 left-1/2 -translate-x-1/2",
+                  side == "bottom" && "-bottom-6 left-1/2 -translate-x-1/2",
+                  side == "left" && "-left-6 top-1/2 -translate-y-1/2",
+                  side == "right" && "-right-6 top-1/2 -translate-y-1/2"
                 ]}
               >
               </button>
@@ -281,7 +291,7 @@
             data-ui
             phx-click-away="close_edge_editor"
             class="absolute z-30 w-64 rounded-xl border border-base-300 bg-base-100/95 backdrop-blur shadow-xl p-2 prism-in"
-            style={"left:#{@edge_editor.x}px;top:#{@edge_editor.y}px;transform:translate(-50%, 12px)"}
+            style={"left:calc(#{@edge_editor.x}px - 8rem);top:calc(#{@edge_editor.y}px + 12px)"}
           >
             <div class="flex flex-wrap gap-1 mb-2">
               <button
