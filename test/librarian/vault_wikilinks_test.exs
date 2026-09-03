@@ -126,6 +126,18 @@ defmodule Librarian.VaultWikilinksTest do
       assert Vault.unlinked_mentions(note) == []
     end
 
+    test "matches inflected mentions and copes with punctuation in titles" do
+      {:ok, note} = Vault.create_note(%{title: "Selective applicative functor?", body: "x"})
+
+      {:ok, mentioner} =
+        Vault.create_note(%{title: "Reading", body: "notes on selective applicative functors"})
+
+      {:ok, _} = Vault.create_note(%{title: "Other", body: "applicative selective is different"})
+
+      assert [found] = Vault.unlinked_mentions(note)
+      assert found.id == mentioner.id
+    end
+
     test "skips trivially short titles" do
       {:ok, note} = Vault.create_note(%{title: "AI", body: "x"})
       {:ok, _} = Vault.create_note(%{title: "M", body: "ai everywhere"})

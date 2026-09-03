@@ -434,11 +434,13 @@ defmodule Librarian.Vault do
 
       exclude = [note.id | connected_ids]
 
+      # Matched through the indexed search_vector (title + first 100K chars of
+      # body) rather than lower(body): scanning raw bodies detoasts the
+      # multi-megabyte imports and OOM-kills the Postgres backend.
       Repo.all(
         from n in Note,
           where: n.id not in ^exclude,
-          where:
-            fragment("position(? in lower(coalesce(?, ''))) > 0", ^String.downcase(title), n.body),
+          where: fragment("search_vector @@ phraseto_tsquery('english', ?)", ^title),
           order_by: [desc: n.inserted_at],
           limit: ^limit
       )
