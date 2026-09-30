@@ -32,7 +32,7 @@ defmodule LibrarianWeb.SettingsLive do
        # Notebooks tab
        notebooks: Vault.list_notebooks(),
        note_counts: Vault.count_notes_by_notebook(),
-       duplicate_count: Vault.duplicate_note_count(),
+       duplicate_count: 0,
        editing_notebook_id: nil,
        # Backup tab
        backup_form: backup_settings_form(),
@@ -55,8 +55,26 @@ defmodule LibrarianWeb.SettingsLive do
        accept: :any,
        max_entries: 1,
        max_file_size: 500_000_000
-     )}
+     )
+     |> count_duplicates()}
   end
+
+  # Hashing every note body takes seconds on a large vault, so the count runs
+  # off the mount path and the page renders without it.
+  defp count_duplicates(socket) do
+    if connected?(socket) do
+      start_async(socket, :duplicate_count, Repo.bind_tenant(&Vault.duplicate_note_count/0))
+    else
+      socket
+    end
+  end
+
+  @impl true
+  def handle_async(:duplicate_count, {:ok, count}, socket) do
+    {:noreply, assign(socket, duplicate_count: count)}
+  end
+
+  def handle_async(:duplicate_count, {:exit, _reason}, socket), do: {:noreply, socket}
 
   @impl true
   def handle_params(%{"tab" => tab}, _uri, socket) do
@@ -362,10 +380,11 @@ defmodule LibrarianWeb.SettingsLive do
      socket
      |> put_flash(:info, "Removed #{removed} duplicate notes — graph rebuild queued")
      |> assign(
-       duplicate_count: Vault.duplicate_note_count(),
+       duplicate_count: 0,
        notebooks: Vault.list_notebooks(),
        note_counts: Vault.count_notes_by_notebook()
-     )}
+     )
+     |> count_duplicates()}
   end
 
   # --- AI tab ---
