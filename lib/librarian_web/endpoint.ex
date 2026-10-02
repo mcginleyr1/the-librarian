@@ -42,6 +42,8 @@ defmodule LibrarianWeb.Endpoint do
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
+    # Keeps the raw body on /webhooks/* for Stripe signature verification.
+    body_reader: {LibrarianWeb.CacheBodyReader, :read_body, []},
     json_decoder: Phoenix.json_library()
 
   plug Plug.MethodOverride

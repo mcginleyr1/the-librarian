@@ -60,6 +60,28 @@ spec:
                 secretKeyRef:
                   name: librarian-secrets
                   key: google-client-secret
+            # Hosted mode (all optional): billing turns on when the Stripe
+            # secret key + monthly price id (configmap) are present.
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: librarian-secrets
+                  key: stripe-secret-key
+                  optional: true
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: librarian-secrets
+                  key: stripe-webhook-secret
+                  optional: true
+            # Platform LLM key for subscribers without their own (capped per
+            # user by PLATFORM_LLM_BUDGET_CENTS).
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: librarian-secrets
+                  key: anthropic-api-key
+                  optional: true
             # Keep in-BEAM embedding (EXLA CPU) single-threaded so a batch can't
             # peg every core and starve web requests. The container has spare
             # cores (below) for web/BEAM while embedding uses ~one.

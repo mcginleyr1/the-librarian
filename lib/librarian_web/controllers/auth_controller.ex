@@ -14,8 +14,10 @@ defmodule LibrarianWeb.AuthController do
     |> redirect(to: ~p"/login")
   end
 
+  # With billing enabled anyone may sign up (the subscription gate takes it
+  # from there); self-hosted deployments keep the email allowlist.
   def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do
-    if Accounts.allowed_email?(auth.info.email) do
+    if Librarian.Billing.enabled?() or Accounts.allowed_email?(auth.info.email) do
       case Accounts.upsert_user_from_auth(auth) do
         {:ok, user} ->
           UserAuth.log_in_user(conn, user)

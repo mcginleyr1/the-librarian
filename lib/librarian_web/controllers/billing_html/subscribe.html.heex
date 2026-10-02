@@ -1,0 +1,82 @@
+<Layouts.auth flash={@flash}>
+  <div class="w-full max-w-lg" id="subscribe-page">
+    <div class="bg-base-100 rounded-2xl shadow-xl border border-base-300 p-8 space-y-6">
+      <div class="text-center space-y-2">
+        <div class="text-4xl">📚</div>
+        <h1 class="text-2xl font-semibold tracking-tight">
+          {if @lapsed?, do: "Pick up where you left off", else: "Choose your plan"}
+        </h1>
+        <p class="text-sm text-base-content/60">
+          <%= if @lapsed? do %>
+            Your subscription is inactive. Renew below — your feeds and notes are
+            right where you left them.
+          <% else %>
+            One plan, everything included: reader, vault, web clipper, and the
+            AI-personalized stream.
+            <span :if={@trial_days > 0}>Free for the first {@trial_days} days.</span>
+          <% end %>
+        </p>
+      </div>
+
+      <div class="space-y-3">
+        <form action={~p"/subscribe/checkout"} method="post" id="checkout-monthly">
+          <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+          <input type="hidden" name="interval" value="monthly" />
+          <button
+            type="submit"
+            class="w-full flex items-center justify-between rounded-xl border border-base-300 bg-base-100 px-5 py-4 text-left shadow-sm transition-all duration-150 hover:shadow-md hover:border-primary/50 active:scale-[0.99]"
+          >
+            <span>
+              <span class="block font-semibold">Monthly</span>
+              <span class="block text-xs text-base-content/50">Cancel anytime</span>
+            </span>
+            <span class="text-lg font-bold tabular-nums">
+              ${@monthly_price}<span class="text-xs font-normal text-base-content/50">/mo</span>
+            </span>
+          </button>
+        </form>
+
+        <form
+          :if={@yearly_available?}
+          action={~p"/subscribe/checkout"}
+          method="post"
+          id="checkout-yearly"
+        >
+          <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+          <input type="hidden" name="interval" value="yearly" />
+          <button
+            type="submit"
+            class="w-full flex items-center justify-between rounded-xl border-2 border-primary/60 bg-primary/5 px-5 py-4 text-left shadow-sm transition-all duration-150 hover:shadow-md hover:border-primary active:scale-[0.99]"
+          >
+            <span>
+              <span class="block font-semibold">
+                Yearly
+                <span class="badge badge-primary badge-sm ml-1 align-middle">2 months free</span>
+              </span>
+              <span class="block text-xs text-base-content/50">Best value</span>
+            </span>
+            <span class="text-lg font-bold tabular-nums">
+              ${@yearly_price}<span class="text-xs font-normal text-base-content/50">/yr</span>
+            </span>
+          </button>
+        </form>
+      </div>
+
+      <form :if={@lapsed?} action={~p"/billing/portal"} method="post" class="text-center">
+        <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+        <button type="submit" id="manage-billing" class="link link-primary text-sm">
+          Or manage your existing billing
+        </button>
+      </form>
+
+      <p class="text-center text-xs text-base-content/40">
+        Payments are handled by Stripe. We never see your card.
+      </p>
+    </div>
+
+    <p class="mt-6 text-center text-xs text-base-content/40">
+      Signed in as {@user.email} ·
+      <.link href={~p"/logout"} method="delete" class="link">Sign out</.link>
+    </p>
+  </div>
+</Layouts.auth>

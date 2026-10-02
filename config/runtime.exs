@@ -33,6 +33,33 @@ if allowed = System.get_env("ALLOWED_EMAILS") do
          allowed |> String.split(",") |> Enum.map(&String.trim/1)
 end
 
+# Stripe billing — setting STRIPE_SECRET_KEY (+ STRIPE_PRICE_ID_MONTHLY) turns
+# on the hosted mode: public landing page, open sign-up, subscription gate.
+# Keyword configs merge, so unset envs keep the config.exs defaults.
+billing_env =
+  [
+    stripe_secret_key: System.get_env("STRIPE_SECRET_KEY"),
+    stripe_webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET"),
+    monthly_price_id: System.get_env("STRIPE_PRICE_ID_MONTHLY"),
+    yearly_price_id: System.get_env("STRIPE_PRICE_ID_YEARLY"),
+    # Display-only prices; keep in sync with the Stripe prices above.
+    monthly_price_usd: System.get_env("BILLING_MONTHLY_PRICE_USD"),
+    yearly_price_usd: System.get_env("BILLING_YEARLY_PRICE_USD")
+  ]
+  |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+
+if billing_env != [], do: config(:librarian, :billing, billing_env)
+
+# Platform Anthropic key: serves users without their own key, capped per user
+# per month so LLM spend can never outrun the subscription fee.
+if anthropic_key = System.get_env("ANTHROPIC_API_KEY") do
+  config :librarian, :platform_anthropic_api_key, anthropic_key
+end
+
+if platform_llm_budget = System.get_env("PLATFORM_LLM_BUDGET_CENTS") do
+  config :librarian, :platform_llm_budget_cents, String.to_integer(platform_llm_budget)
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

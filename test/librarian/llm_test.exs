@@ -1,5 +1,6 @@
 defmodule Librarian.LLMTest do
-  use Librarian.DataCase, async: true
+  # async: false — the platform-key tests mutate global app env.
+  use Librarian.DataCase, async: false
 
   alias Librarian.LLM
   alias Librarian.LLM.Usage
@@ -68,5 +69,41 @@ defmodule Librarian.LLMTest do
 
     record_spend!(1.0)
     assert LLM.budget_exceeded?()
+  end
+
+  describe "platform key" do
+    setup do
+      Application.put_env(:librarian, :platform_anthropic_api_key, "sk-platform")
+      on_exit(fn -> Application.put_env(:librarian, :platform_anthropic_api_key, nil) end)
+      :ok
+    end
+
+    test "serves users without their own key" do
+      assert LLM.configured?()
+    end
+
+    test "is capped by the per-user allowance, not the user's own budget setting" do
+      # A subscriber can't raise the platform allowance by editing their budget.
+      {:ok, _} = Settings.save_settings(%{"llm_monthly_budget_cents" => 100_000})
+
+      assert LLM.budget_cents() == LLM.platform_budget_cents()
+
+      record_spend!(LLM.platform_budget_cents() * 1.0)
+      assert LLM.budget_exceeded?()
+      assert {:error, :budget_exceeded} = LLM.complete("hi", %{})
+    end
+
+    test "a user's own key restores their own budget" do
+      {:ok, _} =
+        Settings.save_settings(%{
+          "anthropic_api_key" => "sk-own",
+          "llm_monthly_budget_cents" => 5000
+        })
+
+      assert LLM.budget_cents() == 5000
+
+      record_spend!(LLM.platform_budget_cents() * 1.0)
+      refute LLM.budget_exceeded?()
+    end
   end
 end

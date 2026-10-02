@@ -1,7 +1,7 @@
 defmodule LibrarianWeb.SettingsLive do
   use LibrarianWeb, :live_view
 
-  alias Librarian.{LLM, Reader, Vault, Settings}
+  alias Librarian.{Billing, LLM, Reader, Vault, Settings}
   alias Librarian.Reader.{Feed, FeedDiscoverer}
   alias Librarian.Workers.{FetchFeedWorker, BackupWorker, BuildGraphWorker}
   alias Librarian.Repo
@@ -40,7 +40,11 @@ defmodule LibrarianWeb.SettingsLive do
        ai_key_hint: api_key_hint(Settings.get_settings()),
        ai_budget_dollars: budget_dollars(Settings.get_settings()),
        llm_spend_cents: LLM.month_spend_cents(),
-       api_token: nil
+       platform_ai_budget_cents: LLM.platform_budget_cents(),
+       api_token: nil,
+       # Billing tab (only shown when Stripe billing is enabled)
+       billing_enabled: Billing.enabled?(),
+       billing_comped: Billing.comped?(socket.assigns.current_user)
      )
      |> allow_upload(:opml,
        accept: :any,
@@ -455,6 +459,19 @@ defmodule LibrarianWeb.SettingsLive do
   defp tab_class(current, tab) do
     if current == tab, do: "tab tab-active", else: "tab"
   end
+
+  defp subscription_status_label(nil), do: "No subscription"
+  defp subscription_status_label("trialing"), do: "Free trial"
+  defp subscription_status_label("active"), do: "Active"
+  defp subscription_status_label("past_due"), do: "Payment problem"
+  defp subscription_status_label("canceled"), do: "Canceled"
+  defp subscription_status_label(other), do: Phoenix.Naming.humanize(other)
+
+  defp subscription_status_badge(status) when status in ["trialing", "active"],
+    do: "badge-success"
+
+  defp subscription_status_badge("past_due"), do: "badge-warning"
+  defp subscription_status_badge(_), do: "badge-ghost"
 
   defp backup_settings_form do
     settings = Settings.get_settings() || %Settings{id: 1}

@@ -1,8 +1,16 @@
 defmodule Librarian.LLM do
   @moduledoc """
-  Minimal Anthropic Messages API client. The API key and a monthly budget
-  live in Settings; every call is gated on month-to-date spend and recorded
-  in llm_usage, so a runaway job stops at the budget instead of the bill.
+  Minimal Anthropic Messages API client. Every call is gated on the current
+  tenant's month-to-date spend and recorded in llm_usage, so a runaway job
+  stops at the budget instead of the bill.
+
+  The key comes from one of two places, and the budget follows the key:
+
+  - the user's own key in Settings → their own configurable monthly budget
+    (self-hosted / bring-your-own-key), or
+  - the platform key (`ANTHROPIC_API_KEY`) → the fixed per-user allowance
+    included in the subscription (`PLATFORM_LLM_BUDGET_CENTS`), so a heavy
+    user can never spend more of our tokens than their fee covers.
   """
 
   import Ecto.Query
@@ -29,11 +37,24 @@ defmodule Librarian.LLM do
   end
 
   def budget_exceeded? do
-    month_spend_cents() >= Settings.llm_monthly_budget_cents()
+    month_spend_cents() >= budget_cents()
+  end
+
+  @doc "The monthly budget for the current tenant, based on whose key is in play."
+  def budget_cents do
+    case api_key() do
+      {:ok, _key, :platform} -> platform_budget_cents()
+      _ -> Settings.llm_monthly_budget_cents()
+    end
+  end
+
+  @doc "Per-user monthly allowance (in cents) when running on the platform key."
+  def platform_budget_cents do
+    Application.get_env(:librarian, :platform_llm_budget_cents, 500)
   end
 
   def configured? do
-    match?({:ok, _}, api_key())
+    match?({:ok, _, _}, api_key())
   end
 
   @doc """
@@ -44,7 +65,7 @@ defmodule Librarian.LLM do
     purpose = Keyword.get(opts, :purpose, "general")
     max_tokens = Keyword.get(opts, :max_tokens, 16_000)
 
-    with {:ok, key} <- api_key(),
+    with {:ok, key, _source} <- api_key(),
          :ok <- check_budget() do
       request(key, prompt, schema, max_tokens, purpose)
     end
@@ -52,7 +73,14 @@ defmodule Librarian.LLM do
 
   defp api_key do
     case Settings.get_settings() do
-      %{anthropic_api_key: key} when is_binary(key) and key != "" -> {:ok, key}
+      %{anthropic_api_key: key} when is_binary(key) and key != "" -> {:ok, key, :user}
+      _ -> platform_api_key()
+    end
+  end
+
+  defp platform_api_key do
+    case Application.get_env(:librarian, :platform_anthropic_api_key) do
+      key when is_binary(key) and key != "" -> {:ok, key, :platform}
       _ -> {:error, :no_api_key}
     end
   end

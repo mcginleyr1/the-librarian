@@ -10,6 +10,7 @@ defmodule LibrarianWeb.UserAuth do
   import Phoenix.Controller
 
   alias Librarian.Accounts
+  alias Librarian.Billing
 
   def log_in_user(conn, user) do
     return_to = get_session(conn, :user_return_to)
@@ -46,8 +47,15 @@ defmodule LibrarianWeb.UserAuth do
   def require_api_token(conn, _opts) do
     with ["Bearer " <> token] <- get_req_header(conn, "authorization"),
          user when not is_nil(user) <- Accounts.get_user_by_api_token(token) do
-      Librarian.Repo.put_user_id(user.id)
-      assign(conn, :current_user, user)
+      if Billing.active?(user) do
+        Librarian.Repo.put_user_id(user.id)
+        assign(conn, :current_user, user)
+      else
+        conn
+        |> put_status(402)
+        |> Phoenix.Controller.json(%{error: "subscription_required"})
+        |> halt()
+      end
     else
       _ ->
         conn
@@ -68,11 +76,46 @@ defmodule LibrarianWeb.UserAuth do
     end
   end
 
+  @doc """
+  Gates the app on an active subscription. A no-op when billing is disabled
+  (self-hosted) or the user is comped; otherwise unsubscribed users land on
+  the subscribe page. Must run after `require_authenticated_user`.
+  """
+  def require_active_subscription(conn, _opts) do
+    if Billing.active?(conn.assigns[:current_user]) do
+      conn
+    else
+      conn
+      |> redirect(to: ~p"/subscribe")
+      |> halt()
+    end
+  end
+
+  @doc "Operator-only routes (Oban dashboard). Admins are the allowlisted emails."
+  def require_admin(conn, _opts) do
+    if Accounts.admin?(conn.assigns[:current_user]) do
+      conn
+    else
+      conn
+      |> put_flash(:error, "You don't have access to that page.")
+      |> redirect(to: ~p"/")
+      |> halt()
+    end
+  end
+
   def redirect_if_authenticated(conn, _opts) do
     if conn.assigns[:current_user] do
       conn |> redirect(to: ~p"/") |> halt()
     else
       conn
+    end
+  end
+
+  def on_mount(:ensure_subscribed, _params, _session, socket) do
+    if Billing.active?(socket.assigns.current_user) do
+      {:cont, socket}
+    else
+      {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/subscribe")}
     end
   end
 
