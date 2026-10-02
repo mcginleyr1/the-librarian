@@ -20,10 +20,11 @@ defmodule Librarian.Vault do
     notebook_id = Keyword.get(opts, :notebook_id)
     limit = Keyword.get(opts, :limit, 50)
     offset = Keyword.get(opts, :offset, 0)
+    order_by = Keyword.get(opts, :order_by, :inserted_at)
 
     query =
       from n in Note,
-        order_by: [desc: n.inserted_at],
+        order_by: [desc: field(n, ^order_by)],
         limit: ^limit,
         offset: ^offset,
         preload: [:notebook, :tags]
@@ -40,14 +41,16 @@ defmodule Librarian.Vault do
 
   def get_note!(id), do: Repo.get!(Note, id) |> Repo.preload([:notebook, :tags])
 
-  def create_note(attrs, tags \\ []) do
-    tag_records = find_or_create_tags(tags)
+  def get_note(id), do: Note |> Repo.get(id) |> Repo.preload([:notebook, :tags])
 
-    result =
-      %Note{user_id: Repo.user_id!()}
-      |> Note.changeset(attrs)
-      |> Ecto.Changeset.put_assoc(:tags, tag_records)
-      |> Repo.insert()
+  def create_note(attrs, tags \\ []) do
+    %Note{user_id: Repo.user_id!()}
+    |> Note.changeset(attrs)
+    |> insert_note(tags)
+  end
+
+  defp insert_note(changeset, tags) do
+    result = changeset |> put_tags(tags) |> Repo.insert()
 
     with {:ok, note} <- result do
       sync_wikilink_edges(note)
@@ -55,6 +58,50 @@ defmodule Librarian.Vault do
     end
 
     result
+  end
+
+  @doc """
+  Upserts a note from an editor client, keyed by the client's stable
+  `external_id`. A note already carrying that `external_id` is updated;
+  otherwise `id` (when given) adopts an existing note that has no external id
+  yet; otherwise a new markdown note is created. Non-nil `tags` replace the
+  note's tags. Saves go through the same paths (and side effects) as
+  `create_note/2` and `update_note/3`.
+
+  Returns `{:ok, note, created?}`, `{:error, :not_found}` (unknown `id`),
+  `{:error, :external_id_conflict}` (`id` is already synced under another
+  external id) or `{:error, changeset}`.
+  """
+  def sync_note(external_id, attrs, tags \\ nil, id \\ nil) do
+    with {:ok, note} <- sync_target(external_id, id) do
+      created? = is_nil(note.id)
+      changeset = note |> Note.sync_changeset(attrs, external_id) |> validate_own_notebook()
+      result = if created?, do: insert_note(changeset, tags), else: save_note(changeset, tags)
+      with {:ok, saved} <- result, do: {:ok, saved, created?}
+    end
+  end
+
+  defp sync_target(external_id, id) do
+    case Repo.get_by(Note, external_id: external_id) || (id && Repo.get(Note, id)) do
+      nil when is_nil(id) ->
+        {:ok, %Note{user_id: Repo.user_id!()}}
+
+      nil ->
+        {:error, :not_found}
+
+      %Note{external_id: ext} = note when ext in [nil, external_id] ->
+        {:ok, Repo.preload(note, :tags)}
+
+      %Note{} ->
+        {:error, :external_id_conflict}
+    end
+  end
+
+  # notebook_id is a plain FK, so only a tenant-scoped lookup proves ownership.
+  defp validate_own_notebook(changeset) do
+    Ecto.Changeset.validate_change(changeset, :notebook_id, fn :notebook_id, id ->
+      if Repo.get(Notebook, id), do: [], else: [notebook_id: "does not exist"]
+    end)
   end
 
   def create_note_from_import(attrs, tags) do
@@ -168,22 +215,19 @@ defmodule Librarian.Vault do
   end
 
   def update_note(%Note{} = note, attrs, tags \\ nil) do
-    changeset = Note.changeset(note, attrs)
+    note |> Note.changeset(attrs) |> save_note(tags)
+  end
 
-    changeset =
-      if tags do
-        tag_records = find_or_create_tags(tags)
-        Ecto.Changeset.put_assoc(changeset, :tags, tag_records)
-      else
-        changeset
-      end
-
-    result = Repo.update(changeset)
-
+  defp save_note(changeset, tags) do
+    result = changeset |> put_tags(tags) |> Repo.update()
     with {:ok, updated} <- result, do: sync_wikilink_edges(updated)
-
     result
   end
+
+  defp put_tags(changeset, nil), do: changeset
+
+  defp put_tags(changeset, tags),
+    do: Ecto.Changeset.put_assoc(changeset, :tags, find_or_create_tags(tags))
 
   def delete_note(%Note{} = note), do: Repo.delete(note)
 
@@ -252,6 +296,24 @@ defmodule Librarian.Vault do
       end
 
     Repo.all(query)
+  end
+
+  @doc """
+  Note lookup for editor clients: title-substring matches first, then
+  full-text hits, de-duplicated, with notebook and tags preloaded. A blank
+  query returns the most recently updated notes.
+  """
+  def find_notes(query_str, limit) do
+    case String.trim(query_str) do
+      "" ->
+        list_notes(limit: limit, order_by: :updated_at)
+
+      q ->
+        (suggest_notes(q, limit: limit) ++ search(q, limit: limit))
+        |> Enum.uniq_by(& &1.id)
+        |> Enum.take(limit)
+        |> Repo.preload([:notebook, :tags])
+    end
   end
 
   def count_notes_by_notebook do
@@ -592,9 +654,11 @@ defmodule Librarian.Vault do
   defp find_or_create_tags(names) when is_list(names) do
     user_id = Repo.user_id!()
 
-    Enum.map(names, fn name ->
-      name = String.downcase(String.trim(name))
-
+    names
+    |> Enum.map(&(&1 |> String.trim() |> String.downcase()))
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+    |> Enum.map(fn name ->
       Repo.insert!(%Tag{name: name, user_id: user_id},
         on_conflict: :nothing,
         conflict_target: [:user_id, :name]

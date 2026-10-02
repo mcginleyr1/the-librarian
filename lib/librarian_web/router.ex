@@ -100,5 +100,8 @@ defmodule LibrarianWeb.Router do
 
     post "/clips", ClipController, :create
     get "/notebooks", NotebookApiController, :index
+    get "/notes", NoteApiController, :index
+    get "/notes/:id", NoteApiController, :show
+    put "/notes/external/:external_id", NoteApiController, :sync
   end
 end

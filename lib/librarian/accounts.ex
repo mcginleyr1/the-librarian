@@ -6,8 +6,8 @@ defmodule Librarian.Accounts do
   def get_user(id), do: Repo.get(User, id)
 
   @doc """
-  The deployment owner: the first (in practice, only) user. All data created
-  by background workers and the clip API is bound to this user.
+  The deployment owner: the first user. CLI import and release tasks write
+  into this user's vault; API requests act as their token's user.
   """
   def owner! do
     Repo.one!(from u in User, order_by: [asc: u.id], limit: 1)

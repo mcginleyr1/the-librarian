@@ -41,9 +41,9 @@ Visit [http://localhost:4000](http://localhost:4000).
 
 ### Authentication
 
-All browser routes require signing in with Google (the `/api` clip endpoints used
-by the Safari extension authenticate with per-user bearer tokens). Who may sign
-in depends on the mode:
+All browser routes require signing in with Google (the `/api` endpoints
+authenticate with per-user bearer tokens instead — see [API](#api)). Who may
+sign in depends on the mode:
 
 - **Self-hosted (default):** only emails on the allowlist may sign in — it
   defaults to `owner@example.com` and is overridden with the comma-separated
@@ -52,8 +52,11 @@ in depends on the mode:
   active subscription (see Billing below). Allowlisted emails are the operator
   accounts: comped (no subscription) and admin (Oban dashboard).
 
-Data created by background workers and the clip API is bound to the deployment
-owner (the first user).
+API requests act as the user whose bearer token they carry, and background
+workers run per user. Only the CLI and release tasks — imports
+(`mix librarian.import_*`, `just import-*`, `just k-import-*`),
+`just k-dedupe-notes`, and `Librarian.Release.prepare_for_stream/1` — act on
+the deployment owner's vault (the first user).
 
 Creating the OAuth client is a one-time manual step — Google exposes no API or
 gcloud command for standard OAuth 2.0 web clients. `just oauth-setup` walks it:
@@ -74,6 +77,75 @@ mix precommit         # Compile, format check, and test (run before committing)
 just import-opml FILE.opml
 just import-evernote FILE.enex [NOTEBOOK_NAME]
 just import-evernote-dir DIR/
+```
+
+## API
+
+JSON endpoints under `/api` authenticate with the per-user bearer token from
+Settings → API Access (`Authorization: Bearer <token>`) and act as that
+token's user: every read and write is scoped to their vault, so another user's
+note looks exactly like a missing one. A missing or unknown token gets `401
+{"error":"unauthorized"}`; a lapsed subscription (hosted mode) gets `402
+{"error":"subscription_required"}`.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/clips` | Clip a page into the vault (browser extension) |
+| `GET /api/notebooks` | List notebooks: `[{"id", "name"}]` |
+| `GET /api/notes?q=&limit=` | Search or list notes (editor clients) |
+| `GET /api/notes/:id` | Read one note with its body and connections |
+| `PUT /api/notes/external/:external_id` | Upsert a note by the client's stable id |
+
+### Notes API (editor sync)
+
+Lets an editor client — e.g. an Emacs org-roam package — search, read, and
+two-way sync vault notes. Errors are `404 {"error":"not_found"}`,
+`409 {"error":"external_id_conflict"}`, and
+`422 {"status":"error","errors":{"<field>":["<message>"]}}`.
+
+Notes are listed as summaries:
+
+```json
+{"id": 42, "title": "Raft", "external_id": "5b9e…", "notebook": {"id": 3, "name": "Roam"},
+ "tags": ["distsys"], "clip_mode": "markdown", "source_url": null,
+ "updated_at": "2026-10-02T12:00:00Z"}
+```
+
+`external_id` is `null` for notes never synced, and `notebook` is `null` for
+unfiled notes.
+
+**`GET /api/notes?q=<text>&limit=<n>`** → `{"notes": [summary]}`. With a
+non-blank `q`, title-substring matches come first, then full-text matches,
+de-duplicated; without one, the most recently updated notes. `limit` defaults
+to 50, max 200.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" "https://$HOST/api/notes?q=raft&limit=20"
+```
+
+**`GET /api/notes/:id`** → `{"note": summary + {"body", "body_format",
+"related"}}`. `body_format` is `"markdown"` for markdown notes and `"html"` for
+clips; `related` lists connected notes as `{"id", "title", "kind",
+"direction"}` with `direction` `"outgoing"` or `"incoming"`.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" "https://$HOST/api/notes/42"
+```
+
+**`PUT /api/notes/external/:external_id`** upserts a markdown note keyed by
+the client's stable id (e.g. an org-roam node UUID). Body: `title`
+(required), `body`, `tags` (when present, replaces the note's tags),
+`notebook_id` (must be one of the user's notebooks), `source_url`, and `id`.
+A note already synced under `external_id` is updated; otherwise `id` adopts
+an existing, never-synced note (`409` if it is synced under a different id,
+`404` if unknown); otherwise a new note is created. Saves rebuild the note's
+`[[wiki-link]]` edges just like editing in the app. Returns
+`{"status":"ok","id":42,"created":true}`.
+
+```bash
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"title":"Raft","body":"See [[Paxos]]","tags":["distsys"]}' \
+  "https://$HOST/api/notes/external/5b9e1c7a-0d1f-4c33-9a57-2f0f3e1b8d11"
 ```
 
 ## Billing (hosted, multi-user mode)
