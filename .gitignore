@@ -35,4 +35,10 @@ librarian-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# macOS Finder metadata and per-user Xcode state.
+.DS_Store
+xcuserdata/
+
+# Xcode build output.
+/safari-extension/TheLibrarian/build/
 
