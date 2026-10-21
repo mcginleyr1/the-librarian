@@ -42,3 +42,6 @@ xcuserdata/
 # Xcode build output.
 /safari-extension/TheLibrarian/build/
 
+# Local Apple signing identity (see Signing.xcconfig.example).
+/safari-extension/TheLibrarian/Signing.xcconfig
+
