@@ -495,4 +495,14 @@ defmodule LibrarianWeb.CoreComponents do
   def translate_errors(errors, field) when is_list(errors) do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
   end
+
+  @doc """
+  The URL if it is http(s), else nil. Article, clip and canvas URLs come from
+  third parties; a `javascript:` URL in an href would run in this origin.
+  """
+  def safe_url(url) when is_binary(url) do
+    if URI.parse(url).scheme in ["http", "https"], do: url
+  end
+
+  def safe_url(_url), do: nil
 end

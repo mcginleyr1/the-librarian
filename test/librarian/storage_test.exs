@@ -43,4 +43,21 @@ defmodule Librarian.StorageTest do
   test "url/1 returns the serving path" do
     assert Storage.url("notes/abc.pdf") == "/vault/files/notes/abc.pdf"
   end
+
+  test "keys that escape the storage root are refused", %{tmp: tmp} do
+    for key <- ["../escape.txt", "attachments/1_a/../../../escape.txt", "/etc/passwd"] do
+      assert_raise ArgumentError, fn -> Storage.put(key, "x") end
+      assert_raise ArgumentError, fn -> Storage.get(key) end
+    end
+
+    refute File.exists?(Path.join(Path.dirname(tmp), "escape.txt"))
+  end
+
+  test "unique_key/2 is random and namespaced by tenant" do
+    Librarian.Repo.put_user_id(42)
+    a = Storage.unique_key("clips", ".pdf")
+
+    assert a =~ ~r"^clips/42/[0-9a-f-]{36}\.pdf$"
+    refute a == Storage.unique_key("clips", ".pdf")
+  end
 end

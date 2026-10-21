@@ -1,4 +1,10 @@
 defmodule Librarian.Release do
+  @moduledoc """
+  Tasks for a running release via `bin/librarian eval`: migrations and
+  rollback, note dedupe, demo seeding, stream preparation, and OPML/Evernote
+  imports into the owner's account.
+  """
+
   @app :librarian
 
   import Ecto.Query

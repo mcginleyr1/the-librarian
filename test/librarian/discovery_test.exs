@@ -125,11 +125,19 @@ defmodule Librarian.DiscoveryTest do
     Stream.record_interaction(article.id, :like)
 
     {:ok, _} = Librarian.Settings.save_settings(%{discovery_paused: true})
-    assert Librarian.Workers.DiscoverSourcesWorker.perform(%Oban.Job{}) == :ok
+
+    assert Librarian.Workers.DiscoverSourcesWorker.perform(%Oban.Job{
+             args: %{"user_id" => Repo.user_id!()}
+           }) == :ok
+
     assert Discovery.list_candidates() == []
 
     {:ok, _} = Librarian.Settings.save_settings(%{discovery_paused: false})
-    Librarian.Workers.DiscoverSourcesWorker.perform(%Oban.Job{})
+
+    Librarian.Workers.DiscoverSourcesWorker.perform(%Oban.Job{
+      args: %{"user_id" => Repo.user_id!()}
+    })
+
     assert Discovery.list_candidates() != []
   end
 end

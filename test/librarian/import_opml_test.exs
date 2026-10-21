@@ -114,25 +114,26 @@ defmodule Librarian.ImportOpmlTest do
   defp extract_feeds_with_category(outlines, category) do
     Enum.flat_map(outlines, fn
       {"outline", attrs, _children} ->
-        case get_attr(attrs, "xmlUrl") do
-          nil ->
+        feed_url = get_attr(attrs, "xmlUrl")
+
+        cond do
+          is_nil(feed_url) ->
             []
 
-          feed_url ->
-            if String.contains?(feed_url, "feedly.com/f/alert") do
-              []
-            else
-              title = get_attr(attrs, "title") || get_attr(attrs, "text") || feed_url
+          String.contains?(feed_url, "feedly.com/f/alert") ->
+            []
 
-              [
-                %{
-                  title: title,
-                  feed_url: feed_url,
-                  site_url: get_attr(attrs, "htmlUrl"),
-                  category: category
-                }
-              ]
-            end
+          true ->
+            title = get_attr(attrs, "title") || get_attr(attrs, "text") || feed_url
+
+            [
+              %{
+                title: title,
+                feed_url: feed_url,
+                site_url: get_attr(attrs, "htmlUrl"),
+                category: category
+              }
+            ]
         end
 
       _ ->

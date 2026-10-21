@@ -219,7 +219,7 @@ defmodule Librarian.ReaderTest do
   describe "update_feed/2" do
     test "changing feed_url updates it and clears conditional-GET state" do
       {:ok, feed} = Reader.create_feed(feed_attrs())
-      {:ok, feed} = Reader.update_feed(feed, %{etag: "abc", last_modified: "yesterday"})
+      feed = feed |> Feed.changeset(%{etag: "abc", last_modified: "yesterday"}) |> Repo.update!()
 
       {:ok, updated} =
         Reader.update_feed(feed, %{
@@ -233,9 +233,40 @@ defmodule Librarian.ReaderTest do
       assert updated.last_modified == nil
     end
 
+    test "ignores fetcher-owned fields from user input" do
+      {:ok, feed} = Reader.create_feed(feed_attrs())
+
+      {:ok, updated} =
+        Reader.update_feed(feed, %{
+          "etag" => "forged",
+          "last_fetched_at" => "2099-01-01T00:00:00Z"
+        })
+
+      assert updated.etag == nil
+      assert updated.last_fetched_at == nil
+    end
+
+    test "a feed shared with other subscribers can't be repointed or renamed" do
+      {:ok, feed} = Reader.create_feed(feed_attrs())
+
+      other =
+        Repo.insert!(%Librarian.Accounts.User{email: "sub-#{System.unique_integer()}@x.test"})
+
+      Repo.with_user(other.id, fn -> {:ok, _} = Reader.create_feed(feed_attrs()) end)
+
+      assert {:error, changeset} =
+               Reader.update_feed(feed, %{"feed_url" => "https://evil.test/rss"})
+
+      assert %{feed_url: ["is shared with other subscribers"]} = errors_on(changeset)
+      assert Repo.get!(Feed, feed.id).feed_url == feed.feed_url
+
+      # Per-user fields stay editable.
+      assert {:ok, %{category: "Mine"}} = Reader.update_feed(feed, %{"category" => "Mine"})
+    end
+
     test "keeps conditional-GET state when the URL is unchanged" do
       {:ok, feed} = Reader.create_feed(feed_attrs())
-      {:ok, feed} = Reader.update_feed(feed, %{etag: "abc"})
+      feed = feed |> Feed.changeset(%{etag: "abc"}) |> Repo.update!()
 
       {:ok, updated} = Reader.update_feed(feed, %{"title" => "Renamed"})
       assert updated.etag == "abc"
@@ -388,6 +419,16 @@ defmodule Librarian.ReaderTest do
       assert Repo.get(Article, ctx.old_unread.id)
       assert Repo.get(Article, ctx.recent_read.id)
       refute Repo.get(Article, ctx.old_read.id)
+    end
+
+    test "keeps articles another subscriber hasn't read yet", ctx do
+      other =
+        Repo.insert!(%Librarian.Accounts.User{email: "gc-#{System.unique_integer()}@x.test"})
+
+      Repo.with_user(other.id, fn -> {:ok, _} = Reader.create_feed(feed_attrs()) end)
+
+      assert Reader.delete_stale_read_articles(30) == 0
+      assert Repo.get(Article, ctx.old_read.id)
     end
   end
 

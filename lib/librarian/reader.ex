@@ -1,9 +1,18 @@
 defmodule Librarian.Reader do
+  @moduledoc """
+  The feed reader. Feeds and articles are a shared catalog; subscriptions and
+  read/star state are per user, and user-facing queries are scoped to the
+  current tenant (see `Librarian.Repo`).
+  """
+
   import Ecto.Query
   alias Librarian.Repo
   alias Librarian.Reader.{Feed, Article, ReadState, Subscription}
 
   @subscription_keys ~w(category active origin trust_score like_rate discovered_at)a
+  # Catalog fields a subscriber may edit; fetch state (etag, last_fetched_at,
+  # fetch_error, ...) belongs to the fetcher alone.
+  @editable_feed_keys ~w(title feed_url fetch_interval_minutes)a
 
   # --- tenant-scoped building blocks ---
   #
@@ -21,6 +30,20 @@ defmodule Librarian.Reader do
   defp my_read_states do
     from rs in ReadState, where: rs.user_id == ^Repo.user_id!()
   end
+
+  @doc """
+  Articles the user may see: those in feeds they subscribe to, plus anything
+  they starred (stars survive unsubscribing). Articles are a shared catalog, so
+  every lookup by a client-supplied id must go through this.
+  """
+  def visible_articles do
+    subscribed = from s in my_subscriptions(), select: s.feed_id
+    starred = from rs in my_read_states(), where: rs.starred == true, select: rs.article_id
+
+    from a in Article, where: a.feed_id in subquery(subscribed) or a.id in subquery(starred)
+  end
+
+  def visible_article?(id), do: Repo.exists?(from a in visible_articles(), where: a.id == ^id)
 
   # The user's view of the catalog: their subscriptions joined to the feed,
   # with the per-user fields merged onto the feed's virtual fields.
@@ -80,9 +103,7 @@ defmodule Librarian.Reader do
     end)
   end
 
-  def get_feed!(id) do
-    Repo.one(from [s, f] in subscribed_feeds(), where: f.id == ^id) || Repo.get!(Feed, id)
-  end
+  def get_feed!(id), do: Repo.one!(from [s, f] in subscribed_feeds(), where: f.id == ^id)
 
   @doc "Subscribes the current user to a feed, creating the catalog row if it's new."
   def create_feed(attrs) do
@@ -107,13 +128,14 @@ defmodule Librarian.Reader do
 
     Repo.transaction(fn ->
       with {:ok, feed} <- upsert_catalog_feed(feed_attrs),
-           {:ok, sub} <-
+           {:ok, %Subscription{id: id} = sub} when not is_nil(id) <-
              insert_subscription(feed, sub_attrs,
                on_conflict: :nothing,
                conflict_target: [:user_id, :feed_id]
              ) do
-        if sub.id, do: merge_subscription(feed, sub), else: %Feed{id: nil}
+        merge_subscription(feed, sub)
       else
+        {:ok, %Subscription{id: nil}} -> %Feed{id: nil}
         {:error, changeset} -> Repo.rollback(changeset)
       end
     end)
@@ -161,7 +183,7 @@ defmodule Librarian.Reader do
     unread_only = Keyword.get(opts, :unread_only, false)
 
     query =
-      from a in Article,
+      from a in visible_articles(),
         where: a.feed_id == ^feed_id,
         order_by: [desc: a.fetched_at, desc: a.published_at],
         limit: ^limit,
@@ -182,7 +204,7 @@ defmodule Librarian.Reader do
   end
 
   def get_article!(id) do
-    Repo.get!(Article, id) |> Repo.preload([:feed, :read_state])
+    Repo.one!(from a in visible_articles(), where: a.id == ^id, preload: [:feed, :read_state])
   end
 
   def list_all_unread_articles(opts \\ []) do
@@ -279,7 +301,7 @@ defmodule Librarian.Reader do
 
   def unread_count(feed_id) do
     Repo.one(
-      from a in Article,
+      from a in visible_articles(),
         left_join: rs in subquery(my_read_states()),
         on: rs.article_id == a.id,
         where: a.feed_id == ^feed_id and (is_nil(rs.id) or is_nil(rs.read_at)),
@@ -369,26 +391,27 @@ defmodule Librarian.Reader do
   def mark_read(article_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    %ReadState{user_id: Repo.user_id!()}
-    |> ReadState.changeset(%{article_id: article_id, read_at: now})
-    |> Repo.insert(
-      on_conflict: [set: [read_at: now]],
-      conflict_target: [:user_id, :article_id]
-    )
+    upsert_read_state(article_id, %{read_at: now}, set: [read_at: now])
   end
 
   def mark_starred(article_id, starred) do
-    %ReadState{user_id: Repo.user_id!()}
-    |> ReadState.changeset(%{article_id: article_id, starred: starred})
-    |> Repo.insert(
-      on_conflict: [set: [starred: starred]],
-      conflict_target: [:user_id, :article_id]
-    )
+    upsert_read_state(article_id, %{starred: starred}, set: [starred: starred])
+  end
+
+  defp upsert_read_state(article_id, attrs, on_conflict) do
+    if visible_article?(article_id) do
+      %ReadState{user_id: Repo.user_id!()}
+      |> ReadState.changeset(Map.put(attrs, :article_id, article_id))
+      |> Repo.insert(on_conflict: on_conflict, conflict_target: [:user_id, :article_id])
+    else
+      {:error, :not_found}
+    end
   end
 
   @doc """
-  Catalog GC (cross-tenant by design): deletes old articles that at least one
-  user has read and that nobody has starred.
+  Catalog GC (cross-tenant by design): deletes old articles that every current
+  subscriber of their feed has read and that nobody has starred — one user's
+  reading never removes an article someone else hasn't seen.
   """
   def delete_stale_read_articles(days_old \\ 365) do
     cutoff = DateTime.utc_now() |> DateTime.add(-days_old, :day) |> DateTime.truncate(:second)
@@ -406,7 +429,19 @@ defmodule Librarian.Reader do
           as: :article,
           where: a.published_at < ^cutoff,
           where: exists(read),
-          where: not exists(starred)
+          where: not exists(starred),
+          where:
+            fragment(
+              """
+              NOT EXISTS (
+                SELECT 1 FROM subscriptions s
+                WHERE s.feed_id = ? AND NOT EXISTS (
+                  SELECT 1 FROM read_states rs
+                  WHERE rs.article_id = ? AND rs.user_id = s.user_id AND rs.read_at IS NOT NULL))
+              """,
+              a.feed_id,
+              a.id
+            )
         )
       )
 
@@ -419,10 +454,14 @@ defmodule Librarian.Reader do
 
   @doc """
   Updates the user's view of a feed. Per-user attrs (category, active, …) land
-  on the subscription; the rest update the shared catalog row.
+  on the subscription; `@editable_feed_keys` update the shared catalog row,
+  which only a feed's sole subscriber may change. Anything else is ignored.
   """
   def update_feed(%Feed{} = feed, attrs) do
     {sub_attrs, feed_attrs} = split_attrs(attrs)
+
+    feed_attrs =
+      Map.take(feed_attrs, @editable_feed_keys ++ Enum.map(@editable_feed_keys, &to_string/1))
 
     with {:ok, updated} <- apply_feed_update(feed, feed_attrs),
          {:ok, sub} <- apply_subscription_update(feed, sub_attrs) do
@@ -431,7 +470,26 @@ defmodule Librarian.Reader do
   end
 
   defp apply_feed_update(feed, attrs) when map_size(attrs) == 0, do: {:ok, feed}
-  defp apply_feed_update(feed, attrs), do: feed |> Feed.changeset(attrs) |> Repo.update()
+
+  defp apply_feed_update(feed, attrs) do
+    changeset = Feed.changeset(feed, attrs)
+
+    if changeset.changes != %{} and shared_feed?(feed) do
+      {:error,
+       Enum.reduce(Map.keys(changeset.changes), changeset, fn field, cs ->
+         Ecto.Changeset.add_error(cs, field, "is shared with other subscribers")
+       end)}
+    else
+      Repo.update(changeset)
+    end
+  end
+
+  defp shared_feed?(feed) do
+    others =
+      from s in Subscription, where: s.feed_id == ^feed.id and s.user_id != ^Repo.user_id!()
+
+    Repo.exists?(others, skip_tenant: true)
+  end
 
   defp apply_subscription_update(_feed, attrs) when map_size(attrs) == 0, do: {:ok, nil}
 
@@ -447,15 +505,18 @@ defmodule Librarian.Reader do
   when no subscriber remains.
   """
   def delete_feed(%Feed{} = feed) do
-    Repo.delete_all(from s in Subscription, where: s.feed_id == ^feed.id)
+    # The row lock makes a concurrent subscribe wait on (then fail against) the
+    # deleted feed instead of being cascaded away with it.
+    Repo.transaction(fn ->
+      Repo.one!(from f in Feed, where: f.id == ^feed.id, lock: "FOR UPDATE")
+      Repo.delete_all(from s in Subscription, where: s.feed_id == ^feed.id)
 
-    remaining = from s in Subscription, where: s.feed_id == ^feed.id
+      remaining = from s in Subscription, where: s.feed_id == ^feed.id
 
-    if Repo.exists?(remaining, skip_tenant: true) do
-      {:ok, feed}
-    else
-      Repo.delete(%Feed{id: feed.id})
-    end
+      if Repo.exists?(remaining, skip_tenant: true),
+        do: feed,
+        else: Repo.delete!(%Feed{id: feed.id})
+    end)
   end
 
   @doc """

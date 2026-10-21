@@ -57,11 +57,19 @@ RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 ENV LANG="en_US.UTF-8" LANGUAGE="en_US:en" LC_ALL="en_US.UTF-8"
 
 WORKDIR /app
-RUN chown nobody /app
 
-ENV MIX_ENV="prod" PHX_SERVER="true"
+# The release stays root-owned and read-only to the runtime user, so a write
+# bug in the app can't rewrite its own code. `nobody` only writes to /data
+# (STORAGE_PATH + the Bumblebee model cache; owned by nobody so a fresh
+# docker volume mounted there inherits that) and /tmp (RELEASE_TMP holds the
+# runtime sys.config the release writes at boot; crash dumps go there too).
+RUN mkdir /data && chown nobody:nogroup /data
 
-COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/librarian ./
+ENV MIX_ENV="prod" PHX_SERVER="true" \
+    RELEASE_TMP="/tmp" ERL_CRASH_DUMP="/tmp/erl_crash.dump" \
+    BUMBLEBEE_CACHE_DIR="/data/bumblebee"
+
+COPY --from=builder /app/_build/${MIX_ENV}/rel/librarian ./
 
 USER nobody
 

@@ -150,7 +150,7 @@ defmodule LibrarianWeb.VaultLive do
 
   def handle_event("edit_note", _params, socket) do
     note = socket.assigns.selected_note
-    tags_str = note.tags |> Enum.map(& &1.name) |> Enum.join(", ")
+    tags_str = Enum.map_join(note.tags, ", ", & &1.name)
 
     {:noreply,
      assign(socket,

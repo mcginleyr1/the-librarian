@@ -5,7 +5,24 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
+// The API token is a bearer credential: only send it over https, or plain http
+// to this machine (local dev). Same check as popup.js.
+function apiUrlProblem(raw) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch (_) {
+    return "API URL is not a valid URL";
+  }
+  const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol === "https:" || (url.protocol === "http:" && loopback)) return null;
+  return "API URL must start with https:// (http:// only for localhost)";
+}
+
 async function handleClip({ mode, title, notebookId, tags, apiUrl, apiToken }) {
+  const problem = apiUrlProblem(apiUrl);
+  if (problem) throw new Error(problem);
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const sourceUrl = tab.url;
   const finalTitle = title || tab.title;

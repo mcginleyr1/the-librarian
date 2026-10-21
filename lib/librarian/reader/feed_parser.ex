@@ -71,7 +71,10 @@ defmodule Librarian.Reader.FeedParser do
         |> Enum.filter(&is_binary/1)
         |> Enum.join()
         |> String.trim()
-        |> then(fn s -> if s == "", do: nil, else: s end)
+        |> case do
+          "" -> nil
+          s -> s
+        end
 
       _ ->
         nil
@@ -82,8 +85,18 @@ defmodule Librarian.Reader.FeedParser do
     children
     |> Enum.find_value(fn
       {"link", attrs, _} ->
-        rel = Enum.find_value(attrs, fn {k, v} -> if k == "rel", do: v end)
-        href = Enum.find_value(attrs, fn {k, v} -> if k == "href", do: v end)
+        rel =
+          Enum.find_value(attrs, fn
+            {"rel", v} -> v
+            _ -> nil
+          end)
+
+        href =
+          Enum.find_value(attrs, fn
+            {"href", v} -> v
+            _ -> nil
+          end)
+
         if rel in [nil, "alternate"] and href, do: href
 
       _ ->
@@ -107,21 +120,25 @@ defmodule Librarian.Reader.FeedParser do
   end
 
   defp parse_rfc2822(str) do
-    # :httpd_util expects "GMT" not "+0000" — normalize common UTC offsets
-    normalized =
-      str
-      |> String.trim()
-      |> String.replace(~r/\s*[+-]00:?00\s*$/, " GMT")
-      |> String.to_charlist()
+    # :httpd_util wants "GMT" and silently ignores numeric offsets ("-0500"
+    # parses as if it were GMT), so strip the offset and apply it ourselves.
+    {base, offset_seconds} =
+      case Regex.run(~r/^(.*?)\s*([+-])(\d{2}):?(\d{2})$/, String.trim(str)) do
+        [_, base, sign, hh, mm] ->
+          seconds = (String.to_integer(hh) * 60 + String.to_integer(mm)) * 60
+          {base <> " GMT", if(sign == "-", do: -seconds, else: seconds)}
 
-    case :httpd_util.convert_request_date(normalized) do
+        nil ->
+          {String.trim(str), 0}
+      end
+
+    case :httpd_util.convert_request_date(String.to_charlist(base)) do
       :bad_date ->
         {:error, :bad_date}
 
       {{y, mo, d}, {h, mi, s}} ->
-        case NaiveDateTime.new(y, mo, d, h, mi, s) do
-          {:ok, ndt} -> {:ok, DateTime.from_naive!(ndt, "Etc/UTC")}
-          err -> err
+        with {:ok, ndt} <- NaiveDateTime.new(y, mo, d, h, mi, s) do
+          {:ok, ndt |> DateTime.from_naive!("Etc/UTC") |> DateTime.add(-offset_seconds)}
         end
     end
   rescue

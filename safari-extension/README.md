@@ -44,12 +44,28 @@ Finder) into `/Applications` and launch it once from there.
 
 Open the extension popup on any page and fill in:
 
-- **API URL** — e.g. `https://librarian.<your-tailnet>.ts.net`
+- **API URL** — e.g. `https://librarian.<your-tailnet>.ts.net`. Must be
+  `https://`; plain `http://` is accepted only for `localhost` /
+  `127.0.0.1` (local dev). The popup refuses to save any other URL and never
+  sends the token to it, showing an error instead.
 - **API Token** — generate/reveal it in the app under
   **Settings → AI → API Access**. The clip API rejects requests without it.
 
 Regenerating the token in Settings invalidates the old one immediately —
 paste the new value into the popup afterwards.
+
+## Permissions
+
+- `activeTab` + `scripting` — read the selection / article / page and take
+  the screenshot of the tab you clicked the toolbar button on.
+- `storage` — remembers the API URL and token.
+- Access to all websites (`<all_urls>`) — PDF mode downloads the current
+  page's URL, and the popup calls your server's API; both are cross-origin
+  requests from the extension. Safari asks per site; you can limit it to
+  "Ask" in Safari → Settings → Extensions.
+
+The extension does not request the `tabs` permission (it only reads the
+URL/title of the tab you clip, which `activeTab` covers).
 
 ## iOS
 

@@ -7,13 +7,12 @@ defmodule LibrarianWeb.SettingsNotebooksLiveTest do
 
   setup :log_in_owner
 
-  test "the duplicate-note warning arrives after mount and clears after dedupe", %{conn: conn} do
+  test "the duplicate-note warning shows once counted and clears after dedupe", %{conn: conn} do
     {:ok, _} = Vault.create_note(%{title: "Twin", body: "same"})
     {:ok, _} = Vault.create_note(%{title: "Twin", body: "same"})
 
     {:ok, view, _html} = live(conn, "/settings?tab=notebooks")
 
-    refute has_element?(view, "button[phx-click='dedupe_notes']")
     render_async(view)
     assert has_element?(view, "button[phx-click='dedupe_notes']")
 

@@ -19,7 +19,7 @@ defmodule Librarian.Workers.BuildGraphWorkerTest do
     a = embedded_note!("first")
     _b = embedded_note!("second")
 
-    assert :ok = perform_job(BuildGraphWorker, %{})
+    assert :ok = perform_job(BuildGraphWorker, %{user_id: Repo.user_id!()})
 
     assert [%{edge: %{origin: "similarity"}}] = Vault.related_notes(a.id)
     refute_enqueued(worker: ExtractEdgesWorker)
@@ -29,7 +29,7 @@ defmodule Librarian.Workers.BuildGraphWorkerTest do
     {:ok, _} = Settings.save_settings(%{"anthropic_api_key" => "sk-test"})
     note = embedded_note!("first")
 
-    assert :ok = perform_job(BuildGraphWorker, %{})
+    assert :ok = perform_job(BuildGraphWorker, %{user_id: Repo.user_id!()})
 
     assert_enqueued(worker: ExtractEdgesWorker, args: %{note_id: note.id})
   end

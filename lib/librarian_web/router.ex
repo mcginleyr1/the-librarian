@@ -11,17 +11,13 @@ defmodule LibrarianWeb.Router do
     plug :put_root_layout, html: {LibrarianWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :put_content_security_policy
     plug :fetch_current_user
   end
 
   pipeline :api do
     plug :accepts, ["json"]
     plug :require_api_token
-  end
-
-  # Stripe calls this; auth is the webhook signature, not a session.
-  pipeline :webhooks do
-    plug :accepts, ["json"]
   end
 
   scope "/", LibrarianWeb do
@@ -33,8 +29,6 @@ defmodule LibrarianWeb.Router do
   scope "/", LibrarianWeb do
     pipe_through :browser
 
-    # Landing page when billing is enabled; otherwise redirects (in → /reader,
-    # out → /login).
     get "/", PageController, :home
 
     get "/auth/:provider", AuthController, :request
@@ -42,26 +36,13 @@ defmodule LibrarianWeb.Router do
     delete "/logout", AuthController, :delete
   end
 
-  # Signed in but not necessarily subscribed: the plan picker must stay
-  # reachable, otherwise unsubscribed users could never pay.
   scope "/", LibrarianWeb do
     pipe_through [:browser, :require_authenticated_user]
-
-    get "/subscribe", BillingController, :subscribe
-    post "/subscribe/checkout", BillingController, :checkout
-    post "/billing/portal", BillingController, :portal
-  end
-
-  scope "/", LibrarianWeb do
-    pipe_through [:browser, :require_authenticated_user, :require_active_subscription]
 
     get "/vault/files/*key", VaultFilesController, :show
 
     live_session :require_authenticated_user,
-      on_mount: [
-        {LibrarianWeb.UserAuth, :ensure_authenticated},
-        {LibrarianWeb.UserAuth, :ensure_subscribed}
-      ] do
+      on_mount: [{LibrarianWeb.UserAuth, :ensure_authenticated}] do
       live "/foryou", ForYouLive, :index
       live "/dashboard", DashboardLive, :index
 
@@ -86,13 +67,7 @@ defmodule LibrarianWeb.Router do
   scope "/" do
     pipe_through [:browser, :require_authenticated_user, :require_admin]
 
-    oban_dashboard("/oban")
-  end
-
-  scope "/webhooks", LibrarianWeb do
-    pipe_through :webhooks
-
-    post "/stripe", StripeWebhookController, :create
+    oban_dashboard("/oban", csp_nonce_assign_key: :csp_nonce)
   end
 
   scope "/api", LibrarianWeb do
@@ -103,5 +78,36 @@ defmodule LibrarianWeb.Router do
     get "/notes", NoteApiController, :index
     get "/notes/:id", NoteApiController, :show
     put "/notes/external/:external_id", NoteApiController, :sync
+  end
+
+  # Feed articles and clips are third-party HTML rendered in this origin; the
+  # policy is the backstop if sanitizing ever misses. Scripts load only from
+  # this origin or carry the per-request nonce (root layout theme script,
+  # Oban Web). Images, media and embeds may come from anywhere.
+  defp put_content_security_policy(conn, _opts) do
+    nonce = 18 |> :crypto.strong_rand_bytes() |> Base.encode64()
+
+    policy =
+      Enum.join(
+        [
+          "default-src 'self'",
+          "script-src 'self' 'nonce-#{nonce}'",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src * data: blob:",
+          "media-src * data: blob:",
+          "font-src 'self' data:",
+          "connect-src 'self' ws://#{conn.host}:* wss://#{conn.host}:*",
+          "frame-src 'self' https:",
+          "object-src 'none'",
+          "base-uri 'self'",
+          "form-action 'self'",
+          "frame-ancestors 'self'"
+        ],
+        "; "
+      )
+
+    conn
+    |> assign(:csp_nonce, nonce)
+    |> put_resp_header("content-security-policy", policy)
   end
 end

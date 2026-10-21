@@ -49,6 +49,15 @@ defmodule LibrarianWeb.VaultFilesControllerTest do
     refute get_resp_header(pdf, "content-security-policy") |> Enum.join() =~ "sandbox"
   end
 
+  test "uploaded SVG and images are sandboxed too", %{conn: conn} do
+    :ok = Storage.put("clips/9.svg", ~s|<svg onload="alert(1)"/>|)
+    {:ok, _} = Vault.create_note(%{title: "Drawing", storage_key: "clips/9.svg"}, [])
+
+    svg = get(conn, "/vault/files/clips/9.svg")
+    assert response(svg, 200)
+    assert get_resp_header(svg, "content-security-policy") == ["sandbox"]
+  end
+
   test "404s for keys no note points at, even for the owner", %{conn: conn} do
     :ok = Storage.put("clips/orphan.png", <<1>>)
     assert conn |> get("/vault/files/clips/orphan.png") |> response(404)

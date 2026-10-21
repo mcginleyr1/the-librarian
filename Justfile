@@ -3,8 +3,11 @@
 
 IMAGE := "the-librarian"
 NAMESPACE := "librarian"
-# Internal registry the cluster pulls from (exposed via the Tailscale operator)
-TS_REGISTRY := "registry.<your-tailnet>.ts.net:5000"
+# Internal registry (exposed via the Tailscale operator): images are built and
+# pushed under this name. Override with LIBRARIAN_REGISTRY for your own tailnet.
+TS_REGISTRY := env_var_or_default("LIBRARIAN_REGISTRY", "registry.<your-tailnet>.ts.net:5000")
+# The same registry as the cluster node pulls the app from (k8s/app.yaml)
+CLUSTER_REGISTRY := "localhost:31500"
 # kubectl context hosting the librarian cluster — pinned so `just deploy` works
 # from any machine on the tailnet, not just one whose current context happens to
 # be right. Override per-machine with LIBRARIAN_KUBE_CONTEXT if needed.
@@ -22,8 +25,12 @@ db-up:
     docker compose up -d postgres
     docker compose exec postgres sh -c 'until pg_isready -U postgres; do sleep 1; done'
 
+# Needs SECRET_KEY_BASE and ALLOWED_EMAILS exported, e.g.
+# `export SECRET_KEY_BASE=$(mix phx.gen.secret) ALLOWED_EMAILS=you@example.com`
 # Start full stack in docker (postgres + built app image) — for local image testing only
 up:
+    @: "${SECRET_KEY_BASE:?export SECRET_KEY_BASE first (generate with: mix phx.gen.secret)}"
+    @: "${ALLOWED_EMAILS:?export ALLOWED_EMAILS first (comma-separated sign-in allowlist)}"
     docker compose --profile full up --build
 
 # Stop everything
@@ -64,14 +71,27 @@ db-reset: db-up
 
 # ── Build & Push ──────────────────────────────────────────────────────────────
 
+# Immutable image tag: the jj working-copy commit id (it changes whenever the
+# source does), else git HEAD on a clean tree, else a UTC timestamp
+_image-tag:
+    @jj log -r @ --no-graph -T 'commit_id.short(12)' 2>/dev/null || (git diff --quiet HEAD 2>/dev/null && git rev-parse --short=12 HEAD) || date -u +%Y%m%d%H%M%S
+
+# Tag of the app image currently deployed; the current source tag only when
+# nothing is deployed yet (any other kubectl error aborts)
+_deployed-tag:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    image=$({{KUBECTL}} get deploy/librarian -n {{NAMESPACE}} --ignore-not-found -o jsonpath='{.spec.template.spec.containers[0].image}')
+    if [ -n "$image" ]; then echo "${image##*:}"; else just _image-tag; fi
+
 # Build the app image for the cluster (arm64 node), tagged for the internal registry
-docker-build:
-    docker build --platform linux/arm64 -t {{TS_REGISTRY}}/{{IMAGE}}:latest .
+docker-build TAG=`just _image-tag`:
+    docker build --platform linux/arm64 -t {{TS_REGISTRY}}/{{IMAGE}}:{{TAG}} .
 
 # Build and push the app image to the INTERNAL registry the cluster pulls from.
 # Uses registry-push (port-forward) because the Tailscale LB mangles large pushes.
-docker-push: docker-build
-    just registry-push {{IMAGE}}:latest
+docker-push TAG=`just _image-tag`: (docker-build TAG)
+    just registry-push {{IMAGE}}:{{TAG}}
 
 # Push an already-built image to the INTERNAL registry, bypassing the Tailscale
 # LoadBalancer proxy (it mangles large layer uploads; GET/pull works, push doesn't).
@@ -96,19 +116,34 @@ registry-push IMG:
 k-namespace:
     {{KUBECTL}} apply -f k8s/namespace.yaml
 
+# Pins the app image (both containers) to TAG: by default the tag already
+# running, so applying config changes never swaps the image — `just deploy` does.
 # Apply all k8s manifests via kustomize (does not apply secrets.yaml — use k-create-secrets)
-k-apply:
-    {{KUBECTL}} apply -k k8s/
+k-apply TAG=`just _deployed-tag`:
+    {{KUBECTL}} kustomize k8s/ | sed 's|image: {{CLUSTER_REGISTRY}}/{{IMAGE}}$|&:{{TAG}}|' | {{KUBECTL}} apply -f -
 
-# Create secrets — run after k-namespace, before k-apply
-k-create-secrets db-password google-client-id google-client-secret: k-namespace
+# Reads LIBRARIAN_DB_PASSWORD, GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from
+# the environment, prompting for any that are unset (never CLI args: those end
+# up in shell history and `ps`). Re-running keeps the existing secret-key-base,
+# so live sessions survive.
+# Create/update secrets — run after k-namespace, before k-apply
+k-create-secrets: k-namespace
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ask() {
+        [ -n "${!1:-}" ] || { read -rsp "$1: " "$1"; echo >&2; }
+        [ -n "${!1}" ] || { echo "$1 is required" >&2; exit 1; }
+    }
+    ask LIBRARIAN_DB_PASSWORD; ask GOOGLE_CLIENT_ID; ask GOOGLE_CLIENT_SECRET
+    secret_key_base=$({{KUBECTL}} get secret librarian-secrets -n {{NAMESPACE}} -o jsonpath='{.data.secret-key-base}' 2>/dev/null | base64 -d || true)
+    [ -n "$secret_key_base" ] || secret_key_base=$(mix phx.gen.secret)
     {{KUBECTL}} create secret generic librarian-secrets -n {{NAMESPACE}} \
         --from-literal=db-user=librarian \
-        --from-literal=db-password={{db-password}} \
-        --from-literal=secret-key-base=$(mix phx.gen.secret) \
-        --from-literal=database-url=ecto://librarian:{{db-password}}@postgres:5432/librarian_prod \
-        --from-literal=google-client-id={{google-client-id}} \
-        --from-literal=google-client-secret={{google-client-secret}} \
+        --from-file=db-password=<(printf %s "$LIBRARIAN_DB_PASSWORD") \
+        --from-file=secret-key-base=<(printf %s "$secret_key_base") \
+        --from-file=database-url=<(printf 'ecto://librarian:%s@postgres:5432/librarian_prod' "$LIBRARIAN_DB_PASSWORD") \
+        --from-file=google-client-id=<(printf %s "$GOOGLE_CLIENT_ID") \
+        --from-file=google-client-secret=<(printf %s "$GOOGLE_CLIENT_SECRET") \
         --save-config --dry-run=client -o yaml | {{KUBECTL}} apply -f -
 
 # Google has no API/gcloud command for standard OAuth 2.0 web clients (the IAP
@@ -120,7 +155,7 @@ oauth-setup:
     @echo "1. Consent screen (once per project):"
     @echo "     https://console.cloud.google.com/auth/branding"
     @echo "     - User type: External   - App name: The Librarian"
-    @echo "     - Add yourself as a test user (Audience page): owner@example.com"
+    @echo "     - Add your Google account as a test user (Audience page)"
     @echo "       (or hit 'Publish app' so the token doesn't expire after 7 days)"
     @echo ""
     @echo "2. Create the client:"
@@ -128,20 +163,30 @@ oauth-setup:
     @echo "     - Application type: Web application   - Name: librarian"
     @echo "     - Authorized redirect URIs:"
     @echo "         http://localhost:4000/auth/google/callback"
-    @echo "         https://librarian.<your-tailnet>.ts.net/auth/google/callback"
+    @echo "         https://{{env_var_or_default("PHX_HOST", "<your-host>")}}/auth/google/callback"
     @echo ""
-    @echo "3. Store the credentials:"
-    @echo "     just k-set-google-oauth <client-id> <client-secret>   # existing cluster"
-    @echo "     just k-create-secrets <db-pw> <client-id> <client-secret>   # first deploy"
-    @echo "     export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...   # local dev"
+    @echo "3. Store the credentials (both recipes prompt for unset values; or set"
+    @echo "   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in the environment):"
+    @echo "     just k-set-google-oauth   # existing cluster"
+    @echo "     just k-create-secrets     # first deploy (also asks for LIBRARIAN_DB_PASSWORD)"
+    @echo "   Local dev reads GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET from the environment."
     open "https://console.cloud.google.com/auth/clients/create"
 
-# Patch Google OAuth creds into the existing secret (does NOT touch db password
-# or secret-key-base — unlike k-create-secrets, which regenerates the key base
-# and would invalidate live sessions), then restart the app to pick them up.
-k-set-google-oauth google-client-id google-client-secret:
-    {{KUBECTL}} patch secret librarian-secrets -n {{NAMESPACE}} --type merge \
-        -p '{"stringData":{"google-client-id":"{{google-client-id}}","google-client-secret":"{{google-client-secret}}"}}'
+# Reads GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET from the environment, prompting
+# for any that are unset (never CLI args: those end up in shell history and `ps`).
+# Patch Google OAuth creds into the secret (keeps db password + secret-key-base), restart app
+k-set-google-oauth:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ask() {
+        [ -n "${!1:-}" ] || { read -rsp "$1: " "$1"; echo >&2; }
+        [ -n "${!1}" ] || { echo "$1 is required" >&2; exit 1; }
+    }
+    ask GOOGLE_CLIENT_ID; ask GOOGLE_CLIENT_SECRET
+    b64() { printf %s "$1" | base64 | tr -d '\n'; }
+    {{KUBECTL}} patch secret librarian-secrets -n {{NAMESPACE}} --type merge --patch-file <(
+        printf '{"data":{"google-client-id":"%s","google-client-secret":"%s"}}' \
+            "$(b64 "$GOOGLE_CLIENT_ID")" "$(b64 "$GOOGLE_CLIENT_SECRET")")
     {{KUBECTL}} rollout restart deployment/librarian -n {{NAMESPACE}}
     {{KUBECTL}} rollout status deployment/librarian -n {{NAMESPACE}}
 
@@ -163,7 +208,7 @@ k-logs:
 k-status:
     {{KUBECTL}} get pods,pvc,ingress -n {{NAMESPACE}}
 
-# Rolling restart (picks up new image)
+# Restart the app pod on its current image (`just deploy` ships a new one)
 k-restart:
     {{KUBECTL}} rollout restart -n {{NAMESPACE}} deploy/librarian
 
@@ -172,10 +217,16 @@ k-shell:
     {{KUBECTL}} exec -n {{NAMESPACE}} -it deploy/librarian -- \
         /app/bin/librarian remote
 
-# Full deploy: build, push, restart
-deploy: docker-push k-restart
+# First deploy: run `just docker-push` then `just k-apply` instead (creates
+# everything on that tag); `deploy` needs the Deployment to exist.
+# Full deploy: build, push, pin app + migrate init container to the new tag (rolls the pod)
+deploy TAG=`just _image-tag`: (docker-push TAG)
+    {{KUBECTL}} set image -n {{NAMESPACE}} deploy/librarian \
+        migrate={{CLUSTER_REGISTRY}}/{{IMAGE}}:{{TAG}} librarian={{CLUSTER_REGISTRY}}/{{IMAGE}}:{{TAG}}
+    {{KUBECTL}} rollout status -n {{NAMESPACE}} deploy/librarian --timeout=10m
 
-# Delete all resources (destructive!)
+# Delete all resources, including the Postgres and data PVCs (destructive!)
+[confirm("Delete the librarian namespace and ALL its data (Postgres + vault volumes)? [y/N]")]
 k-teardown:
     {{KUBECTL}} delete namespace {{NAMESPACE}}
 

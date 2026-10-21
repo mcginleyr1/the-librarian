@@ -1,4 +1,9 @@
 defmodule Librarian.Accounts do
+  @moduledoc """
+  Users: OAuth sign-in gated by the `ALLOWED_EMAILS` allowlist, API tokens,
+  the deployment owner, and per-user fan-out of cron jobs.
+  """
+
   import Ecto.Query
   alias Librarian.Accounts.User
   alias Librarian.Repo
@@ -18,11 +23,13 @@ defmodule Librarian.Accounts do
   end
 
   @doc """
-  Runs `fun` once per user with that user's tenant set — the entry point for
-  cross-user maintenance passes (cron workers that touch every tenant's data).
+  Enqueues `worker` once per user (args `%{"user_id" => id}`) — the entry point
+  for cron workers that touch every tenant's data. One job per user means one
+  user's failure retries alone instead of starving everyone after them.
   """
-  def each_user(fun) when is_function(fun, 0) do
-    Enum.each(list_user_ids(), fn user_id -> Repo.with_user(user_id, fun) end)
+  def enqueue_per_user(worker) do
+    list_user_ids() |> Enum.map(&worker.new(%{"user_id" => &1})) |> Oban.insert_all()
+    :ok
   end
 
   def get_user_by_api_token(token) when is_binary(token) and token != "" do
@@ -44,31 +51,18 @@ defmodule Librarian.Accounts do
   end
 
   @doc """
-  Whether the email is on the operator allowlist (`ALLOWED_EMAILS`). With
-  billing disabled this is the sign-in gate; with billing enabled these
-  accounts are comped (no subscription needed) and act as admins.
+  Whether the email is on the operator allowlist (`ALLOWED_EMAILS`), the
+  sign-in gate. Allowlisted users are also admins (Oban dashboard).
   """
   def allowed_email?(email) when is_binary(email) do
-    String.downcase(email) in Application.fetch_env!(:librarian, :allowed_emails)
+    allowed = Enum.map(Application.fetch_env!(:librarian, :allowed_emails), &String.downcase/1)
+    String.downcase(email) in allowed
   end
 
   def allowed_email?(_), do: false
 
   def admin?(%User{email: email}), do: allowed_email?(email)
   def admin?(_), do: false
-
-  def get_user_by_stripe_customer_id(customer_id) when is_binary(customer_id) do
-    Repo.get_by(User, stripe_customer_id: customer_id)
-  end
-
-  def get_user_by_stripe_customer_id(_), do: nil
-
-  @doc "Persists Stripe subscription state on the user (billing fields only)."
-  def update_subscription!(%User{} = user, attrs) do
-    user
-    |> User.subscription_changeset(attrs)
-    |> Repo.update!()
-  end
 
   @doc """
   Finds or creates the user for a completed `Ueberauth.Auth`. Matches by

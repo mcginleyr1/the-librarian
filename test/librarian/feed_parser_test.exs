@@ -107,4 +107,12 @@ defmodule Librarian.Reader.FeedParserTest do
       assert length(articles) == 2
     end
   end
+
+  test "applies non-UTC RFC 2822 offsets instead of dropping them" do
+    rss =
+      String.replace(@rss2, "Wed, 18 Mar 2026 10:00:00 +0000", "Wed, 18 Mar 2026 10:00:00 -0500")
+
+    {:ok, [first | _]} = FeedParser.parse(rss, "https://example.com/feed")
+    assert first.published_at == ~U[2026-03-18 15:00:00Z]
+  end
 end

@@ -5,10 +5,12 @@ defmodule Librarian.Workers.PruneSourcesWorker do
   require Logger
 
   @impl Oban.Worker
-  def perform(_job) do
-    Librarian.Accounts.each_user(fn ->
+  def perform(%Oban.Job{args: %{"user_id" => user_id}}) do
+    Librarian.Repo.with_user(user_id, fn ->
       count = Librarian.Discovery.prune_sources()
       Logger.info("PruneSourcesWorker: pruned #{count} discovered feeds")
     end)
   end
+
+  def perform(_job), do: Librarian.Accounts.enqueue_per_user(__MODULE__)
 end

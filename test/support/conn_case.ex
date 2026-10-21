@@ -47,7 +47,7 @@ defmodule LibrarianWeb.ConnCase do
 
   @doc """
   Setup helper (`setup :log_in_owner`) that logs in the deployment owner —
-  the user created by the bind_existing_data_to_owner migration.
+  the first user, seeded in test_helper.exs.
   """
   def log_in_owner(%{conn: conn}) do
     user = Librarian.Accounts.owner!()

@@ -17,9 +17,10 @@ defmodule Librarian.TenancyEnforcementTest do
       schemas_with_user_id =
         :librarian
         |> Application.spec(:modules)
-        |> Enum.filter(&Code.ensure_loaded?/1)
-        |> Enum.filter(&function_exported?(&1, :__schema__, 1))
-        |> Enum.filter(&(:user_id in &1.__schema__(:fields)))
+        |> Enum.filter(fn module ->
+          Code.ensure_loaded?(module) and function_exported?(module, :__schema__, 1) and
+            :user_id in module.__schema__(:fields)
+        end)
 
       unregistered = schemas_with_user_id -- Librarian.Repo.tenanted_schemas()
 

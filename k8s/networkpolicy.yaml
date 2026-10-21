@@ -1,0 +1,102 @@
+# Default-deny for the namespace, then only the flows the app needs.
+#
+# NetworkPolicy is enforced only if the cluster's CNI supports it; otherwise
+# these objects are accepted and silently ignored.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: librarian
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# DNS for every pod here (both kube-dns and CoreDNS carry k8s-app=kube-dns).
+# With NodeLocal DNSCache, pods query 169.254.20.10 instead: add an ipBlock.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: librarian
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: librarian
+  namespace: librarian
+spec:
+  podSelector:
+    matchLabels:
+      app: librarian
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # The Tailscale operator runs the ingress proxy pods in its own namespace
+    # (`tailscale` by default — change this if it's installed elsewhere).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tailscale
+      ports:
+        - protocol: TCP
+          port: 4000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Public web only: feeds, Google OAuth, Anthropic, Hugging Face model
+    # downloads, B2 backups. Private, CGNAT/tailnet and link-local ranges stay
+    # blocked, so a user-supplied URL (feed, clip, PDF) can't reach the LAN,
+    # the tailnet or anything else internal.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+  namespace: librarian
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: librarian
+      ports:
+        - protocol: TCP
+          port: 5432

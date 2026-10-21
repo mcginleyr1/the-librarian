@@ -49,6 +49,7 @@ defmodule Librarian.Canvas do
     with {:ok, doc} <- normalize_doc(Map.get(attrs, :doc, empty_doc())) do
       %Page{user_id: Repo.user_id!()}
       |> Page.changeset(Map.put(attrs, :doc, doc))
+      |> Vault.validate_owned(:root_note_id, Note)
       |> Repo.insert()
     end
   end
@@ -63,7 +64,7 @@ defmodule Librarian.Canvas do
   end
 
   def update_page(%Page{} = page, attrs) do
-    page |> Page.changeset(attrs) |> Repo.update()
+    page |> Page.changeset(attrs) |> Vault.validate_owned(:root_note_id, Note) |> Repo.update()
   end
 
   def delete_page(%Page{} = page) do
@@ -274,8 +275,7 @@ defmodule Librarian.Canvas do
   it) and drops it on the page at the given point.
   """
   def attach_image(%Page{} = page, %{path: path, client_name: name}, %{x: x, y: y}) do
-    ext = name |> Path.extname() |> String.downcase()
-    key = "clips/#{System.unique_integer([:positive, :monotonic])}#{ext}"
+    key = Storage.unique_key("clips", name |> Path.extname() |> String.downcase())
 
     with :ok <- Storage.put(key, File.read!(path)),
          {:ok, note} <-

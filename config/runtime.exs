@@ -30,28 +30,11 @@ config :ueberauth, Ueberauth.Strategy.Google.OAuth,
 if allowed = System.get_env("ALLOWED_EMAILS") do
   config :librarian,
          :allowed_emails,
-         allowed |> String.split(",") |> Enum.map(&String.trim/1)
+         allowed |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
 end
 
-# Stripe billing — setting STRIPE_SECRET_KEY (+ STRIPE_PRICE_ID_MONTHLY) turns
-# on the hosted mode: public landing page, open sign-up, subscription gate.
-# Keyword configs merge, so unset envs keep the config.exs defaults.
-billing_env =
-  [
-    stripe_secret_key: System.get_env("STRIPE_SECRET_KEY"),
-    stripe_webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET"),
-    monthly_price_id: System.get_env("STRIPE_PRICE_ID_MONTHLY"),
-    yearly_price_id: System.get_env("STRIPE_PRICE_ID_YEARLY"),
-    # Display-only prices; keep in sync with the Stripe prices above.
-    monthly_price_usd: System.get_env("BILLING_MONTHLY_PRICE_USD"),
-    yearly_price_usd: System.get_env("BILLING_YEARLY_PRICE_USD")
-  ]
-  |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-
-if billing_env != [], do: config(:librarian, :billing, billing_env)
-
 # Platform Anthropic key: serves users without their own key, capped per user
-# per month so LLM spend can never outrun the subscription fee.
+# per month.
 if anthropic_key = System.get_env("ANTHROPIC_API_KEY") do
   config :librarian, :platform_anthropic_api_key, anthropic_key
 end
@@ -99,7 +82,12 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  host =
+    System.get_env("PHX_HOST") ||
+      raise "environment variable PHX_HOST is missing (the public hostname)."
+
+  System.get_env("ALLOWED_EMAILS", "") =~ "@" ||
+    raise "environment variable ALLOWED_EMAILS is missing (comma-separated sign-in allowlist)."
 
   config :librarian, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
@@ -108,26 +96,12 @@ if config_env() == :prod do
          System.get_env("STORAGE_PATH") ||
            raise("environment variable STORAGE_PATH is missing.")
 
-  # Tailscale terminates TLS — Phoenix runs plain HTTP internally.
-  # DISABLE_FORCE_SSL=true prevents redirect loops since Tailscale forwards HTTP.
-  force_ssl =
-    if System.get_env("DISABLE_FORCE_SSL") == "true",
-      do: [],
-      else: [hsts: true]
-
-  endpoint_config =
-    [
-      url: [host: host, port: 443, scheme: "https"],
-      http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}],
-      secret_key_base: secret_key_base
-    ]
-
-  endpoint_config =
-    if force_ssl == [],
-      do: endpoint_config,
-      else: Keyword.put(endpoint_config, :force_ssl, force_ssl)
-
-  config :librarian, LibrarianWeb.Endpoint, endpoint_config
+  # TLS terminates at the proxy (Tailscale); force_ssl is compile-time in
+  # prod.exs and trusts X-Forwarded-Proto from it.
+  config :librarian, LibrarianWeb.Endpoint,
+    url: [host: host, port: 443, scheme: "https"],
+    http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}],
+    secret_key_base: secret_key_base
 
   # ## SSL Support
   #

@@ -21,19 +21,16 @@ defmodule Librarian.Workers.ExtractEdgesWorker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"note_id" => note_id}}) do
-    note = Repo.get!(Librarian.Vault.Note, note_id, skip_tenant: true)
+    case Repo.get(Librarian.Vault.Note, note_id, skip_tenant: true) do
+      nil ->
+        {:cancel, :note_deleted}
 
-    Repo.with_user(note.user_id, fn ->
-      note = Vault.get_note!(note_id)
+      %{embedding: nil} ->
+        {:cancel, :not_embedded}
 
-      cond do
-        is_nil(note.embedding) ->
-          {:cancel, :not_embedded}
-
-        true ->
-          extract(note)
-      end
-    end)
+      note ->
+        Repo.with_user(note.user_id, fn -> extract(Vault.get_note!(note_id)) end)
+    end
   end
 
   defp extract(note) do

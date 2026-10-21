@@ -8,6 +8,37 @@ defmodule Librarian.VaultTest do
     Map.merge(%{name: "Notebook #{:rand.uniform(999_999)}"}, overrides)
   end
 
+  describe "render_note_html/1" do
+    test "clipped HTML is sanitized but keeps content and wiki-links" do
+      {:ok, target} = Vault.create_note(%{title: "Target", body: ""})
+
+      html =
+        Vault.render_note_html(%Note{
+          clip_mode: "full_article",
+          body:
+            ~s|<p>See [[Target]]</p><img src="https://x.test/a.png" onerror="alert(1)">| <>
+              ~s|<a href="javascript:alert(1)">x</a><script>alert(1)</script>|
+        })
+
+      assert html =~ ~s(href="/vault/note/#{target.id}")
+      assert html =~ ~s(src="https://x.test/a.png")
+      refute html =~ "onerror"
+      refute html =~ "javascript:"
+      refute html =~ "<script"
+    end
+  end
+
+  describe "create_note_from_import/2" do
+    test "an evernote guid imports once per user" do
+      attrs = %{title: "Imported", body: "b", evernote_guid: "guid-1"}
+
+      assert {:ok, %Note{id: id}} = Vault.create_note_from_import(attrs, [])
+      assert id
+      assert {:ok, %Note{id: nil}} = Vault.create_note_from_import(attrs, [])
+      assert [%Note{id: ^id}] = Vault.list_notes()
+    end
+  end
+
   describe "create_notebook/1" do
     test "creates a notebook" do
       assert {:ok, %Notebook{} = nb} = Vault.create_notebook(%{name: "Research"})
@@ -75,13 +106,13 @@ defmodule Librarian.VaultTest do
     test "finds notes matching title" do
       results = Vault.search("Elixir")
       ids = Enum.map(results, & &1.id)
-      assert length(results) >= 1
+      assert results != []
       assert Enum.any?(ids, fn id -> id end)
     end
 
     test "finds notes matching body content" do
       results = Vault.search("PostgreSQL")
-      assert length(results) >= 1
+      assert results != []
     end
 
     test "returns empty list for no matches" do

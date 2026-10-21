@@ -280,7 +280,7 @@
         </h1>
         <div class="flex flex-wrap items-center gap-1 mb-8 pb-5 border-b border-base-200">
           <a
-            href={@selected_article.url}
+            href={safe_url(@selected_article.url)}
             target="_blank"
             rel="noopener noreferrer"
             class="press btn btn-sm btn-ghost gap-1.5"
@@ -332,9 +332,12 @@
           </div>
         </div>
         <div class="article-body text-base leading-relaxed">
+          <%!-- Feed HTML is third-party content: sanitized on every render. --%>
           {Phoenix.HTML.raw(
-            @selected_article.content || @selected_article.summary ||
-              "<p class='text-base-content/50 italic'>No content available. Open original to read.</p>"
+            HtmlSanitizeEx.html5(
+              @selected_article.content || @selected_article.summary ||
+                "<p class='text-base-content/50 italic'>No content available. Open original to read.</p>"
+            )
           )}
         </div>
       </div>

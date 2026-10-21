@@ -267,7 +267,7 @@
                 <% "link" -> %>
                   <a
                     data-body
-                    href={node["url"]}
+                    href={safe_url(node["url"])}
                     target="_blank"
                     rel="noopener noreferrer"
                     class="block p-3 select-text"

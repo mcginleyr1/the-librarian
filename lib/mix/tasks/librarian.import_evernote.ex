@@ -1,4 +1,12 @@
 defmodule Mix.Tasks.Librarian.ImportEvernote do
+  @moduledoc """
+  Imports an Evernote `.enex` export into the owner's vault, streaming the file
+  so large exports never load into memory. The notebook defaults to the file's
+  basename and is created if missing.
+
+      mix librarian.import_evernote <path> [notebook_name]
+  """
+
   use Mix.Task
 
   @shortdoc "Import notes from an Evernote ENEX export file"
@@ -77,7 +85,7 @@ defmodule Mix.Tasks.Librarian.ImportEvernote do
   """
   def cdata_fixing_stream(file_path) do
     file_path
-    |> File.stream!([], 65_536)
+    |> File.stream!(65_536)
     |> Stream.transform(
       fn -> {false, <<>>} end,
       fn chunk, {in_cdata, buf} ->
@@ -115,25 +123,34 @@ defmodule Mix.Tasks.Librarian.ImportEvernote do
 
       {pos, len} ->
         <<before::binary-size(^pos), _::binary-size(^len), rest::binary>> = data
+        scan_after_marker(before, rest, acc, in_cdata, at_eof)
+    end
+  end
 
-        if in_cdata do
-          if not at_eof and byte_size(rest) < @cdata_lookahead do
-            # Can't determine if this ]]> is the real terminator — buffer from here
-            {IO.iodata_to_binary(Enum.reverse([before | acc])), "]]>" <> rest, true}
-          else
-            if String.starts_with?(String.trim_leading(rest), "</content>") do
-              scan(rest, ["]]>", before | acc], false, at_eof)
-            else
-              scan(rest, ["]]]]><![CDATA[>", before | acc], true, at_eof)
-            end
-          end
-        else
-          scan(rest, ["<![CDATA[", before | acc], true, at_eof)
-        end
+  defp scan_after_marker(before, rest, acc, false, at_eof) do
+    scan(rest, ["<![CDATA[", before | acc], true, at_eof)
+  end
+
+  defp scan_after_marker(before, rest, acc, true, at_eof) do
+    cond do
+      not at_eof and byte_size(rest) < @cdata_lookahead ->
+        # Can't determine if this ]]> is the real terminator — buffer from here
+        {IO.iodata_to_binary(Enum.reverse([before | acc])), "]]>" <> rest, true}
+
+      String.starts_with?(String.trim_leading(rest), "</content>") ->
+        scan(rest, ["]]>", before | acc], false, at_eof)
+
+      true ->
+        scan(rest, ["]]]]><![CDATA[>", before | acc], true, at_eof)
     end
   end
 
   defmodule Handler do
+    @moduledoc """
+    Saxy handler that builds up each `<note>` (fields, tags, resources) and
+    saves it when the note closes.
+    """
+
     @behaviour Saxy.Handler
 
     @impl Saxy.Handler
@@ -359,7 +376,11 @@ defmodule Mix.Tasks.Librarian.ImportEvernote do
     with data when is_binary(data) <- Map.get(resource, :data),
          decoded <- Base.decode64!(data, ignore: :whitespace),
          filename <- Map.get(resource, :file_name),
-         key <- "attachments/#{:erlang.unique_integer([:positive])}_#{filename || "attachment"}",
+         key <-
+           Librarian.Storage.unique_key(
+             "attachments",
+             "_" <> Path.basename(filename || "attachment")
+           ),
          :ok <- Librarian.Storage.put(key, decoded) do
       acc + 1
     else

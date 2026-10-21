@@ -1,8 +1,8 @@
 defmodule LibrarianWeb.SearchLive do
   use LibrarianWeb, :live_view
   import Ecto.Query
-  alias Librarian.{Repo, Vault}
-  alias Librarian.Reader.{Article, Feed}
+  alias Librarian.{Reader, Repo, Vault}
+  alias Librarian.Reader.Feed
 
   @impl true
   def mount(_params, _session, socket) do
@@ -39,7 +39,7 @@ defmodule LibrarianWeb.SearchLive do
 
   defp search_articles(q) do
     Repo.all(
-      from a in Article,
+      from a in Reader.visible_articles(),
         join: f in Feed,
         on: f.id == a.feed_id,
         where: fragment("a0.search_vector @@ plainto_tsquery('english', ?)", ^q),

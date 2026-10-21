@@ -78,6 +78,9 @@ defmodule Librarian.LLM do
     end
   end
 
+  @doc "Whether the operator configured a shared key for users without their own."
+  def platform_key?, do: match?({:ok, _key, :platform}, platform_api_key())
+
   defp platform_api_key do
     case Application.get_env(:librarian, :platform_anthropic_api_key) do
       key when is_binary(key) and key != "" -> {:ok, key, :platform}

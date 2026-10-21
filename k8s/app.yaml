@@ -5,6 +5,12 @@ metadata:
   namespace: librarian
 spec:
   replicas: 1
+  # Never two pods at once: the RWO data volume can only attach to one, and a
+  # rolling overlap would run Oban cron jobs twice. rollingUpdate: null lets
+  # `kubectl apply` drop the defaulted RollingUpdate params when switching.
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   selector:
     matchLabels:
       app: librarian
@@ -13,10 +19,23 @@ spec:
       labels:
         app: librarian
     spec:
+      securityContext:
+        runAsNonRoot: true
+        # the image's `nobody`, numeric so the kubelet can verify it isn't root
+        runAsUser: 65534
+        runAsGroup: 65534
+        # Lets `nobody` write the data volume on volume types with ownership
+        # management (no-op for hostPath/local-path volumes)
+        fsGroup: 65534
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: migrate
-          image: localhost:31500/the-librarian:latest
-          imagePullPolicy: Always
+          # Keep untagged: `just k-apply` / `just deploy` pin both containers to
+          # an immutable per-commit tag at apply time (see the Justfile).
+          image: localhost:31500/the-librarian
+          imagePullPolicy: IfNotPresent
           command: ["/app/bin/librarian", "eval", "Librarian.Release.migrate()"]
           env:
             - name: DATABASE_URL
@@ -32,10 +51,18 @@ spec:
           envFrom:
             - configMapRef:
                 name: librarian-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: librarian
-          image: localhost:31500/the-librarian:latest
-          imagePullPolicy: Always
+          image: localhost:31500/the-librarian
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 4000
               name: http
@@ -60,22 +87,8 @@ spec:
                 secretKeyRef:
                   name: librarian-secrets
                   key: google-client-secret
-            # Hosted mode (all optional): billing turns on when the Stripe
-            # secret key + monthly price id (configmap) are present.
-            - name: STRIPE_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: librarian-secrets
-                  key: stripe-secret-key
-                  optional: true
-            - name: STRIPE_WEBHOOK_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: librarian-secrets
-                  key: stripe-webhook-secret
-                  optional: true
-            # Platform LLM key for subscribers without their own (capped per
-            # user by PLATFORM_LLM_BUDGET_CENTS).
+            # Shared LLM key for users without their own (capped per user by
+            # PLATFORM_LLM_BUDGET_CENTS).
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -90,9 +103,18 @@ spec:
           envFrom:
             - configMapRef:
                 name: librarian-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           volumeMounts:
+            # STORAGE_PATH and the Bumblebee model cache (BUMBLEBEE_CACHE_DIR,
+            # set in the Dockerfile) — the only persistent writable paths
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: "256Mi"
@@ -100,22 +122,33 @@ spec:
             limits:
               memory: "2Gi"
               cpu: "4"
+          # Boot runs migrations, then loads and compiles the embedding model
+          # (downloading it on first boot) before the endpoint listens: allow
+          # 5 minutes before liveness takes over.
+          startupProbe:
+            httpGet:
+              path: /
+              port: 4000
+            periodSeconds: 10
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /
               port: 4000
-            initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /
               port: 4000
-            initialDelaySeconds: 15
             periodSeconds: 20
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: librarian-data
+        # The root filesystem is read-only; the release writes its runtime
+        # sys.config to RELEASE_TMP=/tmp, and uploads/imports stage there.
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

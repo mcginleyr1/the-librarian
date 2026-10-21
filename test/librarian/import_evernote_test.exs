@@ -8,11 +8,6 @@ defmodule Librarian.ImportEvernoteTest do
 
   @fixture Path.expand("../fixtures/sample.enex", __DIR__)
 
-  defp run_import(path, notebook_name \\ "Test Import") do
-    notebook_id = find_or_create_notebook(notebook_name)
-    parse_and_import(@fixture, notebook_id)
-  end
-
   defp find_or_create_notebook(name) do
     case Vault.create_notebook(%{name: name}) do
       {:ok, nb} ->
@@ -37,7 +32,7 @@ defmodule Librarian.ImportEvernoteTest do
       notebook_id: notebook_id
     }
 
-    stream = File.stream!(file_path, [], 64_000)
+    stream = File.stream!(file_path, 64_000)
 
     case Saxy.parse_stream(stream, Mix.Tasks.Librarian.ImportEvernote.Handler, initial_state) do
       {:ok, state} -> state

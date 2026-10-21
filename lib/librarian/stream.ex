@@ -30,17 +30,22 @@ defmodule Librarian.Stream do
 
   @doc """
   Logs an interaction for an article. `kind` is one of `Interaction.kinds/0`.
-  Returns `{:ok, interaction}` or `{:error, changeset}`.
+  Returns `{:ok, interaction}`, `{:error, changeset}`, or `{:error, :not_found}`
+  for an article the user can't see.
   """
   def record_interaction(article_id, kind, attrs \\ %{}) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     result =
-      %Interaction{user_id: Repo.user_id!()}
-      |> Interaction.changeset(
-        Map.merge(%{article_id: article_id, kind: to_string(kind), occurred_at: now}, attrs)
-      )
-      |> Repo.insert()
+      if Librarian.Reader.visible_article?(article_id) do
+        %Interaction{user_id: Repo.user_id!()}
+        |> Interaction.changeset(
+          Map.merge(%{article_id: article_id, kind: to_string(kind), occurred_at: now}, attrs)
+        )
+        |> Repo.insert()
+      else
+        {:error, :not_found}
+      end
 
     if match?({:ok, _}, result) and to_string(kind) in @model_kinds do
       RebuildInterestWorker.enqueue()

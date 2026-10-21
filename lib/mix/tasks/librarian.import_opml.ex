@@ -1,4 +1,11 @@
 defmodule Mix.Tasks.Librarian.ImportOpml do
+  @moduledoc """
+  Subscribes the owner to the feeds in an OPML export, using each top-level
+  outline as the category. Existing subscriptions are skipped.
+
+      mix librarian.import_opml <file_path>
+  """
+
   use Mix.Task
 
   @shortdoc "Import feeds from an OPML file"

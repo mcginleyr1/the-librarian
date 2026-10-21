@@ -25,38 +25,40 @@ defmodule Librarian.Interest do
   @vault_cap 300
 
   @doc "Recomputes interest centroids from the current positive corpus."
+  # One transaction, so concurrent rebuilds and ranking reads never see an
+  # empty or doubled set of centroids.
   def rebuild do
     positives = positive_embeddings()
-    Repo.delete_all(Centroid)
 
-    if positives == [] do
-      {:ok, 0}
-    else
-      k = min(@clusters, length(positives))
-      {centroids, counts} = kmeans(positives, k)
-      now = DateTime.utc_now() |> DateTime.truncate(:second)
-      user_id = Repo.user_id!()
+    Repo.transaction(fn ->
+      Repo.delete_all(Centroid)
+      if positives == [], do: 0, else: insert_centroids(positives)
+    end)
+  end
 
-      # Drop empty clusters: their centroid is the zero vector, which makes
-      # cosine distance undefined (NaN) in the SQL ranking.
-      inserted =
-        centroids
-        |> Enum.zip(counts)
-        |> Enum.reject(fn {_vector, count} -> count == 0 end)
-        |> Enum.with_index(1)
-        |> Enum.map(fn {{vector, count}, i} ->
-          Repo.insert!(%Centroid{
-            label: "Cluster #{i}",
-            embedding: Pgvector.new(vector),
-            member_count: count,
-            user_id: user_id,
-            inserted_at: now,
-            updated_at: now
-          })
-        end)
+  defp insert_centroids(positives) do
+    k = min(@clusters, length(positives))
+    {centroids, counts} = kmeans(positives, k)
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    user_id = Repo.user_id!()
 
-      {:ok, length(inserted)}
-    end
+    # Drop empty clusters: their centroid is the zero vector, which makes
+    # cosine distance undefined (NaN) in the SQL ranking.
+    centroids
+    |> Enum.zip(counts)
+    |> Enum.reject(fn {_vector, count} -> count == 0 end)
+    |> Enum.with_index(1)
+    |> Enum.map(fn {{vector, count}, i} ->
+      Repo.insert!(%Centroid{
+        label: "Cluster #{i}",
+        embedding: Pgvector.new(vector),
+        member_count: count,
+        user_id: user_id,
+        inserted_at: now,
+        updated_at: now
+      })
+    end)
+    |> length()
   end
 
   def centroids, do: Repo.all(from c in Centroid, order_by: [desc: c.member_count])

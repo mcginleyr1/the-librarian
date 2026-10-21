@@ -8,5 +8,8 @@ resources:
   - configmap.yaml
   - postgres.yaml
   - app.yaml
+  - networkpolicy.yaml
   - tailscale.yaml
-  # secrets created via: just k-create-secrets <db-password>
+  # secrets created via: just k-create-secrets
+  # Apply with `just k-apply` (not a bare `kubectl apply -k`): it pins the
+  # app image to the tag already running in the cluster.

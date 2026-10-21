@@ -176,7 +176,7 @@
 
               <h2 class="text-[15px] font-semibold leading-snug mb-2">
                 <a
-                  href={entry.article.url}
+                  href={safe_url(entry.article.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   phx-click={
@@ -201,7 +201,7 @@
               <%!-- LINK PREVIEW / GRAPH CARD (rendered only when metadata exists) --%>
               <a
                 :if={entry.preview}
-                href={entry.article.url}
+                href={safe_url(entry.article.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 class="press block rounded-lg border border-base-300 overflow-hidden mb-3 hover:border-primary/40 transition-colors"

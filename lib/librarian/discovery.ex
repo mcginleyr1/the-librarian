@@ -197,12 +197,16 @@ defmodule Librarian.Discovery do
   feed on probation. Returns `{:ok, :accepted | :rejected}`.
   """
   def vet_candidate(%CandidateSource{} = candidate) do
-    case FeedDiscoverer.discover(candidate.domain) do
-      {:ok, [%{url: feed_url} = feed | _]} ->
-        subscribe_discovered(feed_url, feed[:title] || candidate.domain, candidate.intent_query)
-        mark(candidate, %{status: "accepted", feed_url: feed_url})
-        {:ok, :accepted}
-
+    with {:ok, [%{url: feed_url} = feed | _]} <- FeedDiscoverer.discover(candidate.domain),
+         {:ok, _feed} <-
+           subscribe_discovered(
+             feed_url,
+             feed[:title] || candidate.domain,
+             candidate.intent_query
+           ) do
+      mark(candidate, %{status: "accepted", feed_url: feed_url})
+      {:ok, :accepted}
+    else
       _ ->
         mark(candidate, %{status: "rejected"})
         {:ok, :rejected}

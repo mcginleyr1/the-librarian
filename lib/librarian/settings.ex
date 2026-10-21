@@ -6,13 +6,13 @@ defmodule Librarian.Settings do
 
   schema "settings" do
     field :b2_key_id, :string
-    field :b2_application_key, :string
+    field :b2_application_key, :string, redact: true
     field :b2_bucket_name, :string
     field :b2_endpoint, :string
     field :last_backup_at, :utc_datetime
     field :category_order, {:array, :string}, default: []
     field :pinned_lenses, {:array, :string}, default: []
-    field :anthropic_api_key, :string
+    field :anthropic_api_key, :string, redact: true
     field :llm_monthly_budget_cents, :integer, default: 2000
     field :discovery_paused, :boolean, default: false
 
@@ -76,12 +76,13 @@ defmodule Librarian.Settings do
 
   def configured? do
     case get_settings() do
-      %{b2_key_id: key_id, b2_application_key: app_key}
-      when not is_nil(key_id) and key_id != "" and
-             not is_nil(app_key) and app_key != "" ->
-        true
+      %__MODULE__{} = s ->
+        Enum.all?(
+          [s.b2_key_id, s.b2_application_key, s.b2_bucket_name, s.b2_endpoint],
+          &(is_binary(&1) and &1 != "")
+        )
 
-      _ ->
+      nil ->
         false
     end
   end

@@ -8,11 +8,13 @@ defmodule Librarian.Workers.DiscoverSourcesWorker do
   alias Librarian.Workers.VetCandidateSourceWorker
 
   @impl Oban.Worker
-  def perform(_job) do
-    Librarian.Accounts.each_user(fn ->
-      unless Librarian.Settings.discovery_paused?(), do: run()
+  def perform(%Oban.Job{args: %{"user_id" => user_id}}) do
+    Librarian.Repo.with_user(user_id, fn ->
+      if Librarian.Settings.discovery_paused?(), do: :ok, else: run()
     end)
   end
+
+  def perform(_job), do: Librarian.Accounts.enqueue_per_user(__MODULE__)
 
   defp run do
     link_graph = Discovery.harvest_link_graph()

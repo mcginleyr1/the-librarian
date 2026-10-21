@@ -4,6 +4,26 @@ let selectedMode = "selection";
 let apiUrl = DEFAULT_API_URL;
 let apiToken = "";
 
+// The API token is a bearer credential: only send it over https, or plain http
+// to this machine (local dev). Same check as background.js.
+function apiUrlProblem(raw) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch (_) {
+    return "API URL is not a valid URL";
+  }
+  const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol === "https:" || (url.protocol === "http:" && loopback)) return null;
+  return "API URL must start with https:// (http:// only for localhost)";
+}
+
+function showStatus(kind, text) {
+  const status = document.getElementById("status");
+  status.className = kind ? `status ${kind}` : "status";
+  status.textContent = text;
+}
+
 // --- Init ---
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -24,22 +44,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (tab) document.getElementById("title").value = tab.title || "";
   } catch (_) {}
 
-  // Load notebooks
-  try {
-    const res = await fetch(`${apiUrl}/api/notebooks`, {
-      headers: { Authorization: `Bearer ${apiToken}` },
-    });
-    if (res.ok) {
-      const notebooks = await res.json();
-      const sel = document.getElementById("notebook");
-      notebooks.forEach(nb => {
-        const opt = document.createElement("option");
-        opt.value = nb.id;
-        opt.textContent = nb.name;
-        sel.appendChild(opt);
+  // Load notebooks — never sending the token to an unsafe API URL
+  const problem = apiUrlProblem(apiUrl);
+  if (problem) {
+    showStatus("error", `✗ ${problem}`);
+  } else {
+    try {
+      const res = await fetch(`${apiUrl}/api/notebooks`, {
+        headers: { Authorization: `Bearer ${apiToken}` },
       });
-    }
-  } catch (_) {}
+      if (res.ok) {
+        const notebooks = await res.json();
+        const sel = document.getElementById("notebook");
+        notebooks.forEach(nb => {
+          const opt = document.createElement("option");
+          opt.value = nb.id;
+          opt.textContent = nb.name;
+          sel.appendChild(opt);
+        });
+      }
+    } catch (_) {}
+  }
 
   // Mode buttons
   document.querySelectorAll(".mode-btn").forEach(btn => {
@@ -50,9 +75,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // Save API URL on change
+  // Save API URL on change (only if it's safe to send the token to)
   document.getElementById("api-url").addEventListener("change", async e => {
     apiUrl = e.target.value.trim().replace(/\/$/, "");
+    const problem = apiUrlProblem(apiUrl);
+    if (problem) return showStatus("error", `✗ ${problem}`);
+    showStatus(null, "");
     try { await chrome.storage.local.set({ apiUrl }); } catch (_) {}
   });
 
@@ -70,14 +98,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 async function saveClip() {
   const btn = document.getElementById("save-btn");
-  const status = document.getElementById("status");
 
   btn.disabled = true;
   btn.textContent = "Saving...";
-  status.className = "status";
-  status.textContent = "";
+  showStatus(null, "");
 
   try {
+    const problem = apiUrlProblem(apiUrl);
+    if (problem) throw new Error(problem);
+
     const title = document.getElementById("title").value.trim();
     const notebookId = document.getElementById("notebook").value || null;
     const tags = document.getElementById("tags").value
@@ -94,15 +123,13 @@ async function saveClip() {
     });
 
     if (response && response.status === "ok") {
-      status.className = "status success";
-      status.textContent = "✓ Saved to vault!";
+      showStatus("success", "✓ Saved to vault!");
       setTimeout(() => window.close(), 1200);
     } else {
       throw new Error(response?.error || "Unknown error");
     }
   } catch (err) {
-    status.className = "status error";
-    status.textContent = `✗ ${err.message}`;
+    showStatus("error", `✗ ${err.message}`);
     btn.disabled = false;
     btn.textContent = "Save to Vault";
   }

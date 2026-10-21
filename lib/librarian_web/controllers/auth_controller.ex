@@ -14,10 +14,10 @@ defmodule LibrarianWeb.AuthController do
     |> redirect(to: ~p"/login")
   end
 
-  # With billing enabled anyone may sign up (the subscription gate takes it
-  # from there); self-hosted deployments keep the email allowlist.
+  # Accounts are matched by email, so an unverified Google email must never
+  # sign in: it could claim another person's account.
   def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do
-    if Librarian.Billing.enabled?() or Accounts.allowed_email?(auth.info.email) do
+    if email_verified?(auth) and Accounts.allowed_email?(auth.info.email) do
       case Accounts.upsert_user_from_auth(auth) do
         {:ok, user} ->
           UserAuth.log_in_user(conn, user)
@@ -39,6 +39,9 @@ defmodule LibrarianWeb.AuthController do
     |> put_flash(:error, "Google sign-in failed.")
     |> redirect(to: ~p"/login")
   end
+
+  defp email_verified?(%{extra: %{raw_info: %{user: %{"email_verified" => true}}}}), do: true
+  defp email_verified?(_auth), do: false
 
   def delete(conn, _params) do
     UserAuth.log_out_user(conn)

@@ -50,6 +50,9 @@ defmodule Librarian.Embeddings do
     {:ok, tensor |> Nx.to_flat_list() |> Pgvector.new()}
   rescue
     e -> {:error, Exception.message(e)}
+  catch
+    # batched_run exits (not raises) on timeout or when the serving is down.
+    :exit, reason -> {:error, reason}
   end
 
   def embed(nil), do: {:error, :no_text}

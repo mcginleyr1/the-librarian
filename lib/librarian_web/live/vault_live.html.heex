@@ -447,7 +447,7 @@
           <span>{Calendar.strftime(@selected_note.inserted_at, "%B %-d, %Y")}</span>
           <a
             :if={@selected_note.source_url}
-            href={@selected_note.source_url}
+            href={safe_url(@selected_note.source_url)}
             target="_blank"
             rel="noopener noreferrer"
             class="link link-primary text-xs flex items-center gap-1"

@@ -17,9 +17,8 @@ defmodule Librarian.Workers.BuildGraphWorker do
   @batch 50
 
   @impl Oban.Worker
-  def perform(_job) do
-    Librarian.Accounts.each_user(&run/0)
-  end
+  def perform(%Oban.Job{args: %{"user_id" => user_id}}), do: Repo.with_user(user_id, &run/0)
+  def perform(_job), do: Librarian.Accounts.enqueue_per_user(__MODULE__)
 
   defp run do
     {:ok, similarity_count} = Vault.generate_similarity_edges()

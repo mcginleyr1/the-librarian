@@ -4,20 +4,15 @@ metadata:
   name: librarian-config
   namespace: librarian
 data:
+  # Required: the app's hostname (the Tailscale ingress name); boot fails without it
   PHX_HOST: "librarian.<your-tailnet>.ts.net"
   PHX_SERVER: "true"
   PORT: "4000"
   POOL_SIZE: "10"
   STORAGE_PATH: "/data/librarian"
-  # Tailscale terminates TLS — disable Phoenix's internal force_ssl redirect
-  DISABLE_FORCE_SSL: "true"
-  # Operator accounts (comma-separated): the sign-in allowlist when billing is
-  # off; comped admin accounts when billing is on.
+  # Required: comma-separated Google accounts allowed to sign in; boot fails
+  # without it
   ALLOWED_EMAILS: "owner@example.com"
-  # Hosted mode (optional): uncomment with real Stripe price ids to enable
-  # billing (also needs the stripe-secret-key secret — see k8s/secrets.yaml).
-  # STRIPE_PRICE_ID_MONTHLY: "price_..."
-  # STRIPE_PRICE_ID_YEARLY: "price_..."
-  # BILLING_MONTHLY_PRICE_USD: "12"
-  # BILLING_YEARLY_PRICE_USD: "96"
+  # Optional: per-user monthly budget (cents) on the shared platform LLM key
+  # (anthropic-api-key secret — see k8s/secrets.yaml)
   # PLATFORM_LLM_BUDGET_CENTS: "500"

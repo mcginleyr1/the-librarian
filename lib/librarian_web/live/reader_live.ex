@@ -153,7 +153,10 @@ defmodule LibrarianWeb.ReaderLive do
 
           feed_ids =
             socket.assigns.feeds_by_category
-            |> Enum.find_value([], fn {cat, feeds} -> if cat == actual_category, do: feeds end)
+            |> Enum.find_value([], fn
+              {^actual_category, feeds} -> feeds
+              _ -> nil
+            end)
             |> Enum.map(& &1.id)
 
           Enum.reduce(feed_ids, socket.assigns.unread_counts, &Map.put(&2, &1, 0))
@@ -224,21 +227,32 @@ defmodule LibrarianWeb.ReaderLive do
   end
 
   @impl true
+  # The topic is global (feeds are fetched once for everyone); ignore feeds
+  # this user doesn't follow instead of querying for each of them.
   def handle_info({:feed_updated, feed_id, new_count}, socket) do
+    if subscribed?(socket.assigns.feeds_by_category, feed_id),
+      do: {:noreply, apply_feed_update(socket, feed_id, new_count)},
+      else: {:noreply, socket}
+  end
+
+  defp subscribed?(feeds_by_category, feed_id) do
+    Enum.any?(feeds_by_category, fn {_category, feeds} ->
+      Enum.any?(feeds, &(&1.id == feed_id))
+    end)
+  end
+
+  defp apply_feed_update(socket, feed_id, new_count) do
     socket =
       assign(socket,
         unread_counts:
           Map.put(socket.assigns.unread_counts, feed_id, Reader.unread_count(feed_id))
       )
 
-    socket =
-      if socket.assigns.filter != :starred and feed_in_scope?(socket.assigns, feed_id) do
-        assign(socket, pending_new: socket.assigns.pending_new + new_count)
-      else
-        socket
-      end
-
-    {:noreply, socket}
+    if socket.assigns.filter != :starred and feed_in_scope?(socket.assigns, feed_id) do
+      assign(socket, pending_new: socket.assigns.pending_new + new_count)
+    else
+      socket
+    end
   end
 
   defp feed_in_scope?(%{selected_feed_id: id}, feed_id) when not is_nil(id), do: id == feed_id
@@ -350,6 +364,6 @@ defmodule LibrarianWeb.ReaderLive do
   defp open_current_url(%{assigns: %{selected_article: nil}} = socket), do: socket
 
   defp open_current_url(socket) do
-    push_event(socket, "open_url", %{url: socket.assigns.selected_article.url})
+    push_event(socket, "open_url", %{url: safe_url(socket.assigns.selected_article.url)})
   end
 end

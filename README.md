@@ -1,10 +1,20 @@
 # The Librarian
 
-A self-hosted personal knowledge base combining an RSS feed reader with web clipping and note-taking. Built with Phoenix/Elixir on PostgreSQL.
+A free and open-source, self-hosted personal knowledge base combining an RSS feed reader with web clipping and note-taking. Built with Phoenix/Elixir on PostgreSQL.
+
+![The Librarian reader: categorized feeds, unread article list, and reading pane](docs/images/reader.jpg)
+
+> **Private networks only.** The Librarian is built for a home lab or other
+> closed network, not the open internet. Reach it over
+> [Tailscale](https://tailscale.com) (recommended: the `k8s/` manifests expose
+> it only on your tailnet through a Tailscale ingress with Funnel off) or
+> another VPN. Don't port-forward it or put it behind a public proxy. Google
+> sign-in and the email allowlist are a second layer of protection, not a
+> replacement for keeping it off the internet.
 
 ## Features
 
-- **Google Sign-In** — Ueberauth-based OAuth; email allowlist (self-hosted) or open sign-up with Stripe subscriptions (hosted)
+- **Google Sign-In** — Ueberauth-based OAuth restricted to an email allowlist; each allowlisted person gets their own isolated vault and feeds
 - **RSS Reader** — Subscribe to feeds, organize by category, track read/starred state, keyboard navigation
 - **Note Vault** — Capture web clips, create markdown notes, organize into notebooks with tags
 - **Wiki-Links & Knowledge Graph** — `[[Note Title]]` links with editor autocomplete, AI-typed connections between related notes, unlinked-mention detection, and a mind-map graph view
@@ -24,7 +34,7 @@ A self-hosted personal knowledge base combining an RSS feed reader with web clip
 
 ## Local Development
 
-**Prerequisites:** Elixir 1.15+, PostgreSQL 16, Node.js
+**Prerequisites:** Elixir 1.20+, PostgreSQL 16 with pgvector, Node.js
 
 ```bash
 # Start PostgreSQL
@@ -32,6 +42,9 @@ just db-up
 
 # Install deps, create DB, run migrations, build assets
 mix setup
+
+# Who may sign in (comma-separated)
+export ALLOWED_EMAILS=you@example.com
 
 # Start dev server
 just dev
@@ -42,21 +55,19 @@ Visit [http://localhost:4000](http://localhost:4000).
 ### Authentication
 
 All browser routes require signing in with Google (the `/api` endpoints
-authenticate with per-user bearer tokens instead — see [API](#api)). Who may
-sign in depends on the mode:
+authenticate with per-user bearer tokens instead — see [API](#api)). Only
+emails on the `ALLOWED_EMAILS` allowlist may sign in, and only when Google
+reports the address as verified. There is no built-in allowlist: with it unset
+nobody can sign in, and production refuses to boot without it. Allowlisted
+users are also admins (the Oban dashboard at `/oban`).
 
-- **Self-hosted (default):** only emails on the allowlist may sign in — it
-  defaults to `owner@example.com` and is overridden with the comma-separated
-  `ALLOWED_EMAILS` env var.
-- **Hosted (billing enabled):** anyone may sign in; using the app requires an
-  active subscription (see Billing below). Allowlisted emails are the operator
-  accounts: comped (no subscription) and admin (Oban dashboard).
-
-API requests act as the user whose bearer token they carry, and background
-workers run per user. Only the CLI and release tasks — imports
+Every allowlisted person gets their own vault, feeds and settings; the feed
+catalog itself is shared, so a feed two people follow is fetched once. API
+requests act as the user whose bearer token they carry, and background workers
+run as one job per user. Only the CLI and release tasks — imports
 (`mix librarian.import_*`, `just import-*`, `just k-import-*`),
 `just k-dedupe-notes`, and `Librarian.Release.prepare_for_stream/1` — act on
-the deployment owner's vault (the first user).
+the deployment owner's vault: the first user to sign in.
 
 Creating the OAuth client is a one-time manual step — Google exposes no API or
 gcloud command for standard OAuth 2.0 web clients. `just oauth-setup` walks it:
@@ -72,8 +83,8 @@ just dev
 **Useful commands:**
 
 ```bash
-mix test              # Run tests
-mix precommit         # Compile, format check, and test (run before committing)
+mix test              # Run tests (seeds an owner@example.com user in the test DB)
+mix precommit         # Compile, format, credo, and test (run before committing)
 just import-opml FILE.opml
 just import-evernote FILE.enex [NOTEBOOK_NAME]
 just import-evernote-dir DIR/
@@ -85,8 +96,7 @@ JSON endpoints under `/api` authenticate with the per-user bearer token from
 Settings → API Access (`Authorization: Bearer <token>`) and act as that
 token's user: every read and write is scoped to their vault, so another user's
 note looks exactly like a missing one. A missing or unknown token gets `401
-{"error":"unauthorized"}`; a lapsed subscription (hosted mode) gets `402
-{"error":"subscription_required"}`.
+{"error":"unauthorized"}`.
 
 | Endpoint | Purpose |
 |---|---|
@@ -101,7 +111,8 @@ note looks exactly like a missing one. A missing or unknown token gets `401
 Lets an editor client — e.g. an Emacs org-roam package — search, read, and
 two-way sync vault notes. Errors are `404 {"error":"not_found"}`,
 `409 {"error":"external_id_conflict"}`, and
-`422 {"status":"error","errors":{"<field>":["<message>"]}}`.
+`422 {"status":"error","errors":{"<field>":["<message>"]}}` (also for a
+non-list `tags` or a `notebook_id` that isn't one of your notebooks).
 
 Notes are listed as summaries:
 
@@ -148,62 +159,72 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json
   "https://$HOST/api/notes/external/5b9e1c7a-0d1f-4c33-9a57-2f0f3e1b8d11"
 ```
 
-## Billing (hosted, multi-user mode)
+## AI Features
 
-Billing is off by default and everything above describes the self-hosted
-experience. Setting `STRIPE_SECRET_KEY` and `STRIPE_PRICE_ID_MONTHLY` switches
-the deployment into hosted mode:
-
-- `/` becomes a public landing page with pricing and a Google sign-in CTA
-- sign-up is open; unsubscribed users land on `/subscribe` (Stripe Checkout,
-  14-day trial) and manage their plan through the Stripe billing portal from
-  Settings → Billing
-- Stripe webhooks (`POST /webhooks/stripe`) keep subscription state in sync —
-  point a webhook endpoint at it with the `checkout.session.completed` and
-  `customer.subscription.*` events, and set `STRIPE_WEBHOOK_SECRET`
-
-**Pricing rationale:** the default display prices are $12/month / $96/year.
-The two tools this replaces cost more individually (Feedly Pro+ $12.99/mo,
-Evernote from $14.99/mo — ~$28/mo combined). The actual amounts charged live
-on the Stripe prices; keep `BILLING_MONTHLY_PRICE_USD`/`BILLING_YEARLY_PRICE_USD`
-in sync if you change them.
-
-**LLM cost protection:** set `ANTHROPIC_API_KEY` to serve AI features to
-subscribers who haven't added their own key. Platform-keyed usage is hard-capped
-per user per month by `PLATFORM_LLM_BUDGET_CENTS` (default `500` = $5), so
-worst-case LLM spend per subscriber stays well under the fee. Users can add
-their own key in Settings → AI to raise their cap at their own expense.
+Knowledge-graph edge typing and source discovery call the Anthropic API. Each
+user can add their own key in Settings → AI, with their own monthly budget.
+Alternatively the operator can set `ANTHROPIC_API_KEY` to serve users who
+haven't added one; that shared usage is hard-capped per user per month by
+`PLATFORM_LLM_BUDGET_CENTS` (default `500` = $5).
 
 | Variable | Description |
 |---|---|
-| `STRIPE_SECRET_KEY` | Enables billing (with the monthly price id) |
-| `STRIPE_WEBHOOK_SECRET` | Webhook signing secret (`whsec_...`) |
-| `STRIPE_PRICE_ID_MONTHLY` | Stripe price id for the monthly plan |
-| `STRIPE_PRICE_ID_YEARLY` | Stripe price id for the yearly plan (optional) |
-| `BILLING_MONTHLY_PRICE_USD` | Display price, default `12` |
-| `BILLING_YEARLY_PRICE_USD` | Display price, default `96` |
-| `ANTHROPIC_API_KEY` | Platform LLM key for subscribers without their own |
-| `PLATFORM_LLM_BUDGET_CENTS` | Included AI allowance per user/month, default `500` |
+| `ANTHROPIC_API_KEY` | Shared key for users without their own (optional) |
+| `PLATFORM_LLM_BUDGET_CENTS` | Per-user monthly cap on the shared key, default `500` |
+
+## Security
+
+- **Third-party HTML is sanitized on render.** Feed articles and clipped or
+  imported notes pass through `HtmlSanitizeEx`'s HTML5 scrubber, links to
+  articles/sources only render as `http(s)`, and every page carries a
+  Content-Security-Policy (scripts only from this origin or with a per-request
+  nonce) as a backstop.
+- **Stored files are sandboxed.** Files under `/vault/files` are served only to
+  the owner of a note that references them, under `Content-Security-Policy:
+  sandbox` (PDFs excepted, which browsers won't render sandboxed). Storage keys
+  are random and per user; keys resolving outside `STORAGE_PATH` are refused.
+- **Outbound fetches can't reach internal networks.** Feed fetching, feed
+  discovery and backup endpoints refuse non-`http(s)` URLs and hosts resolving
+  to loopback, private, link-local or CGNAT/Tailscale addresses (re-checked on
+  every redirect), cap response size and time, and never auto-decode bodies.
+  Pair it with an egress NetworkPolicy (see `k8s/`) to also cover DNS rebinding.
+- **Tenancy is enforced in the Repo.** Queries on user-owned tables are scoped
+  to the current user automatically; references to another user's notes,
+  notebooks or articles are rejected.
 
 ## Docker (Full Stack)
 
 ```bash
-just up   # Builds app + starts postgres, serves on :4000
+export SECRET_KEY_BASE=$(mix phx.gen.secret) ALLOWED_EMAILS=you@example.com
+just up   # Builds app + starts postgres, serves on http://localhost:4100
 just db-down
 ```
 
-The docker-compose `SECRET_KEY_BASE` is for local development only. Generate a real one with `mix phx.gen.secret` for any internet-facing deployment.
+Nothing secret is committed: `just up` refuses to start until `SECRET_KEY_BASE`
+and `ALLOWED_EMAILS` are exported. The compose Postgres listens on
+`127.0.0.1:5433` only.
+
+The image runs as `nobody` with the release files root-owned and read-only; the
+app writes only to `/data` (`STORAGE_PATH` and the Bumblebee model cache,
+`BUMBLEBEE_CACHE_DIR=/data/bumblebee`) and `/tmp` (`RELEASE_TMP`, crash dumps).
 
 ## Deployment (Kubernetes)
 
 The app is designed to run on Kubernetes behind Tailscale for TLS termination.
+The Justfile defaults point at the author's cluster; override them with
+`LIBRARIAN_REGISTRY` (image registry) and `LIBRARIAN_KUBE_CONTEXT`.
 
-**One-time setup:**
+**First deploy:**
 
 ```bash
 just k-namespace
-just k-create-secrets <db-password> <google-client-id> <google-client-secret>
+just k-create-secrets   # reads LIBRARIAN_DB_PASSWORD, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (prompts for any unset)
+just docker-push
+just k-apply            # applies manifests with the image pinned to a tag
 ```
+
+Secrets never go on the command line. Re-running `k-create-secrets` keeps the
+existing `secret-key-base`, so sessions survive.
 
 The production Google OAuth client needs
 `https://<PHX_HOST>/auth/google/callback` as an authorized redirect URI
@@ -211,14 +232,26 @@ The production Google OAuth client needs
 credentials on an existing cluster without touching the other secrets:
 
 ```bash
-just k-set-google-oauth <client-id> <client-secret>
+just k-set-google-oauth   # same env vars or prompts, then restarts the app
 ```
 
 **Deploy:**
 
 ```bash
-just deploy          # Build image, push, apply k8s manifests, run migrations
+just deploy [TAG]    # Build, push, set the image on the app + migrate containers, wait for rollout
 ```
+
+The tag defaults to the jj commit id (else git HEAD on a clean tree, else a UTC
+timestamp); `:latest` is never pushed. `deploy` doesn't apply manifests — after
+changing anything in `k8s/`, run `just k-apply`, which keeps the running tag.
+Don't `kubectl apply -k k8s/` directly: the manifests carry no tag. Migrations
+run in the init container.
+
+The manifests run both pods non-root with dropped capabilities (the app with a
+read-only root filesystem), use a `Recreate` strategy (single replica, RWO
+volume, Oban cron), and ship a default-deny `NetworkPolicy`: Tailscale → app,
+app → Postgres, DNS, and app → public internet on 80/443 only. NetworkPolicy is
+enforced only if the cluster's CNI supports it.
 
 **Other useful commands:**
 
@@ -226,6 +259,8 @@ just deploy          # Build image, push, apply k8s manifests, run migrations
 just k-logs
 just k-status
 just k-shell                              # Remote IEx in the running pod
+just k-restart                            # Restart on the current image
+just k-teardown                           # Deletes the namespace and its volumes (asks first)
 just k-import-opml FILE.opml
 just k-import-evernote FILE.enex [NAME]
 just k-import-evernote-dir DIR/
@@ -238,14 +273,18 @@ just k-import-evernote-dir DIR/
 | `DATABASE_URL` | `ecto://user:pass@host/db` |
 | `SECRET_KEY_BASE` | Generate with `mix phx.gen.secret` |
 | `STORAGE_PATH` | Filesystem path for attachments/clips |
-| `PHX_HOST` | Public hostname |
+| `PHX_HOST` | Required. Hostname the app is reached at (e.g. its tailnet name) |
 | `PHX_SERVER` | Set to `true` |
 | `PORT` | Default `4000` |
 | `GOOGLE_CLIENT_ID` | Google OAuth 2.0 client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 client secret |
-| `ALLOWED_EMAILS` | Comma-separated allowlist: sign-in gate (self-hosted) or comped admins (hosted) |
+| `ALLOWED_EMAILS` | Required. Comma-separated sign-in allowlist (allowlisted users are admins) |
 
-Hosted-mode variables (Stripe, platform LLM key) are listed under Billing above.
+`PHX_HOST` and `ALLOWED_EMAILS` are required: the release refuses to boot
+without them. TLS is expected to terminate at a proxy (Tailscale here) that
+sets `X-Forwarded-Proto`; `force_ssl` is compiled in and redirects anything
+that arrives as plain HTTP. Optional AI variables are listed under
+[AI Features](#ai-features).
 
 ## Importing Data
 
@@ -277,7 +316,7 @@ mix librarian.import_evernote path/to/export.enex "Notebook Name"
 
 ## Browser Extension
 
-The extension is a standard Manifest V3 WebExtension in `safari-extension/extension/`. It reads the configured API endpoint and lets you clip the current page into a notebook. Supports five clip modes:
+The extension is a standard Manifest V3 WebExtension in `safari-extension/extension/`. It reads the configured API endpoint and lets you clip the current page into a notebook. The API URL must be `https://` (plain `http://` only for `localhost`/`127.0.0.1`); the extension refuses to send your API token anywhere else. Clipped HTML is sanitized when displayed, and full-page snapshots are served sandboxed. Supports five clip modes:
 
 - **Selection** — highlighted text
 - **Full Article** — main content via Readability.js
@@ -290,3 +329,16 @@ The same folder loads in all three browsers:
 - **Safari** — build the Xcode wrapper in `safari-extension/TheLibrarian/` (it references the shared folder), then enable via Safari → Develop → Allow Unsigned Extensions
 - **Chrome** — `chrome://extensions` → enable Developer mode → Load unpacked → select `safari-extension/extension/`
 - **Orion** — Orion → Settings → Advanced → enable "Allow installation of 3rd party Chrome extensions", then Tools → Extensions → Manage Extensions → Add Extension and pick the same folder (if Orion asks for a packaged file, `chrome --pack-extension=safari-extension/extension` produces a `.crx`)
+
+## Contributing
+
+PRs are welcome: bug fixes, features, docs. Run `mix precommit` before
+opening one. This is a personal project maintained in spare time, so reviews
+may be slow and not every feature will be merged.
+
+## License
+
+[MIT](LICENSE). Use at your own risk: the software is provided as is, without
+warranty of any kind, and the authors aren't liable for anything that happens
+from using it, including lost notes or an instance exposed to the internet.
+Back up your data (Settings → Backup).

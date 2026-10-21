@@ -47,6 +47,9 @@ defmodule Librarian.Reader.Feed do
       :fetch_interval_minutes
     ])
     |> validate_required([:title, :feed_url])
+    |> validate_change(:feed_url, fn :feed_url, url ->
+      if URI.parse(url).scheme in ["http", "https"], do: [], else: [feed_url: "must be http(s)"]
+    end)
     |> validate_number(:fetch_interval_minutes, greater_than_or_equal_to: 5)
     |> unique_constraint(:feed_url)
     |> clear_conditional_get_on_url_change()

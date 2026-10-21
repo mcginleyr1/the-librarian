@@ -1,4 +1,10 @@
 defmodule Librarian.Backup do
+  @moduledoc """
+  Incremental vault backup to the user's Backblaze B2 bucket (S3 API): notes
+  as Markdown with YAML front matter plus their attachments, and canvas pages
+  as Obsidian `.canvas` files.
+  """
+
   require Logger
   import Ecto.Query
 
@@ -6,38 +12,57 @@ defmodule Librarian.Backup do
   alias Librarian.Canvas.Page
   alias Librarian.Vault.Note
 
+  @doc """
+  Uploads every note and canvas page changed since the last clean run. The
+  cursor (`last_backup_at`) only advances when every upload succeeded, so a
+  failed run is retried in full instead of silently skipping what it missed.
+  """
   def run(settings) do
+    # The endpoint is user-supplied; never sign requests to an internal host.
+    with {:ok, _uri} <- Librarian.SafeHTTP.check_url("https://#{settings.b2_endpoint}/") do
+      started_at = DateTime.utc_now()
+      results = backup_notes(settings) ++ backup_pages(settings)
+
+      case Enum.count(results, &(&1 != :ok)) do
+        0 ->
+          settings
+          |> Ecto.Changeset.change(last_backup_at: DateTime.truncate(started_at, :second))
+          |> Repo.update!()
+
+          :ok
+
+        failures ->
+          {:error, "#{failures} backup uploads failed"}
+      end
+    end
+  end
+
+  defp backup_notes(settings) do
     query =
       case settings.last_backup_at do
-        nil ->
-          from n in Note, select: n.id, order_by: n.id
-
-        since ->
-          from n in Note, where: n.updated_at > ^since, select: n.id, order_by: n.id
+        nil -> from n in Note, select: n.id, order_by: n.id
+        since -> from n in Note, where: n.updated_at > ^since, select: n.id, order_by: n.id
       end
 
-    ids = Repo.all(query)
-    started_at = DateTime.utc_now()
-
-    Enum.each(ids, fn id ->
-      note = Repo.get!(Note, id) |> Repo.preload([:notebook, :tags])
-      backup_note(note, settings)
-      :erlang.garbage_collect()
+    query
+    |> Repo.all()
+    |> Enum.map(fn id ->
+      case Repo.get(Note, id) do
+        # Deleted since the id list was read: nothing left to back up.
+        nil -> :ok
+        note -> note |> Repo.preload([:notebook, :tags]) |> backup_note(settings)
+      end
     end)
+  end
 
+  defp backup_pages(settings) do
     pages =
       case settings.last_backup_at do
         nil -> from p in Page, order_by: p.id
         since -> from p in Page, where: p.updated_at > ^since, order_by: p.id
       end
 
-    Enum.each(Repo.all(pages), &backup_page(&1, settings))
-
-    settings
-    |> Ecto.Changeset.change(last_backup_at: DateTime.truncate(started_at, :second))
-    |> Repo.update()
-
-    :ok
+    Enum.map(Repo.all(pages), &backup_page(&1, settings))
   end
 
   def note_key(note, notebook_name) do
@@ -79,7 +104,6 @@ defmodule Librarian.Backup do
   end
 
   def render_markdown(note, notebook_name) do
-    tags = Enum.map(note.tags || [], & &1.name)
     created_at = note.original_created_at || note.inserted_at
 
     lines =
@@ -87,7 +111,7 @@ defmodule Librarian.Backup do
         "---",
         "title: #{yaml_value(note.title || "")}",
         if(notebook_name, do: "notebook: #{yaml_value(notebook_name)}"),
-        if(tags != [], do: "tags: [#{Enum.map(tags, &yaml_value/1) |> Enum.join(", ")}]"),
+        tags_line(note.tags),
         if(note.source_url, do: "source_url: #{yaml_value(note.source_url)}"),
         if(note.clip_mode, do: "clip_mode: #{note.clip_mode}"),
         if(created_at, do: "created_at: #{DateTime.to_iso8601(created_at)}"),
@@ -99,6 +123,9 @@ defmodule Librarian.Backup do
 
     Enum.join(lines, "\n")
   end
+
+  defp tags_line(tags) when tags in [nil, []], do: nil
+  defp tags_line(tags), do: "tags: [#{Enum.map_join(tags, ", ", &yaml_value(&1.name))}]"
 
   defp yaml_value(nil), do: nil
   defp yaml_value(str) when is_binary(str), do: ~s("#{String.replace(str, ~s("), ~s(\\"))}")
@@ -119,33 +146,45 @@ defmodule Librarian.Backup do
     try do
       index_key = note_key(note, notebook_name)
       markdown = render_markdown(note, notebook_name)
-      b2_put(index_key, markdown, "text/markdown; charset=utf-8", settings)
 
-      if note.storage_key && Storage.exists?(note.storage_key) do
-        att_key = attachment_key(note, notebook_name)
-
-        case Storage.get(note.storage_key) do
-          {:ok, data} ->
-            b2_put(att_key, data, "application/octet-stream", settings)
-
-          {:error, reason} ->
-            Logger.warning(
-              "Backup: could not read attachment for note #{note.id}: #{inspect(reason)}"
-            )
-        end
+      with :ok <- b2_put(index_key, markdown, "text/markdown; charset=utf-8", settings) do
+        backup_attachment(note, notebook_name, settings)
       end
     rescue
       e ->
         Logger.warning("Backup: failed to back up note #{note.id}: #{inspect(e)}")
+        {:error, e}
     after
       :erlang.garbage_collect()
+    end
+  end
+
+  defp backup_attachment(%{storage_key: nil}, _notebook_name, _settings), do: :ok
+
+  defp backup_attachment(note, notebook_name, settings) do
+    case Storage.get(note.storage_key) do
+      {:ok, data} ->
+        b2_put(attachment_key(note, notebook_name), data, "application/octet-stream", settings)
+
+      {:error, :enoent} ->
+        Logger.warning("Backup: attachment for note #{note.id} is missing from storage")
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "Backup: could not read attachment for note #{note.id}: #{inspect(reason)}"
+        )
+
+        {:error, reason}
     end
   end
 
   defp backup_page(page, settings) do
     b2_put(page_key(page), render_canvas(page), "application/json", settings)
   rescue
-    e -> Logger.warning("Backup: failed to back up page #{page.id}: #{inspect(e)}")
+    e ->
+      Logger.warning("Backup: failed to back up page #{page.id}: #{inspect(e)}")
+      {:error, e}
   end
 
   defp b2_put(key, data, content_type, settings) do
@@ -166,16 +205,16 @@ defmodule Librarian.Backup do
 
           {:ok, %{status: status, body: body}} ->
             Logger.warning("Backup: upload failed for #{key} (#{status}): #{inspect(body)}")
-            :ok
+            {:error, {:http, status}}
 
           {:error, reason} ->
             Logger.warning("Backup: upload request failed for #{key}: #{inspect(reason)}")
-            :ok
+            {:error, reason}
         end
 
       {:error, reason} ->
         Logger.warning("Backup: signing failed for #{key}: #{inspect(reason)}")
-        :ok
+        {:error, reason}
     end
   end
 
@@ -184,7 +223,7 @@ defmodule Librarian.Backup do
   end
 
   defp b2_url(key, settings) do
-    encoded_key = key |> String.split("/") |> Enum.map(&URI.encode/1) |> Enum.join("/")
+    encoded_key = key |> String.split("/") |> Enum.map_join("/", &URI.encode/1)
     "https://#{settings.b2_endpoint}/#{settings.b2_bucket_name}/#{encoded_key}"
   end
 

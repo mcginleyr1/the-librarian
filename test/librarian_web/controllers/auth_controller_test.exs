@@ -9,8 +9,11 @@ defmodule LibrarianWeb.AuthControllerTest do
       uid: Keyword.get(opts, :uid, "google-uid-123"),
       info: %Ueberauth.Auth.Info{
         email: email,
-        name: Keyword.get(opts, :name, "Rob McGinley"),
+        name: Keyword.get(opts, :name, "Test Owner"),
         image: "https://example.com/avatar.png"
+      },
+      extra: %Ueberauth.Auth.Extra{
+        raw_info: %{user: %{"email_verified" => Keyword.get(opts, :email_verified, true)}}
       }
     }
   end
@@ -24,7 +27,7 @@ defmodule LibrarianWeb.AuthControllerTest do
   end
 
   describe "callback" do
-    test "allowed email signs in and claims the migration-created owner", %{conn: conn} do
+    test "allowed email signs in and claims the existing owner row", %{conn: conn} do
       owner_before = Accounts.owner!()
       assert owner_before.provider_uid == nil
 
@@ -46,15 +49,12 @@ defmodule LibrarianWeb.AuthControllerTest do
       refute Librarian.Repo.get_by(Accounts.User, email: "intruder@example.com")
     end
 
-    test "with billing enabled, anyone may sign up (the paywall gates access)", %{conn: conn} do
-      Librarian.BillingHelpers.enable_billing()
+    test "an allowlisted but unverified Google email is rejected", %{conn: conn} do
+      conn = callback_with(conn, google_auth("owner@example.com", email_verified: false))
 
-      conn = callback_with(conn, google_auth("stranger@example.com"))
-
-      assert redirected_to(conn) == ~p"/"
-      user = Librarian.Repo.get_by(Accounts.User, email: "stranger@example.com")
-      assert get_session(conn, :user_id) == user.id
-      refute Librarian.Billing.active?(user)
+      assert redirected_to(conn) == ~p"/login"
+      refute get_session(conn, :user_id)
+      assert Accounts.owner!().provider_uid == nil
     end
 
     test "provider failure redirects to login", %{conn: conn} do

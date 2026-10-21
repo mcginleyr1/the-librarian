@@ -1,4 +1,10 @@
 defmodule Librarian.Vault do
+  @moduledoc """
+  The note vault: notebooks, notes, tags and annotations, plus full-text
+  search, note rendering and the note graph (wiki-link, similarity and
+  user-authored edges).
+  """
+
   import Ecto.Query
   alias Librarian.Repo
   alias Librarian.Vault.{Annotation, Edge, Note, Notebook, Tag, Wikilink}
@@ -46,6 +52,7 @@ defmodule Librarian.Vault do
   def create_note(attrs, tags \\ []) do
     %Note{user_id: Repo.user_id!()}
     |> Note.changeset(attrs)
+    |> validate_owned(:notebook_id, Notebook)
     |> insert_note(tags)
   end
 
@@ -75,7 +82,10 @@ defmodule Librarian.Vault do
   def sync_note(external_id, attrs, tags \\ nil, id \\ nil) do
     with {:ok, note} <- sync_target(external_id, id) do
       created? = is_nil(note.id)
-      changeset = note |> Note.sync_changeset(attrs, external_id) |> validate_own_notebook()
+
+      changeset =
+        note |> Note.sync_changeset(attrs, external_id) |> validate_owned(:notebook_id, Notebook)
+
       result = if created?, do: insert_note(changeset, tags), else: save_note(changeset, tags)
       with {:ok, saved} <- result, do: {:ok, saved, created?}
     end
@@ -97,10 +107,13 @@ defmodule Librarian.Vault do
     end
   end
 
-  # notebook_id is a plain FK, so only a tenant-scoped lookup proves ownership.
-  defp validate_own_notebook(changeset) do
-    Ecto.Changeset.validate_change(changeset, :notebook_id, fn :notebook_id, id ->
-      if Repo.get(Notebook, id), do: [], else: [notebook_id: "does not exist"]
+  @doc """
+  Foreign keys to tenanted rows are plain FKs, so only a tenant-scoped lookup
+  proves the referenced row belongs to the current user.
+  """
+  def validate_owned(changeset, field, schema) do
+    Ecto.Changeset.validate_change(changeset, field, fn ^field, id ->
+      if Repo.get(schema, id), do: [], else: [{field, "does not exist"}]
     end)
   end
 
@@ -110,11 +123,16 @@ defmodule Librarian.Vault do
     changeset =
       %Note{user_id: Repo.user_id!()}
       |> Note.changeset(attrs)
+      |> validate_owned(:notebook_id, Notebook)
       |> Ecto.Changeset.put_assoc(:tags, tag_records)
 
     cond do
       attrs[:evernote_guid] ->
-        Repo.insert(changeset, on_conflict: :nothing, conflict_target: :evernote_guid)
+        Repo.insert(changeset,
+          on_conflict: :nothing,
+          conflict_target:
+            {:unsafe_fragment, "(user_id, evernote_guid) WHERE evernote_guid IS NOT NULL"}
+        )
 
       existing = find_import_duplicate(attrs) ->
         {:ok, existing}
@@ -152,7 +170,7 @@ defmodule Librarian.Vault do
   @doc "Number of surplus copies among identical (notebook, title, body) notes."
   def duplicate_note_count do
     # scoped: WHERE user_id = $1 with Repo.user_id!()
-    # credo:disable-for-next-line Librarian.CredoChecks.RawSQL
+    # credo:disable-for-lines:2 Librarian.CredoChecks.RawSQL
     %{rows: [[n]]} =
       Repo.query!(
         """
@@ -179,7 +197,7 @@ defmodule Librarian.Vault do
     {:ok, removed} =
       Repo.transaction(fn ->
         # scoped: WHERE user_id = $1 with Repo.user_id!()
-        # credo:disable-for-next-line Librarian.CredoChecks.RawSQL
+        # credo:disable-for-lines:2 Librarian.CredoChecks.RawSQL
         %{rows: rows} =
           Repo.query!(
             """
@@ -215,7 +233,7 @@ defmodule Librarian.Vault do
   end
 
   def update_note(%Note{} = note, attrs, tags \\ nil) do
-    note |> Note.changeset(attrs) |> save_note(tags)
+    note |> Note.changeset(attrs) |> validate_owned(:notebook_id, Notebook) |> save_note(tags)
   end
 
   defp save_note(changeset, tags) do
@@ -363,10 +381,15 @@ defmodule Librarian.Vault do
     on_conflict =
       Keyword.get(opts, :on_conflict, {:replace, [:reason, :weight, :origin, :updated_at]})
 
+    # Endpoints come from clients (canvas docs, link events); only the
+    # tenant's own notes may be connected.
+    owned = owned_note_ids(Enum.flat_map(entries, &[&1.source_note_id, &1.target_note_id]))
+
     rows =
       entries
       |> Enum.filter(fn e ->
-        e.kind in Edge.kinds() and e.source_note_id != e.target_note_id
+        e.kind in Edge.kinds() and e.source_note_id != e.target_note_id and
+          MapSet.member?(owned, e.source_note_id) and MapSet.member?(owned, e.target_note_id)
       end)
       |> Enum.map(&Map.merge(&1, %{user_id: user_id, inserted_at: now, updated_at: now}))
 
@@ -377,9 +400,13 @@ defmodule Librarian.Vault do
       rows ->
         Repo.insert_all(Edge, rows,
           on_conflict: on_conflict,
-          conflict_target: [:source_note_id, :target_note_id, :kind]
+          conflict_target: [:user_id, :source_note_id, :target_note_id, :kind]
         )
     end
+  end
+
+  defp owned_note_ids(ids) do
+    MapSet.new(Repo.all(from n in Note, where: n.id in ^Enum.uniq(ids), select: n.id))
   end
 
   def delete_edge(id) do
@@ -403,7 +430,10 @@ defmodule Librarian.Vault do
     :ok
   end
 
-  @doc "The note body as HTML: markdown is rendered, clipped HTML gets its wiki-links resolved."
+  @doc """
+  The note body as HTML: markdown is rendered (MDEx escapes raw HTML), clipped
+  HTML is sanitized — it is someone else's page — and gets its wiki-links resolved.
+  """
   def render_note_html(%Note{clip_mode: "markdown", body: body}) when is_binary(body) do
     body
     |> Wikilink.to_markdown_links(wikilink_targets(body))
@@ -411,7 +441,7 @@ defmodule Librarian.Vault do
   end
 
   def render_note_html(%Note{body: body}) when is_binary(body) do
-    Wikilink.to_html_links(body, wikilink_targets(body))
+    body |> HtmlSanitizeEx.html5() |> Wikilink.to_html_links(wikilink_targets(body))
   end
 
   def render_note_html(_), do: "<p class='text-base-content/40 italic'>No content</p>"
@@ -442,7 +472,8 @@ defmodule Librarian.Vault do
   @doc """
   Mirrors the body's `[[Title]]` links into `references` edges with origin
   `wikilink`. The set is replaced on every save, so removing a link from the
-  body removes its edge — similarity/llm/user edges are never touched.
+  body removes its edge — similarity/llm/user edges are never touched (a link
+  matching an existing edge leaves it, and its origin, as is).
   """
   def sync_wikilink_edges(%Note{} = note) do
     target_ids =
@@ -469,7 +500,7 @@ defmodule Librarian.Vault do
         origin: "wikilink"
       }
     )
-    |> upsert_edges()
+    |> upsert_edges(on_conflict: :nothing)
 
     :ok
   end
@@ -525,7 +556,7 @@ defmodule Librarian.Vault do
         else: {"", [k, threshold, Repo.user_id!()]}
 
     # scoped: WHERE n.user_id = $3, lateral join on m2.user_id = n.user_id, stamps n.user_id
-    # credo:disable-for-next-line Librarian.CredoChecks.RawSQL
+    # credo:disable-for-lines:2 Librarian.CredoChecks.RawSQL
     {:ok, %{num_rows: count}} =
       Repo.query(
         """
@@ -541,7 +572,7 @@ defmodule Librarian.Vault do
           LIMIT $1
         ) m ON m.sim >= $2
         WHERE n.embedding IS NOT NULL AND n.user_id = $3 #{filter_sql}
-        ON CONFLICT (source_note_id, target_note_id, kind)
+        ON CONFLICT (user_id, source_note_id, target_note_id, kind)
         DO UPDATE SET weight = EXCLUDED.weight, updated_at = now()
         """,
         params
@@ -567,6 +598,7 @@ defmodule Librarian.Vault do
   def create_annotation(note_id, body) do
     %Annotation{user_id: Repo.user_id!()}
     |> Annotation.changeset(%{note_id: note_id, body: body})
+    |> validate_owned(:note_id, Note)
     |> Repo.insert()
   end
 
