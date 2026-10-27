@@ -1,18 +1,29 @@
 # The Librarian — task runner
 # Usage: just <recipe>
 
+# Per-machine settings (deploy target, sign-in allowlist) come from .env — see
+# .env.example. Variables already exported in the shell take precedence.
+set dotenv-load
+
 IMAGE := "the-librarian"
 NAMESPACE := "librarian"
-# Internal registry (exposed via the Tailscale operator): images are built and
-# pushed under this name. Override with LIBRARIAN_REGISTRY for your own tailnet.
-TS_REGISTRY := env_var_or_default("LIBRARIAN_REGISTRY", "registry.<your-tailnet>.ts.net:5000")
-# The same registry as the cluster node pulls the app from (k8s/app.yaml)
+# Registry images are built and tagged for (e.g. one exposed via the Tailscale
+# operator). Required by the build/push/deploy recipes.
+TS_REGISTRY := env_var_or_default("LIBRARIAN_REGISTRY", "")
+# The same registry as the cluster node pulls from (k8s/app.yaml, postgres.yaml)
 CLUSTER_REGISTRY := "localhost:31500"
-# kubectl context hosting the librarian cluster — pinned so `just deploy` works
-# from any machine on the tailnet, not just one whose current context happens to
-# be right. Override per-machine with LIBRARIAN_KUBE_CONTEXT if needed.
-KUBE_CONTEXT := env_var_or_default("LIBRARIAN_KUBE_CONTEXT", "tailscale-operator.<your-tailnet>.ts.net")
-KUBECTL := "kubectl --context " + KUBE_CONTEXT
+# kubectl context hosting the librarian cluster — pin it so `just deploy` works
+# from any machine, not just one whose current context happens to be right.
+# Empty uses the current context.
+KUBE_CONTEXT := env_var_or_default("LIBRARIAN_KUBE_CONTEXT", "")
+KUBECTL := if KUBE_CONTEXT == "" { "kubectl" } else { "kubectl --context " + KUBE_CONTEXT }
+
+# Fail fast when a setting is missing from .env / the environment
+_need +VARS:
+    #!/usr/bin/env bash
+    for v in {{VARS}}; do
+        [ -n "${!v:-}" ] || { echo "$v is not set: copy .env.example to .env and fill it in" >&2; exit 1; }
+    done
 
 # ── Dev ──────────────────────────────────────────────────────────────────────
 
@@ -25,12 +36,8 @@ db-up:
     docker compose up -d postgres
     docker compose exec postgres sh -c 'until pg_isready -U postgres; do sleep 1; done'
 
-# Needs SECRET_KEY_BASE and ALLOWED_EMAILS exported, e.g.
-# `export SECRET_KEY_BASE=$(mix phx.gen.secret) ALLOWED_EMAILS=you@example.com`
 # Start full stack in docker (postgres + built app image) — for local image testing only
-up:
-    @: "${SECRET_KEY_BASE:?export SECRET_KEY_BASE first (generate with: mix phx.gen.secret)}"
-    @: "${ALLOWED_EMAILS:?export ALLOWED_EMAILS first (comma-separated sign-in allowlist)}"
+up: (_need "SECRET_KEY_BASE" "ALLOWED_EMAILS")
     docker compose --profile full up --build
 
 # Stop everything
@@ -85,7 +92,7 @@ _deployed-tag:
     if [ -n "$image" ]; then echo "${image##*:}"; else just _image-tag; fi
 
 # Build the app image for the cluster (arm64 node), tagged for the internal registry
-docker-build TAG=`just _image-tag`:
+docker-build TAG=`just _image-tag`: (_need "LIBRARIAN_REGISTRY")
     docker build --platform linux/arm64 -t {{TS_REGISTRY}}/{{IMAGE}}:{{TAG}} .
 
 # Build and push the app image to the INTERNAL registry the cluster pulls from.
@@ -96,8 +103,8 @@ docker-push TAG=`just _image-tag`: (docker-build TAG)
 # Push an already-built image to the INTERNAL registry, bypassing the Tailscale
 # LoadBalancer proxy (it mangles large layer uploads; GET/pull works, push doesn't).
 # Port-forwards straight to the registry pod and pushes to localhost instead.
-# Usage: just registry-push postgres-pgvector:16   (image must be tagged {{TS_REGISTRY}}/<that>)
-registry-push IMG:
+# Usage: just registry-push postgres-pgvector:16   (image must be tagged $LIBRARIAN_REGISTRY/<that>)
+registry-push IMG: (_need "LIBRARIAN_REGISTRY")
     #!/usr/bin/env bash
     set -euo pipefail
     port=5000
@@ -118,9 +125,21 @@ k-namespace:
 
 # Pins the app image (both containers) to TAG: by default the tag already
 # running, so applying config changes never swaps the image — `just deploy` does.
+# The per-site settings (PHX_HOST, ALLOWED_EMAILS) go into the librarian-site
+# ConfigMap from LIBRARIAN_HOST / ALLOWED_EMAILS, so no hostnames or emails live
+# in k8s/.
 # Apply all k8s manifests via kustomize (does not apply secrets.yaml — use k-create-secrets)
-k-apply TAG=`just _deployed-tag`:
-    {{KUBECTL}} kustomize k8s/ | sed 's|image: {{CLUSTER_REGISTRY}}/{{IMAGE}}$|&:{{TAG}}|' | {{KUBECTL}} apply -f -
+k-apply TAG=`just _deployed-tag`: (_need "LIBRARIAN_HOST" "ALLOWED_EMAILS") k-namespace
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {
+        {{KUBECTL}} create configmap librarian-site -n {{NAMESPACE}} \
+            --from-literal=PHX_HOST="$LIBRARIAN_HOST" \
+            --from-literal=ALLOWED_EMAILS="$ALLOWED_EMAILS" \
+            --dry-run=client -o yaml
+        echo ---
+        {{KUBECTL}} kustomize k8s/ | sed 's|image: {{CLUSTER_REGISTRY}}/{{IMAGE}}$|&:{{TAG}}|'
+    } | {{KUBECTL}} apply -f -
 
 # Reads LIBRARIAN_DB_PASSWORD, GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from
 # the environment, prompting for any that are unset (never CLI args: those end
@@ -163,7 +182,7 @@ oauth-setup:
     @echo "     - Application type: Web application   - Name: librarian"
     @echo "     - Authorized redirect URIs:"
     @echo "         http://localhost:4000/auth/google/callback"
-    @echo "         https://{{env_var_or_default("PHX_HOST", "<your-host>")}}/auth/google/callback"
+    @echo "         https://{{env_var_or_default("LIBRARIAN_HOST", "<your-host>")}}/auth/google/callback"
     @echo ""
     @echo "3. Store the credentials (both recipes prompt for unset values; or set"
     @echo "   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in the environment):"

@@ -27,20 +27,24 @@ config :ueberauth, Ueberauth.Strategy.Google.OAuth,
   client_id: System.get_env("GOOGLE_CLIENT_ID"),
   client_secret: System.get_env("GOOGLE_CLIENT_SECRET")
 
-if allowed = System.get_env("ALLOWED_EMAILS") do
-  config :librarian,
-         :allowed_emails,
-         allowed |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
-end
+# Tests use the config.exs / test.exs values, so the host's environment
+# (including .env, which `just` loads) must not leak into them.
+if config_env() != :test do
+  if allowed = System.get_env("ALLOWED_EMAILS") do
+    config :librarian,
+           :allowed_emails,
+           allowed |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+  end
 
-# Platform Anthropic key: serves users without their own key, capped per user
-# per month.
-if anthropic_key = System.get_env("ANTHROPIC_API_KEY") do
-  config :librarian, :platform_anthropic_api_key, anthropic_key
-end
+  # Platform Anthropic key: serves users without their own key, capped per user
+  # per month.
+  if anthropic_key = System.get_env("ANTHROPIC_API_KEY") do
+    config :librarian, :platform_anthropic_api_key, anthropic_key
+  end
 
-if platform_llm_budget = System.get_env("PLATFORM_LLM_BUDGET_CENTS") do
-  config :librarian, :platform_llm_budget_cents, String.to_integer(platform_llm_budget)
+  if platform_llm_budget = System.get_env("PLATFORM_LLM_BUDGET_CENTS") do
+    config :librarian, :platform_llm_budget_cents, String.to_integer(platform_llm_budget)
+  end
 end
 
 if config_env() == :prod do

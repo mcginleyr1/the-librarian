@@ -44,7 +44,8 @@ Finder) into `/Applications` and launch it once from there.
 
 Open the extension popup on any page and fill in:
 
-- **API URL** — e.g. `https://librarian.<your-tailnet>.ts.net`. Must be
+- **API URL** — your Librarian's address, e.g. `https://librarian.<tailnet>.ts.net`
+  (there is no default). Must be
   `https://`; plain `http://` is accepted only for `localhost` /
   `127.0.0.1` (local dev). The popup refuses to save any other URL and never
   sends the token to it, showing an error instead.

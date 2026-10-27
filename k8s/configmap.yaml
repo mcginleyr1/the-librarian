@@ -3,16 +3,14 @@ kind: ConfigMap
 metadata:
   name: librarian-config
   namespace: librarian
+# Site-specific settings (PHX_HOST, ALLOWED_EMAILS) live in the librarian-site
+# ConfigMap, which `just k-apply` generates from LIBRARIAN_HOST and
+# ALLOWED_EMAILS in .env; the release refuses to boot without them.
 data:
-  # Required: the app's hostname (the Tailscale ingress name); boot fails without it
-  PHX_HOST: "librarian.<your-tailnet>.ts.net"
   PHX_SERVER: "true"
   PORT: "4000"
   POOL_SIZE: "10"
   STORAGE_PATH: "/data/librarian"
-  # Required: comma-separated Google accounts allowed to sign in; boot fails
-  # without it
-  ALLOWED_EMAILS: "owner@example.com"
   # Optional: per-user monthly budget (cents) on the shared platform LLM key
   # (anthropic-api-key secret — see k8s/secrets.yaml)
   # PLATFORM_LLM_BUDGET_CENTS: "500"

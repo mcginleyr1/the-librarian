@@ -37,16 +37,16 @@ A free and open-source, self-hosted personal knowledge base combining an RSS fee
 **Prerequisites:** Elixir 1.20+, PostgreSQL 16 with pgvector, Node.js
 
 ```bash
+# Per-machine settings: sign-in allowlist, deploy target (see comments inside)
+cp .env.example .env
+
 # Start PostgreSQL
 just db-up
 
 # Install deps, create DB, run migrations, build assets
 mix setup
 
-# Who may sign in (comma-separated)
-export ALLOWED_EMAILS=you@example.com
-
-# Start dev server
+# Start dev server (just loads .env, so ALLOWED_EMAILS applies)
 just dev
 ```
 
@@ -195,14 +195,14 @@ haven't added one; that shared usage is hard-capped per user per month by
 ## Docker (Full Stack)
 
 ```bash
-export SECRET_KEY_BASE=$(mix phx.gen.secret) ALLOWED_EMAILS=you@example.com
+# In .env: SECRET_KEY_BASE (mix phx.gen.secret) and ALLOWED_EMAILS
 just up   # Builds app + starts postgres, serves on http://localhost:4100
 just db-down
 ```
 
 Nothing secret is committed: `just up` refuses to start until `SECRET_KEY_BASE`
-and `ALLOWED_EMAILS` are exported. The compose Postgres listens on
-`127.0.0.1:5433` only.
+and `ALLOWED_EMAILS` are set in `.env` or the environment. The compose Postgres
+listens on `127.0.0.1:5433` only.
 
 The image runs as `nobody` with the release files root-owned and read-only; the
 app writes only to `/data` (`STORAGE_PATH` and the Bumblebee model cache,
@@ -211,14 +211,25 @@ app writes only to `/data` (`STORAGE_PATH` and the Bumblebee model cache,
 ## Deployment (Kubernetes)
 
 The app is designed to run on Kubernetes behind Tailscale for TLS termination.
-The Justfile defaults point at the author's cluster; override them with
-`LIBRARIAN_REGISTRY` (image registry) and `LIBRARIAN_KUBE_CONTEXT`.
+Nothing site-specific lives in `k8s/`: set these in `.env` (see `.env.example`):
+
+| Variable | Used for |
+|---|---|
+| `LIBRARIAN_REGISTRY` | Registry images are built and tagged for (`docker-build`, `registry-push`, `deploy`) |
+| `LIBRARIAN_HOST` | The app's public hostname; `k-apply` puts it in the `librarian-site` ConfigMap as `PHX_HOST` |
+| `ALLOWED_EMAILS` | Sign-in allowlist; `k-apply` puts it in `librarian-site` too |
+| `LIBRARIAN_KUBE_CONTEXT` | kubectl context for the cluster (empty: current context) |
+
+The cluster node pulls images from the same registry at `localhost:31500` (a
+NodePort), which is what the manifests reference.
 
 **First deploy:**
 
 ```bash
 just k-namespace
 just k-create-secrets   # reads LIBRARIAN_DB_PASSWORD, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (prompts for any unset)
+docker build --platform linux/arm64 -t "$LIBRARIAN_REGISTRY/postgres-pgvector:16" k8s/postgres-pgvector/
+just registry-push postgres-pgvector:16
 just docker-push
 just k-apply            # applies manifests with the image pinned to a tag
 ```
@@ -227,7 +238,7 @@ Secrets never go on the command line. Re-running `k-create-secrets` keeps the
 existing `secret-key-base`, so sessions survive.
 
 The production Google OAuth client needs
-`https://<PHX_HOST>/auth/google/callback` as an authorized redirect URI
+`https://<LIBRARIAN_HOST>/auth/google/callback` as an authorized redirect URI
 (`just oauth-setup` walks the console steps). To rotate or add the Google
 credentials on an existing cluster without touching the other secrets:
 

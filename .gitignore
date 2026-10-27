@@ -45,3 +45,6 @@ xcuserdata/
 # Local Apple signing identity (see Signing.xcconfig.example).
 /safari-extension/TheLibrarian/Signing.xcconfig
 
+# Local settings and deploy target (see .env.example).
+/.env
+

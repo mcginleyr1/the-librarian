@@ -1,5 +1,5 @@
 # Tailscale Ingress with TLS termination
-# Accessible at: https://librarian.<your-tailnet>.ts.net
+# Accessible at: https://librarian.<your-tailnet>.ts.net (set LIBRARIAN_HOST to match)
 #
 # Tailscale operator provisions a Let's Encrypt cert automatically.
 # Requires HTTPS Certificates enabled in Tailscale admin:

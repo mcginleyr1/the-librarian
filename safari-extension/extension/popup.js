@@ -1,12 +1,12 @@
-const DEFAULT_API_URL = "https://librarian.<your-tailnet>.ts.net";
-
 let selectedMode = "selection";
-let apiUrl = DEFAULT_API_URL;
+// No default: each install points at its own Librarian (set in the popup).
+let apiUrl = "";
 let apiToken = "";
 
 // The API token is a bearer credential: only send it over https, or plain http
 // to this machine (local dev). Same check as background.js.
 function apiUrlProblem(raw) {
+  if (!raw) return "Set the API URL of your Librarian below";
   let url;
   try {
     url = new URL(raw);
@@ -30,11 +30,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Load saved API URL
   try {
     const stored = await chrome.storage.local.get(["apiUrl", "apiToken"]);
-    apiUrl = stored.apiUrl || DEFAULT_API_URL;
+    apiUrl = stored.apiUrl || "";
     apiToken = stored.apiToken || "";
-  } catch (_) {
-    apiUrl = DEFAULT_API_URL;
-  }
+  } catch (_) {}
   document.getElementById("api-url").value = apiUrl;
   document.getElementById("api-token").value = apiToken;
 

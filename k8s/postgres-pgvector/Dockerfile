@@ -3,8 +3,8 @@
 # Build + push to the internal registry, then the postgres StatefulSet pulls it.
 #
 #   docker build --platform linux/arm64 \
-#     -t registry.<your-tailnet>.ts.net:5000/postgres-pgvector:16 k8s/postgres-pgvector/
-#   docker push registry.<your-tailnet>.ts.net:5000/postgres-pgvector:16
+#     -t "$LIBRARIAN_REGISTRY/postgres-pgvector:16" k8s/postgres-pgvector/
+#   just registry-push postgres-pgvector:16
 FROM postgres:16
 
 RUN apt-get update \

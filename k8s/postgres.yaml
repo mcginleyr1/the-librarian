@@ -20,8 +20,9 @@ spec:
       containers:
         - name: postgres
           # Postgres 16 + pgvector on the same glibc-2.41 base as stock postgres:16
-          # (avoids a collation-version mismatch). Built from k8s/postgres-pgvector/Dockerfile.
-          image: registry.<your-tailnet>.ts.net:5000/postgres-pgvector:16
+          # (avoids a collation-version mismatch). Built from k8s/postgres-pgvector/Dockerfile
+          # and pulled from the in-cluster registry, like the app image.
+          image: localhost:31500/postgres-pgvector:16
           # The official entrypoint starts as root to chown the data dir, then
           # drops to the postgres user (uid 999) via gosu — so no runAsNonRoot /
           # runAsUser (a fresh root-owned volume would fail initdb), and no

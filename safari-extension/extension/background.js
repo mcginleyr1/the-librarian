@@ -8,6 +8,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 // The API token is a bearer credential: only send it over https, or plain http
 // to this machine (local dev). Same check as popup.js.
 function apiUrlProblem(raw) {
+  if (!raw) return "Set the API URL of your Librarian below";
   let url;
   try {
     url = new URL(raw);

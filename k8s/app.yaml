@@ -51,6 +51,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: librarian-config
+            - configMapRef:
+                name: librarian-site
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -103,6 +105,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: librarian-config
+            - configMapRef:
+                name: librarian-site
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
