@@ -42,9 +42,10 @@ defmodule Librarian.SafeHTTP do
       [
         redirect: false,
         retry: false,
+        # raw: no decompress_body / decode_body steps (no gzip bombs, no
+        # decoded maps); compressed: false asks servers not to compress.
         compressed: false,
-        decompress_body: false,
-        decode_body: false,
+        raw: true,
         into: fn {:data, data}, {req, resp} ->
           resp = %{resp | body: resp.body <> data}
 
