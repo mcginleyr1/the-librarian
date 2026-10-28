@@ -84,7 +84,8 @@ defmodule LibrarianWeb.McpControllerTest do
 
     test "anything that isn't a JSON-RPC request or notification is a 400", %{conn: conn} do
       for body <- [%{hello: "world"}, [%{jsonrpc: "2.0", id: 1, method: "ping"}]] do
-        assert %{"error" => %{"code" => -32_600}} = conn |> post_json(body) |> json_response(400)
+        assert %{"id" => nil, "error" => %{"code" => -32_600}} =
+                 conn |> post_json(body) |> json_response(400)
       end
     end
   end

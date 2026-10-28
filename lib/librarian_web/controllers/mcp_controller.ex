@@ -234,10 +234,14 @@ defmodule LibrarianWeb.McpController do
 
   defp reply(conn, status, body), do: conn |> put_status(status) |> json(body)
 
+  # JSON-RPC requires `id` on every response, null when the request's id
+  # couldn't be read; only the error's `data` is optional.
   defp error(id, code, message, data \\ nil) do
-    error = reject_nil(%{code: code, message: message, data: data})
-    reject_nil(%{jsonrpc: "2.0", id: id, error: error})
-  end
+    error =
+      if data,
+        do: %{code: code, message: message, data: data},
+        else: %{code: code, message: message}
 
-  defp reject_nil(map), do: Map.reject(map, fn {_key, value} -> is_nil(value) end)
+    %{jsonrpc: "2.0", id: id, error: error}
+  end
 end
