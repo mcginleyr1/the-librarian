@@ -207,6 +207,25 @@ defmodule Librarian.Reader do
     Repo.one!(from a in visible_articles(), where: a.id == ^id, preload: [:feed, :read_state])
   end
 
+  def get_article(id) do
+    Repo.one(from a in visible_articles(), where: a.id == ^id, preload: [:feed, :read_state])
+  end
+
+  @doc "Full-text search (title and summary) over the articles the user may see, best match first."
+  def search_articles(query_str, opts \\ []) when is_binary(query_str) do
+    limit = Keyword.get(opts, :limit, 20)
+
+    Repo.all(
+      from a in visible_articles(),
+        where: fragment("search_vector @@ plainto_tsquery('english', ?)", ^query_str),
+        order_by: [
+          desc: fragment("ts_rank(search_vector, plainto_tsquery('english', ?))", ^query_str)
+        ],
+        limit: ^limit,
+        preload: :feed
+    )
+  end
+
   def list_all_unread_articles(opts \\ []) do
     limit = Keyword.get(opts, :limit, 50)
     offset = Keyword.get(opts, :offset, 0)

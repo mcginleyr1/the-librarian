@@ -1,8 +1,6 @@
 defmodule LibrarianWeb.SearchLive do
   use LibrarianWeb, :live_view
-  import Ecto.Query
-  alias Librarian.{Reader, Repo, Vault}
-  alias Librarian.Reader.Feed
+  alias Librarian.{Reader, Vault}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -38,23 +36,19 @@ defmodule LibrarianWeb.SearchLive do
   end
 
   defp search_articles(q) do
-    Repo.all(
-      from a in Reader.visible_articles(),
-        join: f in Feed,
-        on: f.id == a.feed_id,
-        where: fragment("a0.search_vector @@ plainto_tsquery('english', ?)", ^q),
-        order_by: [desc: fragment("ts_rank(a0.search_vector, plainto_tsquery('english', ?))", ^q)],
-        limit: 20,
-        select: %{
-          type: "article",
-          id: a.id,
-          title: a.title,
-          subtitle: f.title,
-          url: a.url,
-          preview: fragment("left(coalesce(?, ''), 200)", a.summary),
-          date: a.published_at
-        }
-    )
+    q
+    |> Reader.search_articles(limit: 20)
+    |> Enum.map(fn a ->
+      %{
+        type: "article",
+        id: a.id,
+        title: a.title,
+        subtitle: a.feed.title,
+        url: a.url,
+        preview: String.slice(a.summary || "", 0, 200),
+        date: a.published_at
+      }
+    end)
   end
 
   defp search_notes(q) do
