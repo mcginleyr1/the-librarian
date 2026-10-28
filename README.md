@@ -102,9 +102,11 @@ note looks exactly like a missing one. A missing or unknown token gets `401
 |---|---|
 | `POST /api/clips` | Clip a page into the vault (browser extension) |
 | `GET /api/notebooks` | List notebooks: `[{"id", "name"}]` |
-| `GET /api/notes?q=&limit=` | Search or list notes (editor clients) |
+| `GET /api/notes?q=&limit=&notebook_id=` | Search or list notes (editor clients) |
 | `GET /api/notes/:id` | Read one note with its body and connections |
+| `GET /api/notes/:id/file` | Download a clip's stored file (PDF, screenshot, page snapshot) |
 | `PUT /api/notes/external/:external_id` | Upsert a note by the client's stable id |
+| `POST /mcp` | [MCP](#mcp) server for AI clients |
 
 ### Notes API (editor sync)
 
@@ -125,10 +127,12 @@ Notes are listed as summaries:
 `external_id` is `null` for notes never synced, and `notebook` is `null` for
 unfiled notes.
 
-**`GET /api/notes?q=<text>&limit=<n>`** → `{"notes": [summary]}`. With a
-non-blank `q`, title-substring matches come first, then full-text matches,
-de-duplicated; without one, the most recently updated notes. `limit` defaults
-to 50, max 200.
+**`GET /api/notes?q=<text>&limit=<n>&notebook_id=<id>`** → `{"notes":
+[summary]}`. With a non-blank `q`, title-substring matches come first, then
+full-text matches, de-duplicated; without one, the most recently updated notes.
+`limit` defaults to 50, max 200. `notebook_id` restricts the results to one
+notebook (another user's notebook simply matches nothing; a non-integer is a
+`422`).
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" "https://$HOST/api/notes?q=raft&limit=20"
@@ -141,6 +145,15 @@ clips; `related` lists connected notes as `{"id", "title", "kind",
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" "https://$HOST/api/notes/42"
+```
+
+**`GET /api/notes/:id/file`** returns the stored file behind a clip or
+attachment note (PDF, screenshot, full-page snapshot) with its content type,
+under `Content-Security-Policy: sandbox`. `404` when the note has no file or
+isn't yours.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -o paper.pdf "https://$HOST/api/notes/42/file"
 ```
 
 **`PUT /api/notes/external/:external_id`** upserts a markdown note keyed by
@@ -158,6 +171,37 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json
   -d '{"title":"Raft","body":"See [[Paxos]]","tags":["distsys"]}' \
   "https://$HOST/api/notes/external/5b9e1c7a-0d1f-4c33-9a57-2f0f3e1b8d11"
 ```
+
+## MCP
+
+`/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
+on the Streamable HTTP transport, so AI clients (Claude Code, custom agents)
+can search and read your vault and feeds and write notes. It authenticates
+with the same per-user API bearer token as `/api` and acts as that token's
+user: tools see only that user's notes, notebooks and feed articles.
+
+| Tool | Does |
+|---|---|
+| `search_notes` | Search notes (`query`, `limit`, `notebook_id`), same results as `GET /api/notes` |
+| `read_note` | A note's title, tags, notebook, source URL, body (clips converted from HTML to markdown), stored file and connections |
+| `list_notebooks` | Notebook ids and names |
+| `save_note` | Create a markdown note, or upsert one by `external_id` like `PUT /api/notes/external/:external_id` |
+| `search_articles` | Full-text search of your feed articles |
+| `read_article` | One article's content as markdown |
+
+It speaks protocol version `2026-07-28` (stateless, per-request `_meta`) and
+the `initialize`-handshake versions `2025-11-25` and `2025-06-18`. Responses
+are plain JSON; there are no SSE streams or sessions, so `GET` and `DELETE`
+return `405`. Requests carrying an `Origin` other than the app's host are
+refused (`403`).
+
+```bash
+claude mcp add --transport http librarian "https://$HOST/mcp" \
+  --header "Authorization: Bearer $TOKEN"
+```
+
+OAuth for remote MCP clients that can't send a static bearer token (e.g.
+hosted connectors) is a planned follow-up.
 
 ## AI Features
 
@@ -181,8 +225,10 @@ haven't added one; that shared usage is hard-capped per user per month by
   nonce) as a backstop.
 - **Stored files are sandboxed.** Files under `/vault/files` are served only to
   the owner of a note that references them, under `Content-Security-Policy:
-  sandbox` (PDFs excepted, which browsers won't render sandboxed). Storage keys
-  are random and per user; keys resolving outside `STORAGE_PATH` are refused.
+  sandbox` (PDFs excepted, which browsers won't render sandboxed). The API's
+  `/api/notes/:id/file` serves them only to the note's owner and always
+  sandboxed. Storage keys are random and per user; keys resolving outside
+  `STORAGE_PATH` are refused.
 - **Outbound fetches can't reach internal networks.** Feed fetching, feed
   discovery and backup endpoints refuse non-`http(s)` URLs and hosts resolving
   to loopback, private, link-local or CGNAT/Tailscale addresses (re-checked on

@@ -95,6 +95,33 @@ defmodule LibrarianWeb.NoteApiControllerTest do
       assert conn |> get(~p"/api/notes?q=raft") |> ids() == []
       assert conn |> get(~p"/api/notes") |> ids() == []
     end
+
+    test "filters by notebook_id, with or without q", %{conn: conn} do
+      {:ok, notebook} = Vault.create_notebook(%{name: "Papers"})
+      filed = note!(%{title: "Raft paper", notebook_id: notebook.id})
+      _loose = note!(%{title: "Raft musings", body: "raft"})
+
+      assert conn |> get(~p"/api/notes?notebook_id=#{notebook.id}") |> ids() == [filed.id]
+      assert conn |> get(~p"/api/notes?q=raft&notebook_id=#{notebook.id}") |> ids() == [filed.id]
+    end
+
+    test "another user's notebook_id matches nothing", %{conn: conn} do
+      foreign =
+        other_users(fn ->
+          {:ok, notebook} = Vault.create_notebook(%{name: "Theirs"})
+          note!(%{title: "Raft", notebook_id: notebook.id})
+          notebook
+        end)
+
+      assert conn |> get(~p"/api/notes?notebook_id=#{foreign.id}") |> ids() == []
+    end
+
+    test "422s for a non-integer notebook_id", %{conn: conn} do
+      assert json_response(get(conn, ~p"/api/notes?notebook_id=abc"), 422) == %{
+               "status" => "error",
+               "errors" => %{"notebook_id" => ["is invalid"]}
+             }
+    end
   end
 
   describe "GET /api/notes/:id" do

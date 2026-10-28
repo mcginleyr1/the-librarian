@@ -21,30 +21,45 @@ defmodule LibrarianWeb.NoteApiController do
       end
 
     query = if is_binary(params["q"]), do: params["q"], else: ""
-    notes = Vault.find_notes(query, limit)
-    json(conn, %{notes: Enum.map(notes, &summary/1)})
+
+    case parse_id(params["notebook_id"]) do
+      {:ok, notebook_id} ->
+        notes = Vault.find_notes(query, limit, notebook_id)
+        json(conn, %{notes: Enum.map(notes, &summary/1)})
+
+      {:error, :not_found} ->
+        render_error(conn, {:error, :invalid_notebook_id})
+    end
   end
 
   def show(conn, %{"id" => id}) do
     with {:ok, id} <- parse_id(id), %Vault.Note{} = note <- Vault.get_note(id) do
-      related =
-        Enum.map(Vault.related_notes(note.id), fn %{edge: edge, note: other} ->
-          %{
-            id: other.id,
-            title: other.title,
-            kind: edge.kind,
-            direction: if(edge.source_note_id == note.id, do: "outgoing", else: "incoming")
-          }
-        end)
-
       json(conn, %{
         note:
           Map.merge(summary(note), %{
             body: note.body,
             body_format: if(note.clip_mode == "markdown", do: "markdown", else: "html"),
-            related: related
+            related: related(note)
           })
       })
+    else
+      _ -> render_error(conn, {:error, :not_found})
+    end
+  end
+
+  @doc """
+  The stored file of a clip or attachment note (PDF, screenshot, page
+  snapshot). Always sandboxed: unlike `/vault/files`, nothing here is meant to
+  render in a browser tab of this origin, so PDFs get no exemption.
+  """
+  def file(conn, %{"id" => id}) do
+    with {:ok, id} <- parse_id(id),
+         %Vault.Note{storage_key: key} when is_binary(key) <- Vault.get_note(id),
+         {:ok, data} <- Librarian.Storage.get(key) do
+      conn
+      |> put_resp_content_type(MIME.from_path(key), nil)
+      |> put_resp_header("content-security-policy", "sandbox")
+      |> send_resp(200, data)
     else
       _ -> render_error(conn, {:error, :not_found})
     end
@@ -65,7 +80,8 @@ defmodule LibrarianWeb.NoteApiController do
     end
   end
 
-  defp summary(note) do
+  @doc "A note's summary shape, shared with the MCP tools (`LibrarianWeb.McpTools`)."
+  def summary(note) do
     %{
       id: note.id,
       title: note.title,
@@ -76,6 +92,18 @@ defmodule LibrarianWeb.NoteApiController do
       source_url: note.source_url,
       updated_at: note.updated_at
     }
+  end
+
+  @doc "A note's connections in either direction, shared with the MCP tools."
+  def related(note) do
+    Enum.map(Vault.related_notes(note.id), fn %{edge: edge, note: other} ->
+      %{
+        id: other.id,
+        title: other.title,
+        kind: edge.kind,
+        direction: if(edge.source_note_id == note.id, do: "outgoing", else: "incoming")
+      }
+    end)
   end
 
   defp parse_id(nil), do: {:ok, nil}
@@ -106,6 +134,10 @@ defmodule LibrarianWeb.NoteApiController do
 
   defp render_error(conn, {:error, :invalid_tags}),
     do: conn |> put_status(422) |> json(%{status: "error", errors: %{tags: ["is invalid"]}})
+
+  defp render_error(conn, {:error, :invalid_notebook_id}),
+    do:
+      conn |> put_status(422) |> json(%{status: "error", errors: %{notebook_id: ["is invalid"]}})
 
   defp render_error(conn, {:error, %Ecto.Changeset{} = changeset}) do
     errors =

@@ -20,6 +20,13 @@ defmodule LibrarianWeb.Router do
     plug :require_api_token
   end
 
+  # Bearer-token auth without JSON-only content negotiation: MCP clients probe
+  # with `Accept: text/event-stream` (and must get 405, not 406), and file
+  # downloads accept the file's own type.
+  pipeline :api_token do
+    plug :require_api_token
+  end
+
   scope "/", LibrarianWeb do
     pipe_through [:browser, :redirect_if_authenticated]
 
@@ -78,6 +85,21 @@ defmodule LibrarianWeb.Router do
     get "/notes", NoteApiController, :index
     get "/notes/:id", NoteApiController, :show
     put "/notes/external/:external_id", NoteApiController, :sync
+  end
+
+  scope "/api", LibrarianWeb do
+    pipe_through :api_token
+
+    get "/notes/:id/file", NoteApiController, :file
+  end
+
+  # Model Context Protocol server (Streamable HTTP), same bearer tokens as /api.
+  scope "/", LibrarianWeb do
+    pipe_through :api_token
+
+    post "/mcp", McpController, :create
+    get "/mcp", McpController, :method_not_allowed
+    delete "/mcp", McpController, :method_not_allowed
   end
 
   # Feed articles and clips are third-party HTML rendered in this origin; the

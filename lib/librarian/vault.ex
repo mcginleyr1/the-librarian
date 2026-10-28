@@ -298,6 +298,7 @@ defmodule Librarian.Vault do
   """
   def suggest_notes(query_str, opts \\ []) do
     limit = Keyword.get(opts, :limit, 8)
+    notebook_id = Keyword.get(opts, :notebook_id)
     q = query_str |> to_string() |> String.trim() |> String.downcase()
 
     base =
@@ -305,6 +306,8 @@ defmodule Librarian.Vault do
         where: not is_nil(n.title),
         order_by: [desc: n.inserted_at],
         limit: ^limit
+
+    base = if notebook_id, do: from(n in base, where: n.notebook_id == ^notebook_id), else: base
 
     query =
       if q == "" do
@@ -317,17 +320,20 @@ defmodule Librarian.Vault do
   end
 
   @doc """
-  Note lookup for editor clients: title-substring matches first, then
+  Note lookup for editor and MCP clients: title-substring matches first, then
   full-text hits, de-duplicated, with notebook and tags preloaded. A blank
-  query returns the most recently updated notes.
+  query returns the most recently updated notes. A `notebook_id` restricts
+  the results to that notebook.
   """
-  def find_notes(query_str, limit) do
+  def find_notes(query_str, limit, notebook_id \\ nil) do
+    opts = [limit: limit, notebook_id: notebook_id]
+
     case String.trim(query_str) do
       "" ->
-        list_notes(limit: limit, order_by: :updated_at)
+        list_notes([order_by: :updated_at] ++ opts)
 
       q ->
-        (suggest_notes(q, limit: limit) ++ search(q, limit: limit))
+        (suggest_notes(q, opts) ++ search(q, opts))
         |> Enum.uniq_by(& &1.id)
         |> Enum.take(limit)
         |> Repo.preload([:notebook, :tags])
