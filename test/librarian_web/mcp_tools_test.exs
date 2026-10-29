@@ -1,12 +1,15 @@
 defmodule LibrarianWeb.McpToolsTest do
   use LibrarianWeb.ConnCase, async: true
+  use Oban.Testing, repo: Librarian.Repo
 
   import Ecto.Query
 
-  alias Librarian.{Accounts, Reader, Repo, Vault}
+  alias Librarian.{Accounts, Discovery, Reader, Repo, Vault}
   alias Librarian.Accounts.User
   alias Librarian.Reader.Article
+  alias Librarian.Stream.Interaction
   alias Librarian.Vault.{Edge, Note}
+  alias Librarian.Workers.VetCandidateSourceWorker
 
   defp user!,
     do: Repo.insert!(%User{email: "mcp-#{System.unique_integer([:positive])}@example.com"})
@@ -80,6 +83,37 @@ defmodule LibrarianWeb.McpToolsTest do
   end
 
   defp ids(%{"notes" => notes}), do: Enum.map(notes, & &1["id"])
+
+  defp feed!(attrs) do
+    {:ok, feed} =
+      Reader.create_feed(
+        Map.merge(
+          %{feed_url: "https://f-#{System.unique_integer([:positive])}.example/rss"},
+          attrs
+        )
+      )
+
+    feed
+  end
+
+  defp article_in!(feed, title) do
+    Repo.insert!(%Article{
+      feed_id: feed.id,
+      title: title,
+      url: "https://example.com/#{System.unique_integer([:positive])}",
+      guid: "g-#{System.unique_integer()}",
+      fetched_at: DateTime.utc_now(:second)
+    })
+  end
+
+  defp interaction!(article, kind, seconds_ago) do
+    Repo.insert!(%Interaction{
+      user_id: Repo.user_id!(),
+      article_id: article.id,
+      kind: kind,
+      occurred_at: DateTime.add(DateTime.utc_now(:second), -seconds_ago)
+    })
+  end
 
   describe "search_notes" do
     test "puts title matches before full-text matches", %{conn: conn} do
@@ -313,6 +347,92 @@ defmodule LibrarianWeb.McpToolsTest do
 
       assert {:error, "Article #{foreign.id} not found"} ==
                call(conn, "read_article", %{id: foreign.id})
+    end
+  end
+
+  describe "reading and feeds" do
+    test "recent_reading lists what the user opened or reacted to, newest first", %{conn: conn} do
+      feed = feed!(%{title: "Lobsters", category: "tech"})
+      raft = article_in!(feed, "Raft in practice")
+      rust = article_in!(feed, "Rust async")
+      old = article_in!(feed, "Old news")
+
+      interaction!(raft, "open", 30 * 3600)
+      interaction!(raft, "like", 29 * 3600)
+      interaction!(rust, "open", 3600)
+      interaction!(old, "open", 20 * 86_400)
+
+      other_users(fn ->
+        feed!(%{title: "Theirs"}) |> article_in!("Secret") |> interaction!("open", 60)
+      end)
+
+      assert {:ok, %{"days" => 7, "articles" => [latest, earlier]}} = call(conn, "recent_reading")
+
+      assert %{
+               "title" => "Rust async",
+               "feed" => "Lobsters",
+               "category" => "tech",
+               "reactions" => []
+             } =
+               latest
+
+      assert %{"title" => "Raft in practice", "reactions" => ["like"]} = earlier
+
+      assert {:ok, %{"days" => 30, "articles" => articles}} =
+               call(conn, "recent_reading", %{days: 30})
+
+      assert length(articles) == 3
+    end
+
+    test "list_feeds gives the user's feeds with category, origin and state", %{conn: conn} do
+      feed!(%{title: "Lobsters", category: "tech"})
+      other_users(fn -> feed!(%{title: "Theirs", category: "garden"}) end)
+
+      assert {:ok, %{"feeds" => [feed]}} = call(conn, "list_feeds")
+
+      assert %{
+               "title" => "Lobsters",
+               "category" => "tech",
+               "origin" => "manual",
+               "active" => true
+             } =
+               feed
+    end
+
+    test "follow_sites queues new sites for vetting and skips the rest", %{conn: conn} do
+      feed!(%{title: "Known", site_url: "https://known.example", category: "tech"})
+
+      assert {:ok, result} =
+               call(conn, "follow_sites", %{
+                 sites: ["https://www.New.example/blog", "known.example", "not a domain"],
+                 category: " Systems "
+               })
+
+      assert result == %{
+               "category" => "Systems",
+               "queued" => ["new.example"],
+               "skipped" => ["known.example", "not a domain"]
+             }
+
+      assert [candidate] = Discovery.list_candidates()
+
+      assert {candidate.domain, candidate.channel, candidate.intent_query} ==
+               {"new.example", "intent", "Systems"}
+
+      assert_enqueued(worker: VetCandidateSourceWorker, args: %{id: candidate.id})
+    end
+
+    test "follow_sites needs a few sites and a category", %{conn: conn} do
+      assert {:error, "category is required"} =
+               call(conn, "follow_sites", %{sites: ["a.example"]})
+
+      assert {:error, "sites must be a list of strings"} =
+               call(conn, "follow_sites", %{sites: [1], category: "x"})
+
+      many = Enum.map(1..11, &"s#{&1}.example")
+
+      assert {:error, "at most 10 sites at a time"} =
+               call(conn, "follow_sites", %{sites: many, category: "x"})
     end
   end
 end

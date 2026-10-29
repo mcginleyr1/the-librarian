@@ -7,6 +7,7 @@ defmodule Librarian.Stream do
 
   import Ecto.Query
 
+  alias Librarian.Reader.Subscription
   alias Librarian.Repo
   alias Librarian.Stream.Interaction
   alias Librarian.Workers.RebuildInterestWorker
@@ -83,6 +84,44 @@ defmodule Librarian.Stream do
   @doc "Article ids terminally acted on, so they drop out of the For You feed."
   def consumed_article_ids do
     interaction_article_ids(@consumed)
+  end
+
+  @doc """
+  What the user read since `since`: one row per article they opened or reacted
+  to, most recent first, with its feed, the user's category for that feed, when
+  they last touched it and their reactions (like, save, dislike, …; reading
+  itself isn't listed).
+  """
+  def recent_reading(since, limit) do
+    categories =
+      from s in Subscription,
+        where: s.user_id == ^Repo.user_id!(),
+        select: %{feed_id: s.feed_id, category: s.category}
+
+    Repo.all(
+      from i in Interaction,
+        join: a in assoc(i, :article),
+        join: f in assoc(a, :feed),
+        left_join: s in subquery(categories),
+        on: s.feed_id == f.id,
+        where: i.occurred_at >= ^since,
+        group_by: [a.id, f.title, s.category],
+        order_by: [desc: max(i.occurred_at)],
+        limit: ^limit,
+        select: %{
+          id: a.id,
+          title: a.title,
+          url: a.url,
+          feed: f.title,
+          category: s.category,
+          last_read_at: max(i.occurred_at),
+          reactions:
+            fragment(
+              "array_remove(array_remove(array_agg(DISTINCT ?), 'open'), 'dwell')",
+              i.kind
+            )
+        }
+    )
   end
 
   defp interaction_article_ids(kinds) do

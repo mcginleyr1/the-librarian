@@ -55,6 +55,18 @@ spec:
       ports:
         - protocol: TCP
           port: 4000
+    # ray (its own repo, namespace `ray`) calls the API and MCP server
+    # in-cluster with a user's API token.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ray
+          podSelector:
+            matchLabels:
+              app: ray
+      ports:
+        - protocol: TCP
+          port: 4000
   egress:
     - to:
         - podSelector:

@@ -6,11 +6,14 @@ defmodule LibrarianWeb.McpTools do
   """
   use LibrarianWeb, :verified_routes
 
-  alias Librarian.{Reader, Vault}
+  alias Librarian.{Discovery, Reader, Vault}
   alias LibrarianWeb.NoteApiController
 
   @default_limit 50
   @max_limit 200
+  @default_days 7
+  @max_days 90
+  @max_follow 10
 
   @limit %{
     type: "integer",
@@ -154,6 +157,87 @@ defmodule LibrarianWeb.McpTools do
         additionalProperties: false
       },
       annotations: @read_only
+    },
+    %{
+      name: "recent_reading",
+      title: "Recent reading",
+      description: """
+      What the user has actually been reading in their RSS reader: articles \
+      they opened or reacted to in the last `days`, most recent first, with \
+      feed, category, url, when they last read it and their reactions (like, \
+      save, more_like, dislike, less_like, mute_source, mute_topic, done). \
+      Use it when \
+      the user asks what they've read lately, or to learn which topics and \
+      categories hold their attention right now. Call read_article for an \
+      article's text.\
+      """,
+      inputSchema: %{
+        type: "object",
+        properties: %{
+          days: %{
+            type: "integer",
+            minimum: 1,
+            maximum: @max_days,
+            description: "How far back to look (default #{@default_days})."
+          },
+          limit: @limit
+        },
+        additionalProperties: false
+      },
+      annotations: @read_only
+    },
+    %{
+      name: "list_feeds",
+      title: "List feeds",
+      description: """
+      Every feed the user follows in their RSS reader, by category: title, \
+      site and feed URL, origin ("manual" for feeds they added, "discovered" \
+      for ones the reader found and is trying out on probation) and whether \
+      it is active (inactive ones were switched off or pruned for going \
+      unread). Use it to learn the user's categories and to check whether \
+      they already follow a site before suggesting it.\
+      """,
+      inputSchema: %{type: "object", additionalProperties: false},
+      annotations: @read_only
+    },
+    %{
+      name: "follow_sites",
+      title: "Follow sites",
+      description: """
+      Follow websites in the user's RSS reader. Use it only for sites the \
+      user has chosen to follow; never on your own initiative. Each site is \
+      vetted in the background: the reader looks for its RSS or Atom feed \
+      and, if it finds one, subscribes it in `category` on probation, so a \
+      feed the user then never reads is pruned on its own. Returns the sites \
+      queued and the ones skipped because the user already follows them or \
+      they aren't a domain or URL. Feeds show up in list_feeds once vetted, \
+      usually within a minute.\
+      """,
+      inputSchema: %{
+        type: "object",
+        properties: %{
+          sites: %{
+            type: "array",
+            items: %{type: "string"},
+            minItems: 1,
+            maxItems: @max_follow,
+            description: "Domains or URLs, e.g. \"jvns.ca\" or \"https://jvns.ca/blog\"."
+          },
+          category: %{
+            type: "string",
+            description:
+              "Reader category to file them under: one of the user's own (list_feeds), or a new one."
+          }
+        },
+        required: ["sites", "category"],
+        additionalProperties: false
+      },
+      annotations: %{
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true
+      }
     }
   ]
 
@@ -242,6 +326,35 @@ defmodule LibrarianWeb.McpTools do
            Reader.get_article(id) || {:error, "Article #{id} not found"} do
       content = html_to_markdown(article.content || article.summary || "")
       {:ok, %{article: Map.put(article_summary(article), :content, content)}}
+    end
+  end
+
+  def call("recent_reading", args) do
+    with {:ok, days} <- fetch(args, "days", :integer),
+         {:ok, limit} <- limit(args) do
+      days = if days && days > 0, do: min(days, @max_days), else: @default_days
+      since = DateTime.add(DateTime.utc_now(:second), -days, :day)
+      {:ok, %{days: days, articles: Librarian.Stream.recent_reading(since, limit)}}
+    end
+  end
+
+  def call("list_feeds", _args) do
+    feeds =
+      Enum.map(Reader.list_all_feeds(), fn feed ->
+        Map.take(feed, [:title, :site_url, :feed_url, :category, :origin, :active])
+      end)
+
+    {:ok, %{feeds: feeds}}
+  end
+
+  def call("follow_sites", args) do
+    with {:ok, sites} <- fetch(args, "sites", :strings, :required),
+         {:ok, category} <- fetch(args, "category", :string, :required),
+         true <-
+           length(sites) <= @max_follow || {:error, "at most #{@max_follow} sites at a time"} do
+      category = String.trim(category)
+      {queued, skipped} = Discovery.follow_sites(sites, category)
+      {:ok, %{category: category, queued: Enum.map(queued, & &1.domain), skipped: skipped}}
     end
   end
 

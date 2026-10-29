@@ -5,7 +5,8 @@ defmodule LibrarianWeb.McpControllerTest do
   alias Librarian.Accounts.User
 
   @modern "2026-07-28"
-  @tool_names ~w(search_notes read_note list_notebooks save_note search_articles read_article)
+  @tool_names ~w(search_notes read_note list_notebooks save_note search_articles read_article
+                 recent_reading list_feeds follow_sites)
 
   setup %{conn: conn} do
     user =

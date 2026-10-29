@@ -188,6 +188,13 @@ user: tools see only that user's notes, notebooks and feed articles.
 | `save_note` | Create a markdown note, or upsert one by `external_id` like `PUT /api/notes/external/:external_id` |
 | `search_articles` | Full-text search of your feed articles |
 | `read_article` | One article's content as markdown |
+| `recent_reading` | Articles you opened or reacted to in the last `days` (default 7), with feed, category and reactions |
+| `list_feeds` | Your feeds with category, origin (manual or discovered) and whether they're active |
+| `follow_sites` | Follow up to 10 sites in a category: each goes through discovery's vetting and is subscribed on probation |
+
+ray, in the same cluster, reaches `/mcp` and `/api` at
+`http://librarian.librarian.svc.cluster.local`: the NetworkPolicy admits the
+`ray` namespace, and that host is exempt from the HTTPS redirect.
 
 It speaks protocol version `2026-07-28` (stateless, per-request `_meta`) and
 the `initialize`-handshake versions `2025-11-25` and `2025-06-18`. Responses

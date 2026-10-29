@@ -23,6 +23,7 @@ defmodule Librarian.Discovery do
   alias Librarian.Reader.FeedDiscoverer
   alias Librarian.Discovery.CandidateSource
   alias Librarian.Stream.Interaction
+  alias Librarian.Workers.VetCandidateSourceWorker
 
   @prune_threshold 0.05
   @prune_min_opens 8
@@ -59,6 +60,21 @@ defmodule Librarian.Discovery do
            LLM.complete(explore_prompt(query), explore_schema(), purpose: "explore") do
       {:ok, register_intent_sources(sources, query)}
     end
+  end
+
+  @doc """
+  Follows sites the user picked (in a chat with an assistant, say): each
+  becomes an intent candidate in `category` and is vetted in the background
+  like any other, its feed found and subscribed on probation. Returns
+  `{queued, skipped}`: the candidates queued, and the sites passed over
+  because the user already follows them or they aren't a domain or URL.
+  """
+  def follow_sites(sites, category) do
+    queued = register_intent_sources(Enum.map(sites, &%{"domain" => &1}), category)
+    Enum.each(queued, &(%{"id" => &1.id} |> VetCandidateSourceWorker.new() |> Oban.insert!()))
+
+    queued_domains = MapSet.new(queued, & &1.domain)
+    {queued, Enum.reject(sites, &(normalize_domain(&1) in queued_domains))}
   end
 
   @doc false
@@ -324,7 +340,11 @@ defmodule Librarian.Discovery do
         nil
 
       trimmed ->
-        domain(if String.contains?(trimmed, "://"), do: trimmed, else: "https://#{trimmed}")
+        host =
+          domain(if String.contains?(trimmed, "://"), do: trimmed, else: "https://#{trimmed}")
+
+        # URI.parse takes "not a domain" as a host too
+        if host && host =~ ~r/\A[a-z0-9-]+(\.[a-z0-9-]+)+\z/, do: host
     end
   end
 
