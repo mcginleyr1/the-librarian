@@ -1,8 +1,9 @@
 defmodule LibrarianWeb.ClipControllerTest do
   use LibrarianWeb.ConnCase, async: false
 
-  alias Librarian.{Accounts, Repo, Storage, Vault}
+  alias Librarian.{Accounts, Reader, Repo, Storage, Stream, Vault}
   alias Librarian.Accounts.User
+  alias Librarian.Reader.Article
 
   setup %{conn: conn} do
     tmp = System.tmp_dir!() |> Path.join("librarian_clip_test_#{:rand.uniform(999_999)}")
@@ -41,6 +42,33 @@ defmodule LibrarianWeb.ClipControllerTest do
 
     assert %{"errors" => %{"tags" => _}} =
              conn |> clip(%{title: "x", tags: "not-a-list"}) |> json_response(422)
+  end
+
+  test "clipping a feed article's page likes the article and marks it read", %{conn: conn} do
+    {:ok, feed} = Reader.create_feed(%{title: "Log", feed_url: "https://apenwarr.ca/log/rss.php"})
+
+    article =
+      Repo.insert!(%Article{
+        feed_id: feed.id,
+        guid: "annealing",
+        title: "Annealing",
+        url: "http://apenwarr.ca/log/20260531",
+        fetched_at: DateTime.utc_now(:second)
+      })
+
+    conn |> clip(%{title: "Annealing", source_url: "https://apenwarr.ca/log/20260531/#top"})
+
+    assert Stream.positive_article_ids() == [article.id]
+    assert Reader.get_article!(article.id).read_state.read_at
+  end
+
+  test "clipping a page no feed carries likes nothing", %{conn: conn} do
+    assert %{"status" => "ok"} =
+             conn
+             |> clip(%{title: "Elsewhere", source_url: "https://example.com/elsewhere"})
+             |> json_response(200)
+
+    assert Stream.positive_article_ids() == []
   end
 
   test "another user's notebook is refused", %{conn: conn} do

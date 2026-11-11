@@ -22,6 +22,7 @@ defmodule LibrarianWeb.ClipController do
 
       case Librarian.Vault.create_note(attrs, tags) do
         {:ok, note} ->
+          like_clipped_article(note.source_url)
           json(conn, %{status: "ok", id: note.id})
 
         {:error, changeset} ->
@@ -51,6 +52,22 @@ defmodule LibrarianWeb.ClipController do
   end
 
   defp store_binary(_clip_mode, body_raw), do: {nil, body_raw}
+
+  # Clipping a page you read is the strongest endorsement there is, so it
+  # counts as a like on the feed article it came from (and marks it read, as
+  # a like does in For You).
+  defp like_clipped_article(url) when url in [nil, ""], do: :ok
+
+  defp like_clipped_article(url) do
+    case Librarian.Reader.visible_article_id_by_url(url) do
+      nil ->
+        :ok
+
+      article_id ->
+        Librarian.Reader.mark_read(article_id)
+        Librarian.Stream.record_interaction(article_id, :like)
+    end
+  end
 
   defp parse_notebook_id(id) when id in [nil, ""], do: {:ok, nil}
   defp parse_notebook_id(id) when is_integer(id), do: {:ok, id}

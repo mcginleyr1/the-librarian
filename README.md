@@ -388,6 +388,8 @@ The extension is a standard Manifest V3 WebExtension in `safari-extension/extens
 - **Screenshot** — PNG of visible area
 - **PDF** — captured PDF
 
+Clipping a page that one of your feeds carries also likes that article and marks it read, so reading something and clipping it trains For You the same way a 👍 does. The match ignores the URL's fragment, scheme and trailing slash.
+
 The same folder loads in all three browsers:
 
 - **Safari** — build the Xcode wrapper in `safari-extension/TheLibrarian/` (it references the shared folder), then enable via Safari → Develop → Allow Unsigned Extensions

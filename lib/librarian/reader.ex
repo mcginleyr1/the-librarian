@@ -45,6 +45,27 @@ defmodule Librarian.Reader do
 
   def visible_article?(id), do: Repo.exists?(from a in visible_articles(), where: a.id == ^id)
 
+  @doc """
+  Id of the newest visible article at `url`, ignoring its fragment, scheme and
+  a trailing slash — the page a browser shows can differ from the feed's link
+  in just those ways. `nil` when there is none.
+  """
+  def visible_article_id_by_url(url) do
+    path = url |> String.replace(~r/#.*$/s, "") |> String.replace(~r"^https?://", "")
+    path = String.trim_trailing(path, "/")
+
+    candidates =
+      for scheme <- ~w(https:// http://), slash <- ["", "/"], do: scheme <> path <> slash
+
+    Repo.one(
+      from a in visible_articles(),
+        where: a.url in ^candidates,
+        order_by: [desc: a.id],
+        limit: 1,
+        select: a.id
+    )
+  end
+
   # The user's view of the catalog: their subscriptions joined to the feed,
   # with the per-user fields merged onto the feed's virtual fields.
   defp subscribed_feeds do
@@ -230,13 +251,20 @@ defmodule Librarian.Reader do
     limit = Keyword.get(opts, :limit, 50)
     offset = Keyword.get(opts, :offset, 0)
 
-    Repo.all(
+    # Ids first, so unread is decided on the (feed_id, id) index and only the
+    # unread rows are read from the wide articles heap.
+    unread_ids =
       from a in Article,
         join: s in subquery(my_active_subscriptions()),
         on: s.feed_id == a.feed_id,
         left_join: rs in subquery(my_read_states()),
         on: rs.article_id == a.id,
         where: is_nil(rs.id) or is_nil(rs.read_at),
+        select: a.id
+
+    Repo.all(
+      from a in Article,
+        where: a.id in subquery(unread_ids),
         order_by: [desc: a.fetched_at, desc: a.published_at],
         limit: ^limit,
         offset: ^offset,
