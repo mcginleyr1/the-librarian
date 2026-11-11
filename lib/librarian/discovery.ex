@@ -7,8 +7,9 @@ defmodule Librarian.Discovery do
     recurring new domains become `CandidateSource`s.
   - `explore/1` is the intent channel: the user names an area they want to
     discover, the LLM proposes sources for it, and they enter the same pipeline.
-  - `vet_candidate/1` runs the existing `FeedDiscoverer` on a candidate domain and,
-    if a feed is found, subscribes it as a low-trust `discovered` feed on probation.
+  - `vet_candidate/1` runs the existing `FeedDiscoverer` on a candidate (the site
+    as it was supplied, then its bare domain) and, if a feed is found, subscribes
+    it as a low-trust `discovered` feed on probation.
   - `recompute_like_rates/0` + `prune_sources/0` retire discovered feeds the user
     doesn't engage with.
   """
@@ -82,15 +83,22 @@ defmodule Librarian.Discovery do
     existing = existing_domains()
 
     sources
-    |> Enum.map(&normalize_domain(&1["domain"]))
-    |> Enum.reject(&(is_nil(&1) or MapSet.member?(existing, &1)))
-    |> Enum.uniq()
-    |> Enum.map(fn dom ->
+    |> Enum.map(&{normalize_domain(&1["domain"]), &1["domain"]})
+    |> Enum.reject(fn {dom, _site} -> is_nil(dom) or MapSet.member?(existing, dom) end)
+    |> Enum.uniq_by(fn {dom, _site} -> dom end)
+    |> Enum.map(fn {dom, site} ->
+      site_url = String.trim(site)
+
       {:ok, candidate} =
         %CandidateSource{user_id: Repo.user_id!()}
-        |> CandidateSource.changeset(%{domain: dom, channel: "intent", intent_query: query})
+        |> CandidateSource.changeset(%{
+          domain: dom,
+          site_url: site_url,
+          channel: "intent",
+          intent_query: query
+        })
         |> Repo.insert(
-          on_conflict: [set: [intent_query: query]],
+          on_conflict: [set: [intent_query: query, site_url: site_url]],
           conflict_target: [:user_id, :domain]
         )
 
@@ -213,7 +221,7 @@ defmodule Librarian.Discovery do
   feed on probation. Returns `{:ok, :accepted | :rejected}`.
   """
   def vet_candidate(%CandidateSource{} = candidate) do
-    with {:ok, [%{url: feed_url} = feed | _]} <- FeedDiscoverer.discover(candidate.domain),
+    with {:ok, [%{url: feed_url} = feed | _]} <- discover_feeds(candidate),
          {:ok, _feed} <-
            subscribe_discovered(
              feed_url,
@@ -263,6 +271,18 @@ defmodule Librarian.Discovery do
   end
 
   # --- helpers ---
+
+  # The site as it was supplied comes first: a feed advertised only at a path
+  # (example.com/blog) can't be seen from the domain root.
+  defp discover_feeds(%CandidateSource{site_url: nil, domain: domain}),
+    do: FeedDiscoverer.discover(domain)
+
+  defp discover_feeds(%CandidateSource{site_url: site_url, domain: domain}) do
+    case FeedDiscoverer.discover(site_url) do
+      {:ok, [_ | _]} = found -> found
+      _ -> FeedDiscoverer.discover(domain)
+    end
+  end
 
   defp subscribe_discovered(feed_url, title, category) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)

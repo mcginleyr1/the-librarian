@@ -419,6 +419,9 @@ defmodule LibrarianWeb.McpToolsTest do
       assert {candidate.domain, candidate.channel, candidate.intent_query} ==
                {"new.example", "intent", "Systems"}
 
+      # the path survives for vetting: the feed may only be advertised there
+      assert candidate.site_url == "https://www.New.example/blog"
+
       assert_enqueued(worker: VetCandidateSourceWorker, args: %{id: candidate.id})
     end
 

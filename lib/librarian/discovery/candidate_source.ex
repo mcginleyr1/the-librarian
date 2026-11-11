@@ -6,6 +6,7 @@ defmodule Librarian.Discovery.CandidateSource do
 
   schema "candidate_sources" do
     field :domain, :string
+    field :site_url, :string
     field :feed_url, :string
     field :channel, :string
     field :status, :string, default: "pending"
@@ -23,6 +24,7 @@ defmodule Librarian.Discovery.CandidateSource do
     candidate
     |> cast(attrs, [
       :domain,
+      :site_url,
       :feed_url,
       :channel,
       :status,

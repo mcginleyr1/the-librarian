@@ -86,8 +86,11 @@ defmodule Librarian.DiscoveryTest do
 
     candidates = Discovery.register_intent_sources(sources, "marine insurance")
 
-    assert candidates |> Enum.map(& &1.domain) |> Enum.sort() ==
-             ["insurancejournal.com", "riskandinsurance.com"]
+    assert candidates |> Enum.map(&{&1.domain, &1.site_url}) |> Enum.sort() ==
+             [
+               {"insurancejournal.com", "Insurancejournal.com"},
+               {"riskandinsurance.com", "https://www.riskandinsurance.com/feed"}
+             ]
 
     assert Enum.all?(candidates, &(&1.channel == "intent"))
     assert Enum.all?(candidates, &(&1.intent_query == "marine insurance"))
@@ -103,12 +106,14 @@ defmodule Librarian.DiscoveryTest do
 
     [c2] =
       Discovery.register_intent_sources(
-        [%{"domain" => "example.org", "title" => "E"}],
+        [%{"domain" => "https://example.org/blog", "title" => "E"}],
         "area two"
       )
 
     assert c2.id == c1.id
-    assert Repo.get!(Librarian.Discovery.CandidateSource, c1.id).intent_query == "area two"
+
+    assert %{intent_query: "area two", site_url: "https://example.org/blog"} =
+             Repo.get!(Librarian.Discovery.CandidateSource, c1.id)
   end
 
   test "dismiss_candidate deletes the row and tolerates unknown ids" do
