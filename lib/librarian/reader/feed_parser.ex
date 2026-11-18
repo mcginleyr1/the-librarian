@@ -5,8 +5,10 @@ defmodule Librarian.Reader.FeedParser do
   `{:error, message}` when the body is not a recognizable feed.
   """
 
+  @behaviour Saxy.Handler
+
   def parse(body, feed_url) when is_binary(body) do
-    case Saxy.SimpleForm.parse_string(String.replace_prefix(body, "\uFEFF", "")) do
+    case Saxy.parse_string(String.replace_prefix(body, "\uFEFF", ""), __MODULE__, []) do
       {:ok, {tag, _, _} = doc} when tag in ["rss", "rdf:RDF"] -> {:ok, parse_rss(doc, feed_url)}
       {:ok, {"feed", _, _} = doc} -> {:ok, parse_atom(doc, feed_url)}
       {:ok, {tag, _, _}} -> {:error, "unrecognized feed root <#{tag}>"}
@@ -14,14 +16,20 @@ defmodule Librarian.Reader.FeedParser do
     end
   end
 
+  # Builds Saxy's simple form but stops at the root's closing tag: some sites
+  # append markup after it (WP Rocket adds <script> tags to feeds), which a
+  # full parse rejects as not well-formed.
+  @impl Saxy.Handler
+  def handle_event(event, data, stack) do
+    with {:ok, root} when is_tuple(root) <-
+           Saxy.SimpleForm.Handler.handle_event(event, data, stack),
+         do: {:stop, root}
+  end
+
   defp parse_rss({_tag, _attrs, children}, feed_url) do
-    channel = find_child(children, "channel") || find_child(children, nil)
+    channel = find_child(children, "channel")
 
-    items =
-      ((channel && elem(channel, 2)) || children)
-      |> Enum.filter(&match?({"item", _, _}, &1))
-
-    Enum.map(items, fn {"item", _attrs, children} ->
+    for {"item", _attrs, children} <- (channel && elem(channel, 2)) || children do
       %{
         guid:
           text(children, "guid") || text(children, "link") || generate_guid(feed_url, children),
@@ -32,13 +40,11 @@ defmodule Librarian.Reader.FeedParser do
         author: text(children, "author") || text(children, "dc:creator"),
         published_at: parse_date(text(children, "pubDate") || text(children, "dc:date"))
       }
-    end)
+    end
   end
 
   defp parse_atom({_tag, _attrs, children}, feed_url) do
-    children
-    |> Enum.filter(&match?({"entry", _, _}, &1))
-    |> Enum.map(fn {"entry", _attrs, children} ->
+    for {"entry", _attrs, children} <- children do
       url = find_link(children)
 
       %{
@@ -47,57 +53,32 @@ defmodule Librarian.Reader.FeedParser do
         url: url,
         summary: strip_html(text(children, "summary")),
         content: text(children, "content"),
-        author:
-          get_in(find_child(children, "author"), [Access.elem(2)])
-          |> then(fn c -> c && text(c, "name") end),
+        author: with({_, _, author} <- find_child(children, "author"), do: text(author, "name")),
         published_at: parse_date(text(children, "published") || text(children, "updated"))
       }
-    end)
+    end
   end
 
-  defp find_child(children, tag) do
-    Enum.find(children, fn
-      {^tag, _, _} -> true
-      _ -> false
-    end)
-  end
+  defp find_child(children, tag), do: Enum.find(children, &match?({^tag, _, _}, &1))
 
   # Saxy SimpleForm returns text content as plain strings in the children list,
   # not as {:characters, text} tuples.
   defp text(children, tag) do
-    case find_child(children, tag) do
-      {_, _, node_children} ->
-        node_children
-        |> Enum.filter(&is_binary/1)
-        |> Enum.join()
-        |> String.trim()
-        |> case do
-          "" -> nil
-          s -> s
-        end
-
-      _ ->
-        nil
+    with {_, _, nodes} <- find_child(children, tag),
+         string when string != "" <-
+           nodes |> Enum.filter(&is_binary/1) |> Enum.join() |> String.trim() do
+      string
+    else
+      _ -> nil
     end
   end
 
   defp find_link(children) do
-    children
-    |> Enum.find_value(fn
+    Enum.find_value(children, fn
       {"link", attrs, _} ->
-        rel =
-          Enum.find_value(attrs, fn
-            {"rel", v} -> v
-            _ -> nil
-          end)
-
-        href =
-          Enum.find_value(attrs, fn
-            {"href", v} -> v
-            _ -> nil
-          end)
-
-        if rel in [nil, "alternate"] and href, do: href
+        {_, rel} = List.keyfind(attrs, "rel", 0, {"rel", nil})
+        {_, href} = List.keyfind(attrs, "href", 0, {"href", nil})
+        if rel in [nil, "alternate"], do: href
 
       _ ->
         nil

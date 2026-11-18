@@ -106,6 +106,19 @@ defmodule Librarian.Reader.FeedParserTest do
       assert {:ok, articles} = FeedParser.parse("\uFEFF" <> @atom, "https://example.com/feed")
       assert length(articles) == 2
     end
+
+    test "parses a feed with markup appended after the closing root tag" do
+      junk =
+        ~s(<script>var beacon = "</rss></feed>"</script><script src='beacon.js' async></script>)
+
+      assert {:ok, articles} = FeedParser.parse(@rss2 <> junk, "https://example.com/feed")
+      assert length(articles) == 2
+    end
+
+    test "returns error for a non-feed page with markup after its first element" do
+      assert {:error, "unrecognized feed root <br>"} =
+               FeedParser.parse("<br />\n<b>Warning</b> </rss>", "https://example.com")
+    end
   end
 
   test "applies non-UTC RFC 2822 offsets instead of dropping them" do
