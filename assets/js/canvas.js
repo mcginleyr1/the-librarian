@@ -30,6 +30,8 @@ export default {
     this.observeCards()
     this.growTextareas()
     this.drawEdges()
+    this._flushOnHide = () => { if (document.visibilityState === "hidden") this.flushView() }
+    document.addEventListener("visibilitychange", this._flushOnHide)
   },
 
   updated() {
@@ -41,6 +43,8 @@ export default {
   },
 
   destroyed() {
+    this.flushView()
+    document.removeEventListener("visibilitychange", this._flushOnHide)
     window.removeEventListener("keydown", this._keydown)
     this.resizeObserver.disconnect()
   },
@@ -129,6 +133,12 @@ export default {
   },
 
   saveView() {
+    clearTimeout(this.saveTimer)
+    this.saveTimer = setTimeout(() => this.flushView(), 200)
+  },
+
+  flushView() {
+    clearTimeout(this.saveTimer)
     try {
       localStorage.setItem(`canvas:${this.pageId}`, JSON.stringify({k: this.k, tx: this.tx, ty: this.ty}))
     } catch (_e) { /* storage unavailable */ }

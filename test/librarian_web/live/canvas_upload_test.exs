@@ -54,4 +54,25 @@ defmodule LibrarianWeb.CanvasUploadTest do
 
     assert conn |> get("/vault/files/#{note.storage_key}") |> response(200)
   end
+
+  test "an image that finishes while another is still uploading becomes a card", %{conn: conn} do
+    {:ok, page} = Canvas.create_page(%{title: "Board"})
+    {:ok, view, _html} = live(conn, "/canvas/#{page.id}")
+
+    png = <<137, 80, 78, 71, 13, 10, 26, 10>>
+
+    images =
+      file_input(view, "#canvas-upload", :images, [
+        %{name: "one.png", content: png, type: "image/png"},
+        %{name: "two.png", content: png, type: "image/png"}
+      ])
+
+    render_hook(view, "drop_position", %{"x" => 50, "y" => 60})
+    render_upload(images, "one.png", 50)
+    render_upload(images, "two.png", 100)
+
+    assert [%{title: "two"}] = Vault.list_notes()
+    assert [%{"x" => 50, "y" => 60}] = Canvas.get_page!(page.id).doc["nodes"]
+    assert has_element?(view, "[data-node-type='file']")
+  end
 end

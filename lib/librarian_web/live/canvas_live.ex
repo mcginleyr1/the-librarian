@@ -225,8 +225,10 @@ defmodule LibrarianWeb.CanvasLive do
     if entry.done? do
       at = socket.assigns.pending_drop || %{x: 0, y: 0}
 
-      [page] =
-        consume_uploaded_entries(socket, :images, fn %{path: path}, entry ->
+      # One entry at a time: consume_uploaded_entries raises while any other
+      # image of the same drop is still uploading.
+      page =
+        consume_uploaded_entry(socket, entry, fn %{path: path} ->
           Canvas.attach_image(
             socket.assigns.page,
             %{path: path, client_name: entry.client_name},
@@ -234,9 +236,13 @@ defmodule LibrarianWeb.CanvasLive do
           )
         end)
 
+      # The next image of the same drop lands slightly offset, not on top.
+      more? = Enum.any?(socket.assigns.uploads.images.entries, &(not &1.done?))
+      pending_drop = if more?, do: %{x: at.x + 24, y: at.y + 24}
+
       {:noreply,
        socket
-       |> assign(page: page, doc: page.doc, pending_drop: nil)
+       |> assign(page: page, doc: page.doc, pending_drop: pending_drop)
        |> reload_notes()}
     else
       {:noreply, socket}

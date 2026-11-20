@@ -277,15 +277,16 @@ defmodule Librarian.Canvas do
   def attach_image(%Page{} = page, %{path: path, client_name: name}, %{x: x, y: y}) do
     key = Storage.unique_key("clips", name |> Path.extname() |> String.downcase())
 
-    with :ok <- Storage.put(key, File.read!(path)),
-         {:ok, note} <-
-           Vault.create_note(%{
-             title: Path.rootname(name),
-             clip_mode: "image",
-             storage_key: key
-           }) do
-      node = %{note_node(note.id, x, y) | "width" => 320}
-      save_doc(page, add_node(page.doc, node))
+    with :ok <- Storage.put(key, File.read!(path)) do
+      case Vault.create_note(%{title: Path.rootname(name), clip_mode: "image", storage_key: key}) do
+        {:ok, note} ->
+          node = %{note_node(note.id, x, y) | "width" => 320}
+          save_doc(page, add_node(page.doc, node))
+
+        error ->
+          Storage.delete(key)
+          error
+      end
     end
   end
 
