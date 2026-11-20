@@ -114,6 +114,91 @@ defmodule LibrarianWeb.ReaderLiveTest do
     end
   end
 
+  describe "reading and starring" do
+    setup %{conn: conn} do
+      feed = feed_fixture()
+      [a, b | _] = unread_articles(feed, 3)
+      {:ok, view, _html} = live(conn, "/reader")
+      %{view: view, feed: feed, a: a, b: b}
+    end
+
+    defp item(article), do: "#articles-#{article.id}"
+
+    defp feed_count(view, feed),
+      do: view |> element("a[href='/reader/feed/#{feed.id}']") |> render()
+
+    test "starring a just-selected unread article updates the reader and the list", %{
+      view: view,
+      a: a
+    } do
+      view |> element(item(a)) |> render_click()
+      view |> element("button[phx-click='toggle_star']") |> render_click()
+
+      assert view |> element("button[phx-click='toggle_star']") |> render() =~ "Starred"
+      assert has_element?(view, "#{item(a)} .hero-star-solid")
+    end
+
+    test "selecting moves the highlight and dims the read title in the list", %{
+      view: view,
+      a: a,
+      b: b
+    } do
+      assert has_element?(view, "#{item(a)} p.font-medium")
+
+      view |> element(item(a)) |> render_click()
+      assert has_element?(view, "#{item(a)}.ring-1")
+      refute has_element?(view, "#{item(a)} p.font-medium")
+
+      view |> element(item(b)) |> render_click()
+      assert has_element?(view, "#{item(b)}.ring-1")
+      refute has_element?(view, "#{item(a)}.ring-1")
+    end
+
+    test "unread count only drops for articles that were unread", %{view: view, feed: feed, a: a} do
+      assert feed_count(view, feed) =~ "3"
+
+      view |> element(item(a)) |> render_click()
+      assert feed_count(view, feed) =~ "2"
+
+      view |> element(item(a)) |> render_click()
+      assert feed_count(view, feed) =~ "2"
+    end
+
+    test "keyboard navigation and starring record the same interactions as clicks", %{
+      view: view,
+      a: a
+    } do
+      render_hook(view, "key_nav", %{"key" => "j"})
+      assert has_element?(view, "#{item(a)}.ring-1")
+      assert Librarian.Stream.signal_summary()["open"] == 1
+
+      render_hook(view, "key_nav", %{"key" => "s"})
+      assert has_element?(view, "#{item(a)} .hero-star-solid")
+      assert Librarian.Stream.signal_summary()["save"] == 1
+    end
+
+    test "a read article that has left the unread list is not put back", %{
+      view: view,
+      a: a,
+      b: b
+    } do
+      view |> element(item(a)) |> render_click()
+      render_hook(view, "show_new_articles", %{})
+      refute has_element?(view, item(a))
+
+      view |> element("button[phx-click='toggle_star']") |> render_click()
+      refute has_element?(view, item(a))
+
+      view |> element(item(b)) |> render_click()
+      refute has_element?(view, item(a))
+    end
+
+    test "an unknown filter is ignored", %{view: view} do
+      render_hook(view, "set_filter", %{"filter" => "bogus"})
+      assert has_element?(view, "#article-list")
+    end
+  end
+
   defp stream_item_count(html) do
     ~r/id="articles-\d+"/
     |> Regex.scan(html)

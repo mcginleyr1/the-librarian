@@ -101,15 +101,15 @@
         <% end %>
       </div>
       <div class="p-2 border-t border-base-300 flex gap-1">
-        <a href="/dashboard" class="press btn btn-ghost btn-xs flex-1 gap-1">
+        <.link navigate={~p"/dashboard"} class="press btn btn-ghost btn-xs flex-1 gap-1">
           <.icon name="hero-chart-bar" class="size-3" /> Stats
-        </a>
-        <a href="/vault" class="press btn btn-ghost btn-xs flex-1 gap-1">
+        </.link>
+        <.link navigate={~p"/vault"} class="press btn btn-ghost btn-xs flex-1 gap-1">
           <.icon name="hero-archive-box" class="size-3" /> Vault
-        </a>
-        <a href="/settings" class="press btn btn-ghost btn-xs flex-1 gap-1">
+        </.link>
+        <.link navigate={~p"/settings"} class="press btn btn-ghost btn-xs flex-1 gap-1">
           <.icon name="hero-cog-6-tooth" class="size-3" /> Settings
-        </a>
+        </.link>
       </div>
     </aside>
 

@@ -5,6 +5,7 @@ defmodule LibrarianWeb.ReaderLive do
   alias Librarian.Stream
 
   @page_size 50
+  @filters %{"unread" => :unread, "all" => :all, "starred" => :starred}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -85,15 +86,7 @@ defmodule LibrarianWeb.ReaderLive do
 
   @impl true
   def handle_event("select_article", %{"id" => id}, socket) do
-    article_id = String.to_integer(id)
-    article = Reader.get_article!(article_id)
-    Reader.mark_read(article_id)
-    Stream.record_interaction(article_id, :open)
-    index = Enum.find_index(socket.assigns.article_ids, &(&1 == article_id)) || -1
-    unread_counts = Map.update(socket.assigns.unread_counts, article.feed_id, 0, &max(0, &1 - 1))
-
-    {:noreply,
-     assign(socket, selected_article: article, current_index: index, unread_counts: unread_counts)}
+    {:noreply, open_article(socket, String.to_integer(id))}
   end
 
   def handle_event("toggle_feeds", _params, socket) do
@@ -113,20 +106,7 @@ defmodule LibrarianWeb.ReaderLive do
   end
 
   def handle_event("toggle_star", %{"id" => id}, socket) do
-    article_id = String.to_integer(id)
-    article = Reader.get_article!(article_id)
-    starred = !(article.read_state && article.read_state.starred)
-    Reader.mark_starred(article_id, starred)
-    if starred, do: Stream.record_interaction(article_id, :save)
-
-    updated_article =
-      if socket.assigns.selected_article && socket.assigns.selected_article.id == article_id do
-        put_in(socket.assigns.selected_article.read_state.starred, starred)
-      else
-        socket.assigns.selected_article
-      end
-
-    {:noreply, assign(socket, selected_article: updated_article)}
+    {:noreply, toggle_star(socket, String.to_integer(id))}
   end
 
   def handle_event("feedback", %{"id" => id, "kind" => kind}, socket) do
@@ -179,17 +159,27 @@ defmodule LibrarianWeb.ReaderLive do
   end
 
   def handle_event("set_filter", %{"filter" => filter}, socket) do
-    filter = String.to_existing_atom(filter)
-    socket = assign(socket, filter: filter)
+    case Map.fetch(@filters, filter) do
+      {:ok, filter} ->
+        socket = assign(socket, filter: filter)
 
-    path =
-      cond do
-        socket.assigns.selected_feed_id -> "/reader/feed/#{socket.assigns.selected_feed_id}"
-        socket.assigns.selected_category -> "/reader/category/#{socket.assigns.selected_category}"
-        true -> "/reader"
-      end
+        path =
+          cond do
+            socket.assigns.selected_feed_id ->
+              "/reader/feed/#{socket.assigns.selected_feed_id}"
 
-    {:noreply, push_patch(socket, to: path)}
+            socket.assigns.selected_category ->
+              "/reader/category/#{socket.assigns.selected_category}"
+
+            true ->
+              "/reader"
+          end
+
+        {:noreply, push_patch(socket, to: path)}
+
+      :error ->
+        {:noreply, socket}
+    end
   end
 
   def handle_event("show_new_articles", _params, socket) do
@@ -332,34 +322,61 @@ defmodule LibrarianWeb.ReaderLive do
     if count == 0 do
       socket
     else
-      index = min(index, count - 1) |> max(0)
-      article_id = Enum.at(ids, index)
-      article = Reader.get_article!(article_id)
-      Reader.mark_read(article_id)
-
-      unread_counts =
-        Map.update(socket.assigns.unread_counts, article.feed_id, 0, &max(0, &1 - 1))
-
-      assign(socket,
-        selected_article: article,
-        current_index: index,
-        unread_counts: unread_counts
-      )
+      open_article(socket, Enum.at(ids, min(index, count - 1) |> max(0)))
     end
   end
 
-  defp toggle_star_current(%{assigns: %{selected_article: nil}} = socket), do: socket
-
-  defp toggle_star_current(socket) do
-    article = socket.assigns.selected_article
-    starred = !(article.read_state && article.read_state.starred)
-    Reader.mark_starred(article.id, starred)
-
-    read_state =
-      (article.read_state || %Librarian.Reader.ReadState{}) |> Map.put(:starred, starred)
-
-    assign(socket, selected_article: Map.put(article, :read_state, read_state))
+  # Stream items only re-render when re-inserted. One that has left the list
+  # (read, then the unread list reloaded) must not be inserted back into it.
+  defp refresh_item(socket, article) do
+    if article && article.id in socket.assigns.article_ids,
+      do: stream_insert(socket, :articles, article),
+      else: socket
   end
+
+  # Reads the article, then refreshes it and the previously open one so the
+  # list shows the new highlight and read dimming.
+  defp open_article(socket, article_id) do
+    unread? = unread?(Reader.get_article!(article_id))
+    Reader.mark_read(article_id)
+    Stream.record_interaction(article_id, :open)
+    article = Reader.get_article!(article_id)
+    previous = socket.assigns.selected_article
+
+    unread_counts =
+      if unread?,
+        do: Map.update(socket.assigns.unread_counts, article.feed_id, 0, &max(0, &1 - 1)),
+        else: socket.assigns.unread_counts
+
+    socket
+    |> assign(
+      selected_article: article,
+      current_index: Enum.find_index(socket.assigns.article_ids, &(&1 == article_id)) || -1,
+      unread_counts: unread_counts
+    )
+    |> refresh_item(previous)
+    |> refresh_item(article)
+  end
+
+  defp unread?(%{read_state: read_state}), do: is_nil(read_state) or is_nil(read_state.read_at)
+
+  defp toggle_star(socket, article_id) do
+    article = Reader.get_article!(article_id)
+    starred = !(article.read_state && article.read_state.starred)
+    Reader.mark_starred(article_id, starred)
+    if starred, do: Stream.record_interaction(article_id, :save)
+    article = Reader.get_article!(article_id)
+    selected = socket.assigns.selected_article
+
+    socket
+    |> assign(
+      selected_article: if(selected && selected.id == article_id, do: article, else: selected)
+    )
+    |> refresh_item(article)
+  end
+
+  defp toggle_star_current(%{assigns: %{selected_article: nil}} = socket), do: socket
+  defp toggle_star_current(socket), do: toggle_star(socket, socket.assigns.selected_article.id)
 
   defp open_current_url(%{assigns: %{selected_article: nil}} = socket), do: socket
 
