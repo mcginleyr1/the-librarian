@@ -194,7 +194,7 @@ defmodule Librarian.Vault do
   survivors are marked graph-stale so the next build re-links them.
   """
   def dedupe_notes do
-    {:ok, removed} =
+    {:ok, {removed, keys}} =
       Repo.transaction(fn ->
         # scoped: WHERE user_id = $1 with Repo.user_id!()
         # credo:disable-for-lines:2 Librarian.CredoChecks.RawSQL
@@ -220,15 +220,18 @@ defmodule Librarian.Vault do
         dupe_ids = Enum.map(dupes, &elem(&1, 0))
         survivor_ids = dupes |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
 
-        Repo.delete_all(from n in Note, where: n.id in ^dupe_ids)
+        {_, keys} =
+          Repo.delete_all(from n in Note, where: n.id in ^dupe_ids, select: n.storage_key)
 
         Repo.update_all(from(n in Note, where: n.id in ^survivor_ids),
           set: [graph_indexed_at: nil]
         )
 
-        length(dupe_ids)
+        {length(dupe_ids), keys}
       end)
 
+    # Only once the deletes are committed: a rollback must not lose files.
+    delete_orphaned_files(keys)
     removed
   end
 
@@ -237,7 +240,7 @@ defmodule Librarian.Vault do
   end
 
   defp save_note(changeset, tags) do
-    result = changeset |> put_tags(tags) |> Repo.update()
+    result = changeset |> put_tags(tags) |> reset_derived_data() |> Repo.update()
     with {:ok, updated} <- result, do: sync_wikilink_edges(updated)
     result
   end
@@ -247,7 +250,25 @@ defmodule Librarian.Vault do
   defp put_tags(changeset, tags),
     do: Ecto.Changeset.put_assoc(changeset, :tags, find_or_create_tags(tags))
 
-  def delete_note(%Note{} = note), do: Repo.delete(note)
+  # Re-embedding and re-linking pick up notes whose embedding / graph_indexed_at are nil.
+  defp reset_derived_data(changeset) do
+    if Map.has_key?(changeset.changes, :title) or Map.has_key?(changeset.changes, :body),
+      do: Ecto.Changeset.change(changeset, embedding: nil, graph_indexed_at: nil),
+      else: changeset
+  end
+
+  defp delete_orphaned_files(keys) do
+    keys = Enum.reject(keys, &is_nil/1)
+    still_used = Repo.all(from n in Note, where: n.storage_key in ^keys, select: n.storage_key)
+    Enum.each(keys -- still_used, &Librarian.Storage.delete/1)
+  end
+
+  def delete_note(%Note{} = note) do
+    with {:ok, deleted} <- Repo.delete(note) do
+      delete_orphaned_files([deleted.storage_key])
+      {:ok, deleted}
+    end
+  end
 
   def delete_notes(ids) when is_list(ids) do
     int_ids =
@@ -264,7 +285,10 @@ defmodule Librarian.Vault do
       end)
       |> Enum.reject(&is_nil/1)
 
-    {count, _} = Repo.delete_all(from n in Note, where: n.id in ^int_ids)
+    {count, keys} =
+      Repo.delete_all(from n in Note, where: n.id in ^int_ids, select: n.storage_key)
+
+    delete_orphaned_files(keys)
     {:ok, count}
   end
 
@@ -603,13 +627,18 @@ defmodule Librarian.Vault do
     {:ok, count}
   end
 
-  @doc "Top-k embedded neighbors of a note — candidate set for LLM edge typing."
-  def neighbor_candidates(%Note{id: id, embedding: embedding}, k \\ 10) when embedding != nil do
+  @doc """
+  Top-k embedded neighbors of a note — candidate set for LLM edge typing, as
+  `%{id, title, body}` maps with the body cut to `body_chars` characters.
+  """
+  def neighbor_candidates(%Note{id: id, embedding: embedding}, k \\ 10, body_chars \\ 500)
+      when embedding != nil do
     Repo.all(
       from n in Note,
         where: n.id != ^id and not is_nil(n.embedding),
         order_by: fragment("embedding <=> ?", ^embedding),
-        limit: ^k
+        limit: ^k,
+        select: %{id: n.id, title: n.title, body: fragment("left(?, ?)", n.body, ^body_chars)}
     )
   end
 
@@ -712,13 +741,18 @@ defmodule Librarian.Vault do
     |> Enum.map(&(&1 |> String.trim() |> String.downcase()))
     |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()
-    |> Enum.map(fn name ->
-      Repo.insert!(%Tag{name: name, user_id: user_id},
-        on_conflict: :nothing,
-        conflict_target: [:user_id, :name]
-      )
+    |> case do
+      [] ->
+        []
 
-      Repo.get_by!(Tag, name: name)
-    end)
+      names ->
+        now = DateTime.utc_now(:second)
+
+        rows =
+          Enum.map(names, &%{name: &1, user_id: user_id, inserted_at: now, updated_at: now})
+
+        Repo.insert_all(Tag, rows, on_conflict: :nothing, conflict_target: [:user_id, :name])
+        Repo.all(from t in Tag, where: t.name in ^names)
+    end
   end
 end

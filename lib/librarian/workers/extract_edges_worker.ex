@@ -10,9 +10,12 @@ defmodule Librarian.Workers.ExtractEdgesWorker do
     max_attempts: 3,
     unique: [keys: [:note_id], period: 300]
 
+  import Ecto.Query, only: [from: 2]
+
   require Logger
 
   alias Librarian.{LLM, Repo, Vault}
+  alias Librarian.Vault.Edge
 
   @candidates 10
   @body_chars 3000
@@ -34,7 +37,7 @@ defmodule Librarian.Workers.ExtractEdgesWorker do
   end
 
   defp extract(note) do
-    candidates = Vault.neighbor_candidates(note, @candidates)
+    candidates = Vault.neighbor_candidates(note, @candidates, @excerpt_chars + 1)
 
     case candidates do
       [] ->
@@ -77,7 +80,18 @@ defmodule Librarian.Workers.ExtractEdgesWorker do
         }
       end)
 
-    {count, _} = Vault.upsert_edges(entries, on_conflict: :preserve_non_llm)
+    refresh_llm_only =
+      from e in Edge,
+        where: e.origin == "llm",
+        update: [
+          set: [
+            reason: fragment("EXCLUDED.reason"),
+            weight: fragment("EXCLUDED.weight"),
+            updated_at: fragment("EXCLUDED.updated_at")
+          ]
+        ]
+
+    {count, _} = Vault.upsert_edges(entries, on_conflict: refresh_llm_only)
     Logger.info("ExtractEdgesWorker: note #{note.id} -> #{count} typed edges")
   end
 
