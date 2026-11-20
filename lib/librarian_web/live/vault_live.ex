@@ -269,7 +269,7 @@ defmodule LibrarianWeb.VaultLive do
     {:noreply,
      socket
      |> assign(selected_note: nil, editing: false, note_counts: note_counts)
-     |> stream_delete(:notes, note)}
+     |> drop_from_list(note)}
   end
 
   def handle_event("load_more", _params, socket) do
@@ -406,13 +406,20 @@ defmodule LibrarianWeb.VaultLive do
   defp restream_moved(socket, note) do
     notebook_id = socket.assigns.selected_notebook_id
 
-    if notebook_id && note.notebook_id != notebook_id do
-      socket
-      |> stream_delete(:notes, note)
-      |> update(:listed_note_ids, &MapSet.delete(&1, note.id))
-    else
-      restream_if_listed(socket, note)
-    end
+    if notebook_id && note.notebook_id != notebook_id,
+      do: drop_from_list(socket, note),
+      else: restream_if_listed(socket, note)
+  end
+
+  # Load More pages by offset, so a listed note that leaves the list must pull
+  # the offset back or the next page skips one.
+  defp drop_from_list(socket, note) do
+    %{listed_note_ids: listed, note_offset: offset} = socket.assigns
+    offset = if note.id in listed, do: max(offset - 1, 0), else: offset
+
+    socket
+    |> assign(note_offset: offset, listed_note_ids: MapSet.delete(listed, note.id))
+    |> stream_delete(:notes, note)
   end
 
   # Streamed items only re-render when re-inserted, and their highlight reads @selected_note.

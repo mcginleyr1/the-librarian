@@ -153,8 +153,9 @@ spec:
         # The root filesystem is read-only; the release writes its runtime
         # sys.config to RELEASE_TMP=/tmp, and uploads/imports stage there.
         - name: tmp
-          emptyDir:
-            sizeLimit: 1Gi
+          # No sizeLimit: an Evernote import stages the upload twice here (up
+          # to 1 GB for a 500 MB file), and exceeding a limit evicts the pod.
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

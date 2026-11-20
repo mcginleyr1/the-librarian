@@ -88,10 +88,20 @@ defmodule Librarian.VaultDataIntegrityTest do
 
       :ok = Storage.put("clips/other2.png", "data")
 
-      assert Vault.dedupe_notes() == 2
+      # Same title and body but a different stored file: not a copy.
+      assert Vault.dedupe_notes() == 1
       assert Storage.exists?("clips/shared.png")
       assert Storage.exists?("clips/other.png")
-      refute Storage.exists?("clips/other2.png")
+      assert Storage.exists?("clips/other2.png")
+    end
+
+    test "delete_notes/1 keeps a file that a remaining note shares with two deleted ones" do
+      a = note_with_file!("A", "clips/shared.png")
+      {:ok, b} = Vault.create_note(%{title: "B", body: "b", storage_key: "clips/shared.png"})
+      {:ok, _c} = Vault.create_note(%{title: "C", body: "c", storage_key: "clips/shared.png"})
+
+      {:ok, 2} = Vault.delete_notes([a.id, b.id])
+      assert Storage.exists?("clips/shared.png")
     end
   end
 

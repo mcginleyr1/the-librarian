@@ -189,9 +189,11 @@ defmodule Librarian.Vault do
   end
 
   @doc """
-  Deletes surplus copies of identical (notebook, title, body) notes, keeping
-  the oldest. Annotations move to the survivor; edges cascade away, and
-  survivors are marked graph-stale so the next build re-links them.
+  Deletes surplus copies of identical (notebook, title, body, stored file)
+  notes, keeping the oldest. Annotations move to the survivor; edges cascade
+  away, and survivors are marked graph-stale so the next build re-links them.
+  The stored file is part of the key because attachments have no body: two
+  different PDFs with the same title are not copies of each other.
   """
   def dedupe_notes do
     {:ok, {removed, keys}} =
@@ -202,7 +204,9 @@ defmodule Librarian.Vault do
           Repo.query!(
             """
             SELECT id,
-                   MIN(id) OVER (PARTITION BY notebook_id, title, md5(coalesce(body, ''))) AS survivor
+                   MIN(id) OVER (
+                     PARTITION BY notebook_id, title, md5(coalesce(body, '')), storage_key
+                   ) AS survivor
             FROM notes
             WHERE user_id = $1
             """,
@@ -260,7 +264,11 @@ defmodule Librarian.Vault do
   defp delete_orphaned_files(keys) do
     keys = Enum.reject(keys, &is_nil/1)
     still_used = Repo.all(from n in Note, where: n.storage_key in ^keys, select: n.storage_key)
-    Enum.each(keys -- still_used, &Librarian.Storage.delete/1)
+
+    keys
+    |> Enum.uniq()
+    |> Enum.reject(&(&1 in still_used))
+    |> Enum.each(&Librarian.Storage.delete/1)
   end
 
   def delete_note(%Note{} = note) do

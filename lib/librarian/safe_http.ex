@@ -37,6 +37,9 @@ defmodule Librarian.SafeHTTP do
         redirects_left == 0 ->
           {:error, :too_many_redirects}
 
+        System.monotonic_time(:millisecond) > deadline ->
+          {:error, :deadline_exceeded}
+
         true ->
           follow(
             uri |> URI.merge(hd(location)) |> to_string(),

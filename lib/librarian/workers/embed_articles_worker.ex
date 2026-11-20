@@ -30,7 +30,12 @@ defmodule Librarian.Workers.EmbedArticlesWorker do
       from(n in Note,
         where: is_nil(n.embedding),
         limit: @batch,
-        select: %{id: n.id, title: n.title, body: fragment("left(?, ?)", n.body, ^max)}
+        select: %{
+          id: n.id,
+          updated_at: n.updated_at,
+          title: n.title,
+          body: fragment("left(?, ?)", n.body, ^max)
+        }
       )
 
     articles =
@@ -39,6 +44,7 @@ defmodule Librarian.Workers.EmbedArticlesWorker do
         limit: @batch,
         select: %{
           id: a.id,
+          updated_at: a.updated_at,
           title: a.title,
           summary: fragment("left(?, ?)", a.summary, ^max),
           content: fragment("left(?, ?)", a.content, ^max)
@@ -75,10 +81,12 @@ defmodule Librarian.Workers.EmbedArticlesWorker do
     end
   end
 
+  # Matching updated_at skips a row edited since it was read: its text has
+  # changed, so it keeps a nil embedding and the next run embeds the new text.
   defp store_embeddings(schema, chunk, vectors) do
     for {row, vector} <- Enum.zip(chunk, vectors) do
       Repo.update_all(
-        from(r in schema, where: r.id == ^row.id),
+        from(r in schema, where: r.id == ^row.id and r.updated_at == ^row.updated_at),
         [set: [embedding: vector]],
         skip_tenant: true
       )

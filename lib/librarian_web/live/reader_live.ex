@@ -365,7 +365,11 @@ defmodule LibrarianWeb.ReaderLive do
     starred = !(article.read_state && article.read_state.starred)
     Reader.mark_starred(article_id, starred)
     if starred, do: Stream.record_interaction(article_id, :save)
-    article = Reader.get_article!(article_id)
+
+    # Not re-fetched: unstarring an article from a feed the user has left makes
+    # it invisible, and get_article!/1 would raise.
+    read_state = Map.put(article.read_state || %Reader.ReadState{}, :starred, starred)
+    article = %{article | read_state: read_state}
     selected = socket.assigns.selected_article
 
     socket

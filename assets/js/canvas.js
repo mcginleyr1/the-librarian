@@ -30,7 +30,7 @@ export default {
     this.observeCards()
     this.growTextareas()
     this.drawEdges()
-    this._flushOnHide = () => { if (document.visibilityState === "hidden") this.flushView() }
+    this._flushOnHide = () => { if (document.visibilityState === "hidden") this.flushPendingView() }
     document.addEventListener("visibilitychange", this._flushOnHide)
   },
 
@@ -43,7 +43,7 @@ export default {
   },
 
   destroyed() {
-    this.flushView()
+    this.flushPendingView()
     document.removeEventListener("visibilitychange", this._flushOnHide)
     window.removeEventListener("keydown", this._keydown)
     this.resizeObserver.disconnect()
@@ -137,8 +137,15 @@ export default {
     this.saveTimer = setTimeout(() => this.flushView(), 200)
   },
 
+  // Only when a save is waiting: a tab that has not moved must not overwrite
+  // a newer view saved by another tab on the same page.
+  flushPendingView() {
+    if (this.saveTimer) this.flushView()
+  },
+
   flushView() {
     clearTimeout(this.saveTimer)
+    this.saveTimer = null
     try {
       localStorage.setItem(`canvas:${this.pageId}`, JSON.stringify({k: this.k, tx: this.tx, ty: this.ty}))
     } catch (_e) { /* storage unavailable */ }
