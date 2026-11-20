@@ -29,6 +29,15 @@ defmodule LibrarianWeb.SearchLiveTest do
     assert has_element?(view, "a", "Raft notes")
   end
 
+  test "typing in the search box searches", %{conn: conn} do
+    {:ok, _} = Vault.create_note(%{title: "Raft notes", body: "raft"}, [])
+    {:ok, view, _html} = live(conn, ~p"/search")
+
+    view |> form("#search-form", %{q: "raft"}) |> render_change()
+
+    assert has_element?(view, "a", "Raft notes")
+  end
+
   test "note results link to the note, with tags stripped from the preview", %{conn: conn} do
     {:ok, note} = Vault.create_note(%{title: "Clipped", body: "<p>zebra <b>stripes</b></p>"}, [])
 
