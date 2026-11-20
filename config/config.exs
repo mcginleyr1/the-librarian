@@ -88,7 +88,8 @@ config :librarian, Oban,
        {"15 */2 * * *", Librarian.Workers.TagArticlesWorker},
        {"30 * * * *", Librarian.Workers.BuildGraphWorker},
        {"45 3 * * *", Librarian.Workers.DiscoverSourcesWorker},
-       {"50 3 * * *", Librarian.Workers.PruneSourcesWorker}
+       {"50 3 * * *", Librarian.Workers.PruneSourcesWorker},
+       {"0 4 * * *", Librarian.Workers.CleanupWorker}
      ]}
   ],
   queues: [feeds: 5, vault: 2, backup: 1, stream: 3]

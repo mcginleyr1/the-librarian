@@ -14,6 +14,9 @@ defmodule Librarian.Workers.EmbedArticlesWorker do
   alias Librarian.Vault.Note
 
   @batch 200
+  # The serving is compiled for batch_size: 16; embedding one item at a time
+  # pays the full padded batch cost for every row.
+  @embed_batch 16
 
   @impl Oban.Worker
   def perform(_job) do
@@ -28,7 +31,6 @@ defmodule Librarian.Workers.EmbedArticlesWorker do
         limit: @batch,
         select: %{id: n.id, title: n.title, body: fragment("left(?, ?)", n.body, ^max)}
       )
-      |> embed_missing(Note, fn r -> text([r.title, r.body]) end)
 
     articles =
       from(a in Article,
@@ -41,31 +43,45 @@ defmodule Librarian.Workers.EmbedArticlesWorker do
           content: fragment("left(?, ?)", a.content, ^max)
         }
       )
-      |> embed_missing(Article, fn r -> text([r.title, r.summary, r.content]) end)
 
-    Logger.info("EmbedArticlesWorker: embedded #{notes} notes, #{articles} articles")
-    :ok
+    with {:ok, notes} <- embed_missing(notes, Note, fn r -> text([r.title, r.body]) end),
+         {:ok, articles} <-
+           embed_missing(articles, Article, fn r -> text([r.title, r.summary, r.content]) end) do
+      Logger.info("EmbedArticlesWorker: embedded #{notes} notes, #{articles} articles")
+      :ok
+    end
   end
 
   # system pass over every user's rows: embedding is content processing
   defp embed_missing(query, schema, to_text) do
     query
     |> Repo.all(skip_tenant: true)
-    |> Enum.reduce(0, fn row, acc ->
-      case Embeddings.embed(to_text.(row)) do
-        {:ok, vector} ->
-          Repo.update_all(
-            from(r in schema, where: r.id == ^row.id),
-            [set: [embedding: vector]],
-            skip_tenant: true
-          )
+    |> Enum.chunk_every(@embed_batch)
+    |> Enum.reduce_while(0, fn chunk, acc ->
+      case Embeddings.embed_many(Enum.map(chunk, to_text)) do
+        {:ok, vectors} ->
+          store_embeddings(schema, chunk, vectors)
+          {:cont, acc + length(chunk)}
 
-          acc + 1
-
-        {:error, _reason} ->
-          acc
+        {:error, reason} ->
+          Logger.warning("EmbedArticlesWorker: batch failed: #{inspect(reason)}")
+          {:halt, {:error, reason}}
       end
     end)
+    |> case do
+      {:error, reason} -> {:error, reason}
+      count -> {:ok, count}
+    end
+  end
+
+  defp store_embeddings(schema, chunk, vectors) do
+    for {row, vector} <- Enum.zip(chunk, vectors) do
+      Repo.update_all(
+        from(r in schema, where: r.id == ^row.id),
+        [set: [embedding: vector]],
+        skip_tenant: true
+      )
+    end
   end
 
   defp text(parts) do

@@ -57,5 +57,18 @@ defmodule Librarian.Embeddings do
 
   def embed(nil), do: {:error, :no_text}
 
+  @doc "Embeds a list of texts in one serving call, so EXLA sees a full batch."
+  def embed_many([]), do: {:ok, []}
+
+  def embed_many(texts) when is_list(texts) do
+    results = Nx.Serving.batched_run(@serving, Enum.map(texts, &truncate/1))
+
+    {:ok, Enum.map(results, fn %{embedding: t} -> t |> Nx.to_flat_list() |> Pgvector.new() end)}
+  rescue
+    e -> {:error, Exception.message(e)}
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
   defp truncate(text), do: String.slice(text, 0, @max_chars)
 end

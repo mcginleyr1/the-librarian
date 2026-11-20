@@ -385,7 +385,23 @@ defmodule Librarian.Vault do
     user_id = Repo.user_id!()
 
     on_conflict =
-      Keyword.get(opts, :on_conflict, {:replace, [:reason, :weight, :origin, :updated_at]})
+      case Keyword.get(opts, :on_conflict, {:replace, [:reason, :weight, :origin, :updated_at]}) do
+        # LLM-extracted edges must never overwrite an edge a human or another
+        # origin authored: only an existing "llm" row is refreshed.
+        :preserve_non_llm ->
+          from e in Edge,
+            where: e.origin == "llm",
+            update: [
+              set: [
+                reason: fragment("EXCLUDED.reason"),
+                weight: fragment("EXCLUDED.weight"),
+                updated_at: fragment("EXCLUDED.updated_at")
+              ]
+            ]
+
+        on_conflict ->
+          on_conflict
+      end
 
     # Endpoints come from clients (canvas docs, link events); only the
     # tenant's own notes may be connected.

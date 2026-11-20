@@ -378,7 +378,7 @@ defmodule Librarian.Reader do
 
     article_ids =
       Repo.all(
-        from a in Article,
+        from a in visible_articles(),
           left_join: rs in subquery(my_read_states()),
           on: rs.article_id == a.id,
           where: a.feed_id == ^feed_id and (is_nil(rs.id) or is_nil(rs.read_at)),

@@ -239,13 +239,32 @@ defmodule Librarian.Discovery do
 
   @doc "Recomputes each subscription's like_rate from interactions on its feed's articles."
   def recompute_like_rates do
-    for sub <- Repo.all(Subscription) do
-      stats = feed_signal_stats(sub.feed_id)
-      total = stats.positive + stats.negative + stats.opens
+    stats = signal_stats_by_user_feed()
 
-      rate = if total > 0, do: (stats.positive - stats.negative) / total, else: nil
+    for sub <- Repo.all(Subscription) do
+      rows = Map.get(stats, {sub.user_id, sub.feed_id}, %{})
+      positive = sum_kinds(rows, Stream.positive_kinds())
+      negative = sum_kinds(rows, Stream.negative_kinds())
+      opens = Map.get(rows, "open", 0)
+      total = positive + negative + opens
+
+      rate = if total > 0, do: (positive - negative) / total, else: nil
       sub |> Ecto.Changeset.change(like_rate: rate) |> Repo.update!()
     end
+  end
+
+  # One grouped read for every subscription instead of a query per subscription.
+  defp signal_stats_by_user_feed do
+    Repo.all(
+      from i in Interaction,
+        join: a in Article,
+        on: a.id == i.article_id,
+        group_by: [i.user_id, a.feed_id, i.kind],
+        select: {i.user_id, a.feed_id, i.kind, count(i.id)}
+    )
+    |> Enum.reduce(%{}, fn {user_id, feed_id, kind, count}, acc ->
+      Map.update(acc, {user_id, feed_id}, %{kind => count}, &Map.put(&1, kind, count))
+    end)
   end
 
   @doc "Deactivates discovered feeds the user has seen enough of but doesn't like."
@@ -259,8 +278,9 @@ defmodule Librarian.Discovery do
             s.origin == "discovered" and s.active == true and
               not is_nil(s.like_rate) and s.like_rate < @prune_threshold and
               fragment(
-                "(SELECT count(*) FROM interactions i JOIN articles a ON a.id = i.article_id WHERE a.feed_id = ? AND i.kind = 'open') >= ?",
+                "(SELECT count(*) FROM interactions i JOIN articles a ON a.id = i.article_id WHERE a.feed_id = ? AND i.user_id = ? AND i.kind = 'open') >= ?",
                 s.feed_id,
+                s.user_id,
                 @prune_min_opens
               )
         ),
@@ -380,25 +400,6 @@ defmodule Librarian.Discovery do
       _ ->
         nil
     end
-  end
-
-  defp feed_signal_stats(feed_id) do
-    rows =
-      Repo.all(
-        from i in Interaction,
-          join: a in Article,
-          on: a.id == i.article_id,
-          where: a.feed_id == ^feed_id,
-          group_by: i.kind,
-          select: {i.kind, count(i.id)}
-      )
-      |> Map.new()
-
-    %{
-      positive: sum_kinds(rows, Stream.positive_kinds()),
-      negative: sum_kinds(rows, Stream.negative_kinds()),
-      opens: Map.get(rows, "open", 0)
-    }
   end
 
   defp sum_kinds(rows, kinds), do: Enum.reduce(kinds, 0, &(&2 + Map.get(rows, &1, 0)))

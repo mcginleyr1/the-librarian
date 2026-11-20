@@ -77,7 +77,7 @@ defmodule Librarian.Workers.ExtractEdgesWorker do
         }
       end)
 
-    {count, _} = Vault.upsert_edges(entries)
+    {count, _} = Vault.upsert_edges(entries, on_conflict: :preserve_non_llm)
     Logger.info("ExtractEdgesWorker: note #{note.id} -> #{count} typed edges")
   end
 
