@@ -24,11 +24,12 @@ defmodule LibrarianWeb.VaultLive do
        tags_input: "",
        note_offset: 0,
        more_notes?: false,
+       listed_note_ids: MapSet.new(),
        related: [],
        annotations: [],
        mentions: [],
        rendered_body: nil,
-       note_changeset: Note.changeset(%Note{}, %{}),
+       form: to_form(Note.changeset(%Note{}, %{})),
        show_notebooks: false,
        draft_body: "",
        editor_tab: :write,
@@ -144,7 +145,7 @@ defmodule LibrarianWeb.VaultLive do
        tags_input: "",
        draft_body: "",
        editor_tab: :write,
-       note_changeset: Note.changeset(%Note{}, %{})
+       form: to_form(Note.changeset(%Note{notebook_id: socket.assigns.selected_notebook_id}, %{}))
      )}
   end
 
@@ -158,12 +159,22 @@ defmodule LibrarianWeb.VaultLive do
        tags_input: tags_str,
        draft_body: note.body || "",
        editor_tab: :write,
-       note_changeset: Note.changeset(note, %{})
+       form: to_form(Note.changeset(note, %{}))
      )}
   end
 
-  def handle_event("editor_change", %{"note" => %{"body" => body}}, socket) do
-    {:noreply, assign(socket, draft_body: body)}
+  def handle_event("editor_change", %{"note" => params} = all, socket) do
+    changeset =
+      (socket.assigns.selected_note || %Note{})
+      |> Note.changeset(params)
+      |> Map.put(:action, :validate)
+
+    {:noreply,
+     assign(socket,
+       form: to_form(changeset),
+       draft_body: params["body"] || socket.assigns.draft_body,
+       tags_input: all["tags_input"] || socket.assigns.tags_input
+     )}
   end
 
   def handle_event("set_editor_tab", %{"tab" => "preview"}, socket) do
@@ -219,10 +230,11 @@ defmodule LibrarianWeb.VaultLive do
          socket
          |> select_note(saved.id)
          |> assign(note_counts: note_counts, notebooks: Vault.list_notebooks())
+         |> update(:listed_note_ids, &MapSet.put(&1, saved.id))
          |> stream_insert(:notes, Vault.get_note!(saved.id), at: 0)}
 
       {:error, changeset} ->
-        {:noreply, assign(socket, note_changeset: changeset)}
+        {:noreply, assign(socket, form: to_form(changeset), tags_input: tags_str)}
     end
   end
 
@@ -234,7 +246,7 @@ defmodule LibrarianWeb.VaultLive do
     {:noreply,
      socket
      |> assign(selected_note: note, note_counts: Vault.count_notes_by_notebook())
-     |> stream_insert(:notes, note)}
+     |> restream_moved(note)}
   end
 
   def handle_event("move_note", params, socket) do
@@ -246,7 +258,7 @@ defmodule LibrarianWeb.VaultLive do
     {:noreply,
      socket
      |> assign(selected_note: note, note_counts: Vault.count_notes_by_notebook())
-     |> stream_insert(:notes, note)}
+     |> restream_moved(note)}
   end
 
   def handle_event("delete_note", _params, socket) do
@@ -304,7 +316,11 @@ defmodule LibrarianWeb.VaultLive do
 
       {:noreply,
        socket
-       |> assign(search_query: q, more_notes?: false)
+       |> assign(
+         search_query: q,
+         more_notes?: false,
+         listed_note_ids: MapSet.new(notes, & &1.id)
+       )
        |> stream(:notes, notes, reset: true)}
     end
   end
@@ -387,10 +403,25 @@ defmodule LibrarianWeb.VaultLive do
     |> push_patch(to: "/vault/note/#{id}")
   end
 
+  defp restream_moved(socket, note) do
+    notebook_id = socket.assigns.selected_notebook_id
+
+    if notebook_id && note.notebook_id != notebook_id do
+      socket
+      |> stream_delete(:notes, note)
+      |> update(:listed_note_ids, &MapSet.delete(&1, note.id))
+    else
+      restream_if_listed(socket, note)
+    end
+  end
+
+  # Streamed items only re-render when re-inserted, and their highlight reads @selected_note.
   defp select_note(socket, id) do
     note = Vault.get_note!(id)
+    previous = socket.assigns.selected_note
 
-    assign(socket,
+    socket
+    |> assign(
       selected_note: note,
       editing: false,
       related: Vault.related_notes(id),
@@ -398,6 +429,16 @@ defmodule LibrarianWeb.VaultLive do
       mentions: Vault.unlinked_mentions(note),
       rendered_body: Vault.render_note_html(note)
     )
+    |> restream_if_listed(previous)
+    |> restream_if_listed(note)
+  end
+
+  # Inserting a note that is not in the list (opened by link, or beyond the
+  # loaded pages) would append it, so only notes already listed are refreshed.
+  defp restream_if_listed(socket, note) do
+    if note && note.id in socket.assigns.listed_note_ids,
+      do: stream_insert(socket, :notes, note),
+      else: socket
   end
 
   @kind_order ~w(extends contradicts example_of references same_topic related)
@@ -433,8 +474,14 @@ defmodule LibrarianWeb.VaultLive do
         offset: offset
       )
 
+    ids = MapSet.new(notes, & &1.id)
+
     socket
-    |> assign(note_offset: offset + length(notes), more_notes?: length(notes) == @page_size)
+    |> assign(
+      note_offset: offset + length(notes),
+      more_notes?: length(notes) == @page_size,
+      listed_note_ids: if(reset, do: ids, else: MapSet.union(socket.assigns.listed_note_ids, ids))
+    )
     |> stream(:notes, notes, reset: reset)
   end
 
