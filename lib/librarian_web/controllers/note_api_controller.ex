@@ -55,11 +55,12 @@ defmodule LibrarianWeb.NoteApiController do
   def file(conn, %{"id" => id}) do
     with {:ok, id} <- parse_id(id),
          %Vault.Note{storage_key: key} when is_binary(key) <- Vault.get_note(id),
-         {:ok, data} <- Librarian.Storage.get(key) do
+         {:ok, file_path} <- Librarian.Storage.file_path(key) do
       conn
       |> put_resp_content_type(MIME.from_path(key), nil)
       |> put_resp_header("content-security-policy", "sandbox")
-      |> send_resp(200, data)
+      |> put_resp_header("x-content-type-options", "nosniff")
+      |> send_file(200, file_path)
     else
       _ -> render_error(conn, {:error, :not_found})
     end

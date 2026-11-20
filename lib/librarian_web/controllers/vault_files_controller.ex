@@ -14,14 +14,14 @@ defmodule LibrarianWeb.VaultFilesController do
     key = Enum.join(key_parts, "/")
 
     with true <- Repo.exists?(from n in Note, where: n.storage_key == ^key),
-         {:ok, data} <- Librarian.Storage.get(key) do
+         {:ok, file_path} <- Librarian.Storage.file_path(key) do
       ext = Path.extname(key)
       content_type = MIME.type(String.trim_leading(ext, "."))
 
       conn
-      |> put_resp_content_type(content_type)
+      |> put_resp_content_type(content_type, nil)
       |> sandbox(ext)
-      |> send_resp(200, data)
+      |> send_file(200, file_path)
     else
       _ -> send_resp(conn, 404, "Not found")
     end

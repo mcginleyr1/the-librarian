@@ -22,6 +22,12 @@ defmodule Librarian.Storage do
 
   def get(key), do: File.read(path(key))
 
+  @doc "The absolute path of a stored file, for `Plug.Conn.send_file/3`. `{:error, :enoent}` if missing."
+  def file_path(key) do
+    full_path = path(key)
+    if File.regular?(full_path), do: {:ok, full_path}, else: {:error, :enoent}
+  end
+
   def delete(key), do: File.rm(path(key))
 
   def exists?(key), do: File.exists?(path(key))

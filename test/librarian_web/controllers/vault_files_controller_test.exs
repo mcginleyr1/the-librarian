@@ -1,8 +1,7 @@
 defmodule LibrarianWeb.VaultFilesControllerTest do
   use LibrarianWeb.ConnCase, async: false
 
-  alias Librarian.{Repo, Storage, Vault}
-  alias Librarian.Accounts.User
+  alias Librarian.{Storage, Vault}
 
   setup :log_in_owner
 
@@ -26,8 +25,7 @@ defmodule LibrarianWeb.VaultFilesControllerTest do
 
     assert conn |> get("/vault/files/clips/42.png") |> response(200)
 
-    other =
-      Repo.insert!(%User{email: "other-#{System.unique_integer([:positive])}@example.com"})
+    other = insert_allowed_user!("other")
 
     other_conn = log_in_user(build_conn(), other)
     assert other_conn |> get("/vault/files/clips/42.png") |> response(404)
@@ -45,7 +43,7 @@ defmodule LibrarianWeb.VaultFilesControllerTest do
     assert csp =~ "sandbox"
 
     pdf = get(conn, "/vault/files/clips/8.pdf")
-    assert response_content_type(pdf, :pdf)
+    assert get_resp_header(pdf, "content-type") == ["application/pdf"]
     refute get_resp_header(pdf, "content-security-policy") |> Enum.join() =~ "sandbox"
   end
 

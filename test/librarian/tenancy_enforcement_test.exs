@@ -44,6 +44,7 @@ defmodule Librarian.TenancyEnforcementTest do
     @raw_sql_allowlist ~w(
       lib/librarian/vault.ex
       lib/librarian/ranking.ex
+      lib/librarian_web/controllers/health_controller.ex
     )
 
     test "no unlisted file issues raw SQL" do

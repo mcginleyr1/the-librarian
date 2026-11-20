@@ -3,10 +3,8 @@ defmodule LibrarianWeb.NoteFileApiTest do
   use LibrarianWeb.ConnCase, async: false
 
   alias Librarian.{Accounts, Repo, Storage, Vault}
-  alias Librarian.Accounts.User
 
-  defp user!,
-    do: Repo.insert!(%User{email: "file-#{System.unique_integer([:positive])}@example.com"})
+  defp user!, do: insert_allowed_user!("file")
 
   setup %{conn: conn} do
     tmp =
@@ -44,6 +42,7 @@ defmodule LibrarianWeb.NoteFileApiTest do
     assert response(conn, 200) == "%PDF-1.4 paper"
     assert get_resp_header(conn, "content-type") == ["application/pdf"]
     assert get_resp_header(conn, "content-security-policy") == ["sandbox"]
+    assert get_resp_header(conn, "x-content-type-options") == ["nosniff"]
   end
 
   test "404s for another user's file, a note without a file and unknown ids", %{conn: conn} do

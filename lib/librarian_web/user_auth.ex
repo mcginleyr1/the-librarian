@@ -32,7 +32,7 @@ defmodule LibrarianWeb.UserAuth do
   def fetch_current_user(conn, _opts) do
     user =
       if user_id = get_session(conn, :user_id) do
-        Accounts.get_user(user_id)
+        user_id |> Accounts.get_user() |> still_allowed()
       end
 
     if user, do: Librarian.Repo.put_user_id(user.id)
@@ -45,7 +45,8 @@ defmodule LibrarianWeb.UserAuth do
   """
   def require_api_token(conn, _opts) do
     with ["Bearer " <> token] <- get_req_header(conn, "authorization"),
-         user when not is_nil(user) <- Accounts.get_user_by_api_token(token) do
+         user when not is_nil(user) <-
+           token |> Accounts.get_user_by_api_token() |> still_allowed() do
       Librarian.Repo.put_user_id(user.id)
       assign(conn, :current_user, user)
     else
@@ -91,7 +92,7 @@ defmodule LibrarianWeb.UserAuth do
   def on_mount(:ensure_authenticated, _params, session, socket) do
     socket =
       Phoenix.Component.assign_new(socket, :current_user, fn ->
-        if user_id = session["user_id"], do: Accounts.get_user(user_id)
+        if user_id = session["user_id"], do: user_id |> Accounts.get_user() |> still_allowed()
       end)
 
     if user = socket.assigns.current_user do
@@ -103,6 +104,11 @@ defmodule LibrarianWeb.UserAuth do
       {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/login")}
     end
   end
+
+  # Removing an email from ALLOWED_EMAILS must end its live sessions and tokens,
+  # not just block the next sign-in.
+  defp still_allowed(%{email: email} = user), do: if(Accounts.allowed_email?(email), do: user)
+  defp still_allowed(nil), do: nil
 
   defp maybe_store_return_to(%{method: "GET"} = conn) do
     put_session(conn, :user_return_to, current_path(conn))

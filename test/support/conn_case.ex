@@ -46,6 +46,29 @@ defmodule LibrarianWeb.ConnCase do
   end
 
   @doc """
+  Inserts a user with a unique email and puts it on the allowlist: sessions and
+  tokens of users who are not allowlisted are rejected on every request.
+  """
+  def insert_allowed_user!(prefix) do
+    email = "#{prefix}-#{System.unique_integer([:positive])}@example.com"
+    update_allowed_emails(&[email | &1])
+    Librarian.Repo.insert!(%Librarian.Accounts.User{email: email})
+  end
+
+  @doc "Takes the user's email off the allowlist."
+  def disallow_user!(user), do: update_allowed_emails(&List.delete(&1, user.email))
+
+  # Locked because async tests share this application env.
+  defp update_allowed_emails(fun) do
+    :global.trans({:allowed_emails, self()}, fn ->
+      :librarian
+      |> Application.fetch_env!(:allowed_emails)
+      |> fun.()
+      |> then(&Application.put_env(:librarian, :allowed_emails, &1))
+    end)
+  end
+
+  @doc """
   Setup helper (`setup :log_in_owner`) that logs in the deployment owner —
   the first user, seeded in test_helper.exs.
   """

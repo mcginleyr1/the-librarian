@@ -131,18 +131,19 @@ spec:
           # 5 minutes before liveness takes over.
           startupProbe:
             httpGet:
-              path: /
+              path: /health
               port: 4000
             periodSeconds: 10
             failureThreshold: 30
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 4000
             periodSeconds: 10
+          # Liveness must not depend on Postgres: a database outage would
+          # otherwise restart the app in a loop.
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: 4000
             periodSeconds: 20
       volumes:
@@ -152,7 +153,8 @@ spec:
         # The root filesystem is read-only; the release writes its runtime
         # sys.config to RELEASE_TMP=/tmp, and uploads/imports stage there.
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 1Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

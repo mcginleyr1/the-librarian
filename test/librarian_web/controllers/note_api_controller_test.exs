@@ -4,11 +4,10 @@ defmodule LibrarianWeb.NoteApiControllerTest do
   import Ecto.Query
 
   alias Librarian.{Accounts, Repo, Vault}
-  alias Librarian.Accounts.User
   alias Librarian.Vault.{Edge, Note}
 
   defp user! do
-    Repo.insert!(%User{email: "api-#{System.unique_integer([:positive])}@example.com"})
+    insert_allowed_user!("api")
   end
 
   # A fresh token user per test: the auth plug switches the tenant to the

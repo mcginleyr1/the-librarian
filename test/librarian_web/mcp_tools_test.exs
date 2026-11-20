@@ -5,14 +5,12 @@ defmodule LibrarianWeb.McpToolsTest do
   import Ecto.Query
 
   alias Librarian.{Accounts, Discovery, Reader, Repo, Vault}
-  alias Librarian.Accounts.User
   alias Librarian.Reader.Article
   alias Librarian.Stream.Interaction
   alias Librarian.Vault.{Edge, Note}
   alias Librarian.Workers.VetCandidateSourceWorker
 
-  defp user!,
-    do: Repo.insert!(%User{email: "mcp-#{System.unique_integer([:positive])}@example.com"})
+  defp user!, do: insert_allowed_user!("mcp")
 
   # A fresh token user per test, whose tenant the test builds its data in.
   setup %{conn: conn} do

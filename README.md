@@ -59,7 +59,14 @@ authenticate with per-user bearer tokens instead — see [API](#api)). Only
 emails on the `ALLOWED_EMAILS` allowlist may sign in, and only when Google
 reports the address as verified. There is no built-in allowlist: with it unset
 nobody can sign in, and production refuses to boot without it. Allowlisted
-users are also admins (the Oban dashboard at `/oban`).
+users are also admins (the Oban dashboard at `/oban`). The allowlist is
+checked on every request, so removing an email ends that user's sessions and
+API token immediately.
+
+`GET /health` (no authentication, exempt from `force_ssl`) returns 200 after a
+`SELECT 1` and 503 if the database is unreachable; the Kubernetes startup and
+readiness probes use it. Liveness is a plain TCP check, so a database outage
+does not restart the app.
 
 Every allowlisted person gets their own vault, feeds and settings; the feed
 catalog itself is shared, so a feed two people follow is fetched once. API

@@ -19,24 +19,37 @@ defmodule Librarian.SafeHTTP do
   @max_body_bytes 10_000_000
   @deadline_ms 60_000
 
-  def get(url, opts \\ []), do: follow(url, opts, @max_redirects)
+  def get(url, opts \\ []) do
+    {deadline_ms, opts} = Keyword.pop(opts, :deadline_ms, @deadline_ms)
+    deadline = System.monotonic_time(:millisecond) + deadline_ms
+    follow(url, opts, deadline, @max_redirects)
+  end
 
-  defp follow(url, opts, redirects_left) do
+  defp follow(url, opts, deadline, redirects_left) do
     with {:ok, uri} <- check_url(url),
-         {:ok, resp} <- request(uri, opts) do
+         {:ok, resp} <- request(uri, opts, deadline) do
       location = Req.Response.get_header(resp, "location")
 
       cond do
-        resp.status not in [301, 302, 303, 307, 308] or location == [] -> {:ok, resp}
-        redirects_left == 0 -> {:error, :too_many_redirects}
-        true -> follow(uri |> URI.merge(hd(location)) |> to_string(), opts, redirects_left - 1)
+        resp.status not in [301, 302, 303, 307, 308] or location == [] ->
+          {:ok, resp}
+
+        redirects_left == 0 ->
+          {:error, :too_many_redirects}
+
+        true ->
+          follow(
+            uri |> URI.merge(hd(location)) |> to_string(),
+            opts,
+            deadline,
+            redirects_left - 1
+          )
       end
     end
   end
 
-  defp request(uri, opts) do
+  defp request(uri, opts, deadline) do
     {max_bytes, opts} = Keyword.pop(opts, :max_body_bytes, @max_body_bytes)
-    deadline = System.monotonic_time(:millisecond) + Keyword.get(opts, :deadline_ms, @deadline_ms)
 
     req_opts =
       [
@@ -47,27 +60,37 @@ defmodule Librarian.SafeHTTP do
         compressed: false,
         raw: true,
         into: fn {:data, data}, {req, resp} ->
-          resp = %{resp | body: resp.body <> data}
+          size = Req.Response.get_private(resp, :safe_http_size, 0) + byte_size(data)
+
+          resp =
+            resp
+            |> Req.Response.put_private(:safe_http_size, size)
+            |> Req.Response.update_private(:safe_http_chunks, [data], &[data | &1])
 
           cond do
-            byte_size(resp.body) > max_bytes -> halt(req, resp, :body_too_large)
+            size > max_bytes -> halt(req, resp, :body_too_large)
             System.monotonic_time(:millisecond) > deadline -> halt(req, resp, :deadline_exceeded)
             true -> {:cont, {req, resp}}
           end
         end
       ]
-      |> Keyword.merge(Keyword.delete(opts, :deadline_ms))
+      |> Keyword.merge(opts)
 
     case Req.get(to_string(uri), req_opts) do
       {:ok, resp} ->
         case Req.Response.get_private(resp, :safe_http_error) do
-          nil -> {:ok, resp}
+          nil -> {:ok, collect_body(resp)}
           reason -> {:error, reason}
         end
 
       error ->
         error
     end
+  end
+
+  defp collect_body(resp) do
+    chunks = Req.Response.get_private(resp, :safe_http_chunks, [])
+    %{resp | body: chunks |> Enum.reverse() |> IO.iodata_to_binary()}
   end
 
   defp halt(req, resp, reason) do

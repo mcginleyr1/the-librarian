@@ -2,17 +2,13 @@ defmodule LibrarianWeb.McpControllerTest do
   use LibrarianWeb.ConnCase, async: true
 
   alias Librarian.{Accounts, Repo}
-  alias Librarian.Accounts.User
 
   @modern "2026-07-28"
   @tool_names ~w(search_notes read_note list_notebooks save_note search_articles read_article
                  recent_reading list_feeds follow_sites)
 
   setup %{conn: conn} do
-    user =
-      Accounts.ensure_api_token!(
-        Repo.insert!(%User{email: "mcp-#{System.unique_integer([:positive])}@example.com"})
-      )
+    user = Accounts.ensure_api_token!(insert_allowed_user!("mcp"))
 
     Repo.put_user_id(user.id)
     %{conn: put_req_header(conn, "authorization", "Bearer #{user.api_token}")}

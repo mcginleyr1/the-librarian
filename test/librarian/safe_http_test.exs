@@ -68,6 +68,36 @@ defmodule Librarian.SafeHTTPTest do
                get(&Plug.Conn.send_resp(&1, 200, String.duplicate("x", 101)), max_body_bytes: 100)
     end
 
+    test "joins chunked bodies into one binary" do
+      assert {:ok, %Req.Response{body: "abcdef"}} =
+               get(fn conn ->
+                 {:ok, conn} = conn |> Plug.Conn.send_chunked(200) |> Plug.Conn.chunk("abc")
+                 {:ok, conn} = Plug.Conn.chunk(conn, "def")
+                 conn
+               end)
+    end
+
+    test "one deadline covers every redirect hop" do
+      hop = :counters.new(1, [])
+
+      slow_hop = fn conn ->
+        :counters.add(hop, 1, 1)
+        Process.sleep(60)
+
+        case :counters.get(hop, 1) do
+          1 ->
+            conn
+            |> Plug.Conn.put_resp_header("location", "http://93.184.215.14/next.xml")
+            |> Plug.Conn.send_resp(302, "moved")
+
+          _ ->
+            Plug.Conn.send_resp(conn, 200, "feed")
+        end
+      end
+
+      assert {:error, :deadline_exceeded} = get(slow_hop, deadline_ms: 100)
+    end
+
     test "refuses a redirect to an internal address" do
       assert {:error, :forbidden_address} =
                get(fn conn ->

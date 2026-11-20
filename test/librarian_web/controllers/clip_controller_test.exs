@@ -2,7 +2,6 @@ defmodule LibrarianWeb.ClipControllerTest do
   use LibrarianWeb.ConnCase, async: false
 
   alias Librarian.{Accounts, Reader, Repo, Storage, Stream, Vault}
-  alias Librarian.Accounts.User
   alias Librarian.Reader.Article
 
   setup %{conn: conn} do
@@ -72,7 +71,7 @@ defmodule LibrarianWeb.ClipControllerTest do
   end
 
   test "another user's notebook is refused", %{conn: conn} do
-    other = Repo.insert!(%User{email: "clip-#{System.unique_integer([:positive])}@example.com"})
+    other = insert_allowed_user!("clip")
     {:ok, notebook} = Repo.with_user(other.id, fn -> Vault.create_notebook(%{name: "theirs"}) end)
 
     assert %{"errors" => %{"notebook_id" => ["does not exist"]}} =

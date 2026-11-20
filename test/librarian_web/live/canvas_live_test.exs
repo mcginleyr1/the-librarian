@@ -262,10 +262,7 @@ defmodule LibrarianWeb.CanvasLiveTest do
     test "another user's page is not found", %{conn: _conn} do
       {:ok, page} = Canvas.create_page(%{title: "Private"})
 
-      other =
-        Librarian.Repo.insert!(%Librarian.Accounts.User{
-          email: "other-#{System.unique_integer([:positive])}@example.com"
-        })
+      other = insert_allowed_user!("other")
 
       assert_raise Ecto.NoResultsError, fn ->
         live(log_in_user(build_conn(), other), "/canvas/#{page.id}")

@@ -28,6 +28,10 @@ defmodule LibrarianWeb.Router do
   end
 
   scope "/", LibrarianWeb do
+    get "/health", HealthController, :show
+  end
+
+  scope "/", LibrarianWeb do
     pipe_through [:browser, :redirect_if_authenticated]
 
     get "/login", PageController, :login
