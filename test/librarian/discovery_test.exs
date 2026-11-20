@@ -2,7 +2,9 @@ defmodule Librarian.DiscoveryTest do
   use Librarian.DataCase, async: true
 
   alias Librarian.{Discovery, Reader, Stream}
+  alias Librarian.Accounts.User
   alias Librarian.Reader.Article
+  alias Librarian.Stream.Interaction
 
   defp article_with_links(html) do
     {:ok, feed} =
@@ -66,6 +68,81 @@ defmodule Librarian.DiscoveryTest do
     article = article_with_links("<p>no links</p>")
     Stream.record_interaction(article.id, :like)
     assert Discovery.prune_sources() == 0
+  end
+
+  describe "prune_sources/0 and recompute_like_rates/0" do
+    setup do
+      {:ok, feed} =
+        Reader.create_feed(%{
+          title: "Discovered",
+          feed_url: "https://disc.example/rss-#{System.unique_integer([:positive])}",
+          origin: "discovered"
+        })
+
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      articles =
+        for i <- 1..8 do
+          %Article{}
+          |> Article.changeset(%{
+            feed_id: feed.id,
+            guid: "d-#{i}",
+            title: "A#{i}",
+            fetched_at: now
+          })
+          |> Repo.insert!()
+        end
+
+      %{feed: feed, articles: articles, now: now}
+    end
+
+    defp interact(user_id, article, kind, now) do
+      Repo.insert!(%Interaction{
+        user_id: user_id,
+        article_id: article.id,
+        kind: kind,
+        occurred_at: now
+      })
+    end
+
+    test "other users' opens don't deactivate this user's subscription", ctx do
+      %{feed: feed, articles: [first, second | _] = articles, now: now} = ctx
+      me = Repo.user_id!()
+
+      other =
+        Repo.insert!(%User{email: "other-#{System.unique_integer([:positive])}@example.com"})
+
+      interact(me, first, "dislike", now)
+      interact(me, second, "open", now)
+      Enum.each(articles, &interact(other.id, &1, "open", now))
+
+      assert Discovery.prune_sources() == 0
+      assert Reader.get_feed!(feed.id).active
+    end
+
+    test "own opens still deactivate a disliked discovered feed", ctx do
+      %{feed: feed, articles: [first | _] = articles, now: now} = ctx
+      me = Repo.user_id!()
+
+      interact(me, first, "dislike", now)
+      Enum.each(articles, &interact(me, &1, "open", now))
+
+      assert Discovery.prune_sources() == 1
+      refute Reader.get_feed!(feed.id).active
+    end
+
+    test "like_rate is per feed from a single grouped pass", ctx do
+      %{feed: feed, articles: [first, second, third | _], now: now} = ctx
+      me = Repo.user_id!()
+
+      interact(me, first, "like", now)
+      interact(me, second, "dislike", now)
+      interact(me, third, "open", now)
+
+      Discovery.recompute_like_rates()
+
+      assert_in_delta Reader.get_feed!(feed.id).like_rate, 0.0, 1.0e-9
+    end
   end
 
   test "register_intent_sources normalizes domains, skips known feeds, tags with the query" do

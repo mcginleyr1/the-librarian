@@ -16,7 +16,10 @@ defmodule Librarian.Workers.FetchFeedWorker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"feed_id" => feed_id}}) do
-    Librarian.Reader.fetch_feed(feed_id)
+    case Librarian.Reader.fetch_feed(feed_id) do
+      {:error, :feed_deleted} -> {:cancel, :feed_deleted}
+      result -> result
+    end
   end
 
   # Backstop for a stalled server so one feed can't hold a :feeds slot.

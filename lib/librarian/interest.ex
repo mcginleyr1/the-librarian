@@ -10,6 +10,7 @@ defmodule Librarian.Interest do
 
   import Ecto.Query
 
+  alias Librarian.Reader
   alias Librarian.Repo
   alias Librarian.Stream
   alias Librarian.Interest.Centroid
@@ -63,22 +64,27 @@ defmodule Librarian.Interest do
 
   def centroids, do: Repo.all(from c in Centroid, order_by: [desc: c.member_count])
 
-  @doc "Topic frequencies across tagged articles, most common first."
+  @doc "Topic frequencies across the user's visible articles, most common first."
   def topic_frequencies do
-    Repo.all(from a in Article, where: a.topics != [], select: a.topics)
-    |> List.flatten()
-    |> Enum.frequencies()
-    |> Enum.sort_by(fn {_topic, n} -> -n end)
+    topics =
+      from a in Reader.visible_articles(),
+        select: %{topic: type(fragment("unnest(?)", a.topics), :string)}
+
+    Repo.all(
+      from t in subquery(topics),
+        group_by: t.topic,
+        order_by: [desc: count(), asc: t.topic],
+        select: {t.topic, count()}
+    )
   end
 
   @doc """
   Regenerates a human-readable interest profile from the learned model, so it
   stays inspectable and hand-editable. Returns markdown.
   """
-  def regenerate_profile_doc do
+  def regenerate_profile_doc(topics \\ topic_frequencies()) do
     summary = Librarian.Stream.signal_summary()
     clusters = centroids()
-    topics = topic_frequencies()
 
     """
     # Learned Interest Profile

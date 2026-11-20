@@ -337,6 +337,47 @@ defmodule Librarian.ReaderTest do
       assert Reader.unread_count(f1.id) == 0
       assert Reader.unread_count(f2.id) == 1
     end
+
+    test "ignores a feed the user is not subscribed to" do
+      other =
+        Repo.insert!(%Librarian.Accounts.User{
+          email: "o-#{System.unique_integer([:positive])}@example.com"
+        })
+
+      {foreign, foreign_article} =
+        Repo.with_user(other.id, fn ->
+          {:ok, feed} = Reader.create_feed(feed_attrs(%{feed_url: "https://theirs.com/feed"}))
+          {:ok, article} = Repo.insert(Article.changeset(%Article{}, article_attrs(feed.id)))
+          {feed, article}
+        end)
+
+      Reader.mark_all_read_for_feed(foreign.id)
+
+      refute Repo.exists?(
+               from rs in Librarian.Reader.ReadState,
+                 where: rs.article_id == ^foreign_article.id
+             )
+    end
+  end
+
+  describe "create_feed/1 against an existing catalog row" do
+    test "a second subscriber reuses the catalog feed" do
+      other =
+        Repo.insert!(%Librarian.Accounts.User{
+          email: "o-#{System.unique_integer([:positive])}@example.com"
+        })
+
+      {:ok, mine} = Reader.create_feed(feed_attrs())
+      {:ok, theirs} = Repo.with_user(other.id, fn -> Reader.create_feed(feed_attrs()) end)
+
+      assert theirs.id == mine.id
+    end
+  end
+
+  describe "fetch_feed/1" do
+    test "reports a deleted feed instead of raising" do
+      assert Reader.fetch_feed(-1) == {:error, :feed_deleted}
+    end
   end
 
   describe "mark_all_read_for_category/1" do

@@ -170,7 +170,16 @@ defmodule Librarian.Reader do
         Repo.insert(changeset)
 
       url ->
-        if feed = Repo.get_by(Feed, feed_url: url), do: {:ok, feed}, else: Repo.insert(changeset)
+        # on_conflict: :nothing, because a unique violation would abort the
+        # caller's transaction; the losing racer reads the winner's row instead.
+        with nil <- Repo.get_by(Feed, feed_url: url),
+             {:ok, %Feed{id: nil}} <-
+               Repo.insert(changeset, on_conflict: :nothing, conflict_target: [:feed_url]) do
+          {:ok, Repo.get_by!(Feed, feed_url: url)}
+        else
+          %Feed{} = feed -> {:ok, feed}
+          other -> other
+        end
     end
   end
 
@@ -586,7 +595,9 @@ defmodule Librarian.Reader do
   end
 
   def fetch_feed(feed_id) do
-    feed = Repo.get!(Feed, feed_id)
-    Librarian.Reader.FeedFetcher.fetch(feed)
+    case Repo.get(Feed, feed_id) do
+      nil -> {:error, :feed_deleted}
+      feed -> Librarian.Reader.FeedFetcher.fetch(feed)
+    end
   end
 end

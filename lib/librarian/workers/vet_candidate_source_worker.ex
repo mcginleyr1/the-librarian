@@ -1,6 +1,6 @@
 defmodule Librarian.Workers.VetCandidateSourceWorker do
   @moduledoc "Vets one candidate source: discover its feed and subscribe if good."
-  use Oban.Worker, queue: :stream, max_attempts: 2
+  use Oban.Worker, queue: :stream, max_attempts: 2, unique: [period: 3600, states: :incomplete]
 
   require Logger
 

@@ -27,16 +27,17 @@ defmodule Librarian.Reader.FeedParser do
   end
 
   defp parse_rss({_tag, _attrs, children}, feed_url) do
-    channel = find_child(children, "channel")
+    channel_children = with {_, _, nodes} <- find_child(children, "channel"), do: nodes
 
-    for {"item", _attrs, children} <- (channel && elem(channel, 2)) || children do
+    # RSS 2.0 nests items in <channel>; RSS 1.0/RDF puts them beside it.
+    for {"item", _attrs, children} <- List.wrap(channel_children) ++ children do
       %{
         guid:
           text(children, "guid") || text(children, "link") || generate_guid(feed_url, children),
         title: text(children, "title"),
         url: text(children, "link"),
         summary: strip_html(text(children, "description")),
-        content: text(children, "content:encoded"),
+        content: text(children, "content:encoded") || text(children, "description"),
         author: text(children, "author") || text(children, "dc:creator"),
         published_at: parse_date(text(children, "pubDate") || text(children, "dc:date"))
       }

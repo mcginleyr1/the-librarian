@@ -6,6 +6,42 @@ defmodule Librarian.Reader.FeedParserTest do
   @rss2 File.read!("test/fixtures/rss2.xml")
   @atom File.read!("test/fixtures/atom.xml")
 
+  describe "parse/2 with RSS 1.0 (RDF)" do
+    test "reads items that sit beside the channel" do
+      rdf = """
+      <?xml version="1.0"?>
+      <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+               xmlns="http://purl.org/rss/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <channel rdf:about="https://example.com/"><title>RDF Feed</title></channel>
+        <item rdf:about="https://example.com/1">
+          <title>RDF One</title>
+          <link>https://example.com/1</link>
+          <dc:date>2026-03-18T10:00:00Z</dc:date>
+        </item>
+      </rdf:RDF>
+      """
+
+      assert {:ok, [%{title: "RDF One", url: "https://example.com/1"}]} =
+               FeedParser.parse(rdf, "https://example.com/rdf")
+    end
+  end
+
+  describe "parse/2 content fallback" do
+    test "uses the raw description as content when content:encoded is absent" do
+      rss = """
+      <rss version="2.0"><channel><title>T</title>
+        <item><title>One</title><link>https://e.com/1</link>
+          <description>&lt;p&gt;Hi &lt;a href="https://e.com"&gt;link&lt;/a&gt;&lt;/p&gt;</description>
+        </item>
+      </channel></rss>
+      """
+
+      assert {:ok, [article]} = FeedParser.parse(rss, "https://e.com/feed")
+      assert article.content == ~s(<p>Hi <a href="https://e.com">link</a></p>)
+      assert article.summary == "Hi link"
+    end
+  end
+
   describe "parse/2 with RSS 2.0" do
     setup do
       {:ok, articles} = FeedParser.parse(@rss2, "https://example.com/feed")

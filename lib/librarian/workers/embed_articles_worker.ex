@@ -2,7 +2,8 @@ defmodule Librarian.Workers.EmbedArticlesWorker do
   @moduledoc """
   Embeds newly arrived articles and notes that don't have an embedding yet,
   so the personalized stream stays current. Runs on a short cron and after
-  feed fetches. No-op (and retries) if the embedding serving isn't running.
+  feed fetches. Retries (and logs) when the embedding serving fails, so rows
+  whose embedding is still nil are picked up again by the next cron run.
   """
   use Oban.Worker, queue: :stream, max_attempts: 3
 

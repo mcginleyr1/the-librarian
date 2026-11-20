@@ -15,14 +15,16 @@ defmodule LibrarianWeb.DashboardLive do
   end
 
   defp assign_data(socket) do
+    topics = Interest.topic_frequencies()
+
     assign(socket,
       summary: Stream.signal_summary(),
       clusters: Interest.centroids(),
-      topics: Enum.take(Interest.topic_frequencies(), 12),
+      topics: Enum.take(topics, 12),
       sources: Discovery.source_counts(),
       candidate_counts: Discovery.candidate_status_counts(),
       candidates: Enum.take(Discovery.list_candidates(), 10),
-      profile_html: MDEx.to_html!(Interest.regenerate_profile_doc())
+      profile_html: MDEx.to_html!(Interest.regenerate_profile_doc(topics))
     )
   end
 end
