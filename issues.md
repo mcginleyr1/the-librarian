@@ -100,7 +100,9 @@ Audit of The Librarian codebase, grouped by category and priority.
 
 - [ ] **`CleanupWorker` is never scheduled in Oban cron** (`config/config.exs:83-92`, `lib/librarian/workers/cleanup_worker.ex`)
   - `CleanupWorker` is implemented and tested but omitted from `Oban.Plugins.Cron`, so stale read articles are never garbage-collected.
-  - **Fix:** Add a daily/weekly entry for `Librarian.Workers.CleanupWorker` to `crontab`.
+  - ~~**Fix:** Add a daily/weekly entry for `Librarian.Workers.CleanupWorker` to `crontab`.~~
+  - **Do not schedule it as it stands** (decided 2026-11-20). The fetcher inserts any feed item whose guid is not in the database, so feeds that still list years of history re-ingest the deleted articles as unread on the next poll. It was scheduled briefly and removed before its first run, which would have deleted 3,327 articles across 76 feeds.
+  - **Real fix:** record the guids of deleted articles and have `FeedFetcher` skip them, then schedule the worker.
 
 - [ ] **Unsupervised `Task.start` in `SettingsLive` can leak `/tmp` files and freeze UI** (`lib/librarian_web/live/settings_live.ex:130-136, 158-162`)
   - If an ENEX import (up to 500 MB) crashes, `File.rm(path)` is never executed and `importing_enex: true` stays stuck forever. Same stuck-spinner issue for `discover_feed`.

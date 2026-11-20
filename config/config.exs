@@ -88,8 +88,13 @@ config :librarian, Oban,
        {"15 */2 * * *", Librarian.Workers.TagArticlesWorker},
        {"30 * * * *", Librarian.Workers.BuildGraphWorker},
        {"45 3 * * *", Librarian.Workers.DiscoverSourcesWorker},
-       {"50 3 * * *", Librarian.Workers.PruneSourcesWorker},
-       {"0 4 * * *", Librarian.Workers.CleanupWorker}
+       {"50 3 * * *", Librarian.Workers.PruneSourcesWorker}
+       # CleanupWorker is deliberately NOT scheduled. It deletes read articles
+       # published over a year ago, but the fetcher inserts any feed item whose
+       # guid is not in the database, so feeds that still list years of history
+       # bring them straight back as unread on the next poll (tried once
+       # already). Schedule it only once deleted guids are recorded somewhere
+       # the fetcher checks, so a deleted article stays deleted.
      ]}
   ],
   queues: [feeds: 5, vault: 2, backup: 1, stream: 3]
