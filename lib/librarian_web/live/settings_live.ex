@@ -6,8 +6,18 @@ defmodule LibrarianWeb.SettingsLive do
   alias Librarian.Workers.{FetchFeedWorker, BackupWorker, BuildGraphWorker}
   alias Librarian.Repo
 
+  @tabs %{
+    "import" => :import,
+    "feeds" => :feeds,
+    "notebooks" => :notebooks,
+    "backup" => :backup,
+    "ai" => :ai
+  }
+
   @impl true
   def mount(_params, _session, socket) do
+    settings = Settings.get_settings()
+
     {:ok,
      socket
      |> assign(
@@ -35,10 +45,10 @@ defmodule LibrarianWeb.SettingsLive do
        duplicate_count: 0,
        editing_notebook_id: nil,
        # Backup tab
-       backup_form: backup_settings_form(),
+       backup_form: backup_settings_form(settings),
        # AI tab
-       ai_key_hint: api_key_hint(Settings.get_settings()),
-       ai_budget_dollars: budget_dollars(Settings.get_settings()),
+       ai_key_hint: api_key_hint(settings),
+       ai_budget_dollars: budget_dollars(settings),
        llm_spend_cents: LLM.month_spend_cents(),
        platform_ai: LLM.platform_key?(),
        platform_ai_budget_cents: LLM.platform_budget_cents(),
@@ -74,9 +84,49 @@ defmodule LibrarianWeb.SettingsLive do
 
   def handle_async(:duplicate_count, {:exit, _reason}, socket), do: {:noreply, socket}
 
+  def handle_async(:discover_feed, {:ok, {:ok, []}}, socket) do
+    {:noreply, assign(socket, discovering: false, discover_error: "No feeds found at that URL")}
+  end
+
+  def handle_async(:discover_feed, {:ok, {:ok, feeds}}, socket) do
+    {:noreply, assign(socket, discovering: false, discovered_feeds: feeds)}
+  end
+
+  def handle_async(:discover_feed, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     assign(socket, discovering: false, discover_error: "Could not reach URL: #{reason}")}
+  end
+
+  def handle_async(:discover_feed, {:exit, _reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(discovering: false)
+     |> put_flash(:error, "Feed discovery failed")}
+  end
+
+  @impl true
+  def handle_info({:enex_done, result}, socket) do
+    {:noreply,
+     assign(socket,
+       importing_enex: false,
+       import_result: {:enex, result},
+       notebooks: Vault.list_notebooks(),
+       note_counts: Vault.count_notes_by_notebook()
+     )}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, :normal}, socket), do: {:noreply, socket}
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(importing_enex: false)
+     |> put_flash(:error, "Evernote import failed")}
+  end
+
   @impl true
   def handle_params(%{"tab" => tab}, _uri, socket) do
-    {:noreply, assign(socket, tab: String.to_existing_atom(tab))}
+    {:noreply, assign(socket, tab: Map.get(@tabs, tab, :import))}
   end
 
   def handle_params(_params, _uri, socket), do: {:noreply, socket}
@@ -124,16 +174,22 @@ defmodule LibrarianWeb.SettingsLive do
 
     lv = self()
 
-    # Task.start spawns a fresh process that does not inherit this LiveView's
-    # tenant; bind_tenant re-establishes the current user so the import lands
-    # in their vault, not the owner's.
-    Task.start(
-      Repo.bind_tenant(fn ->
-        result = Librarian.Release.run_evernote_import(path, notebook)
-        File.rm(path)
-        send(lv, {:enex_done, result})
-      end)
-    )
+    # Not start_async: that links the task to this LiveView, so leaving the
+    # page would kill a long import halfway. The unlinked task does not inherit
+    # this LiveView's tenant; bind_tenant re-establishes the current user so
+    # the import lands in their vault, not the owner's.
+    {:ok, pid} =
+      Task.start(
+        Repo.bind_tenant(fn ->
+          try do
+            send(lv, {:enex_done, Librarian.Release.run_evernote_import(path, notebook)})
+          after
+            File.rm(path)
+          end
+        end)
+      )
+
+    Process.monitor(pid)
 
     {:noreply, assign(socket, importing_enex: true, import_result: nil)}
   end
@@ -156,9 +212,10 @@ defmodule LibrarianWeb.SettingsLive do
   # --- Feed discovery ---
 
   def handle_event("discover_feed", %{"url" => url}, socket) when byte_size(url) > 0 do
-    lv = self()
-    Task.start(fn -> send(lv, {:discovery_result, FeedDiscoverer.discover(url)}) end)
-    {:noreply, assign(socket, discovering: true, discovered_feeds: nil, discover_error: nil)}
+    {:noreply,
+     socket
+     |> start_async(:discover_feed, fn -> FeedDiscoverer.discover(url) end)
+     |> assign(discovering: true, discovered_feeds: nil, discover_error: nil)}
   end
 
   def handle_event("discover_feed", _params, socket) do
@@ -356,11 +413,11 @@ defmodule LibrarianWeb.SettingsLive do
       Map.reject(params, fn {key, value} -> key == "b2_application_key" and value == "" end)
 
     case Settings.save_settings(params) do
-      {:ok, _settings} ->
+      {:ok, settings} ->
         {:noreply,
          socket
          |> put_flash(:info, "Backup settings saved")
-         |> assign(backup_form: backup_settings_form())}
+         |> assign(backup_form: backup_settings_form(settings))}
 
       {:error, changeset} ->
         {:noreply, assign(socket, backup_form: to_form(changeset))}
@@ -368,7 +425,7 @@ defmodule LibrarianWeb.SettingsLive do
   end
 
   def handle_event("run_backup", _params, socket) do
-    %{}
+    %{user_id: Repo.user_id!()}
     |> BackupWorker.new()
     |> Oban.insert()
 
@@ -377,7 +434,7 @@ defmodule LibrarianWeb.SettingsLive do
 
   def handle_event("dedupe_notes", _params, socket) do
     removed = Vault.dedupe_notes()
-    %{} |> BuildGraphWorker.new() |> Oban.insert()
+    %{user_id: Repo.user_id!()} |> BuildGraphWorker.new() |> Oban.insert()
 
     {:noreply,
      socket
@@ -446,45 +503,19 @@ defmodule LibrarianWeb.SettingsLive do
   end
 
   def handle_event("build_graph_now", _params, socket) do
-    %{}
+    %{user_id: Repo.user_id!()}
     |> BuildGraphWorker.new()
     |> Oban.insert()
 
     {:noreply, put_flash(socket, :info, "Graph build queued — running in background")}
   end
 
-  @impl true
-  def handle_info({:discovery_result, {:ok, []}}, socket) do
-    {:noreply, assign(socket, discovering: false, discover_error: "No feeds found at that URL")}
-  end
-
-  def handle_info({:discovery_result, {:ok, feeds}}, socket) do
-    {:noreply, assign(socket, discovering: false, discovered_feeds: feeds)}
-  end
-
-  def handle_info({:discovery_result, {:error, reason}}, socket) do
-    {:noreply,
-     assign(socket, discovering: false, discover_error: "Could not reach URL: #{reason}")}
-  end
-
-  def handle_info({:enex_done, result}, socket) do
-    {:noreply,
-     socket
-     |> assign(
-       importing_enex: false,
-       import_result: {:enex, result},
-       notebooks: Vault.list_notebooks(),
-       note_counts: Vault.count_notes_by_notebook()
-     )}
-  end
-
   defp tab_class(current, tab) do
     if current == tab, do: "tab tab-active", else: "tab"
   end
 
-  defp backup_settings_form do
-    settings = Settings.get_settings() || %Settings{id: 1}
-    settings |> Settings.changeset(%{}) |> to_form()
+  defp backup_settings_form(settings) do
+    (settings || %Settings{id: 1}) |> Settings.changeset(%{}) |> to_form()
   end
 
   defp api_key_hint(%Settings{anthropic_api_key: key}) when is_binary(key) and key != "" do

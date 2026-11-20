@@ -2,12 +2,12 @@
   <div class="max-w-4xl mx-auto px-4 py-8">
     <%!-- Header with back nav --%>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 mb-6">
-      <a href="/reader" class="btn btn-ghost btn-sm gap-1">
+      <.link navigate={~p"/reader"} class="btn btn-ghost btn-sm gap-1">
         <.icon name="hero-arrow-left" class="w-4 h-4" /> Reader
-      </a>
-      <a href="/vault" class="btn btn-ghost btn-sm gap-1">
+      </.link>
+      <.link navigate={~p"/vault"} class="btn btn-ghost btn-sm gap-1">
         <.icon name="hero-archive-box" class="w-4 h-4" /> Vault
-      </a>
+      </.link>
       <h1 class="text-2xl font-bold ml-2">Settings</h1>
       <div class="ml-auto flex items-center gap-2">
         <img
@@ -717,7 +717,7 @@
             Backups run automatically at 2am daily. You can also trigger one now.
           </p>
           <div class="mt-3">
-            <button phx-click="run_backup" class="btn btn-outline gap-2">
+            <button id="run-backup" phx-click="run_backup" class="btn btn-outline gap-2">
               <.icon name="hero-cloud-arrow-up" class="w-4 h-4" /> Back Up Now
             </button>
           </div>
@@ -815,7 +815,7 @@
             You can also kick off a pass now.
           </p>
           <div class="mt-3">
-            <button phx-click="build_graph_now" class="btn btn-outline gap-2">
+            <button id="build-graph-now" phx-click="build_graph_now" class="btn btn-outline gap-2">
               <.icon name="hero-share" class="w-4 h-4" /> Build Graph Now
             </button>
           </div>
