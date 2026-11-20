@@ -1,9 +1,9 @@
 <Layouts.app flash={@flash}>
   <div class="max-w-2xl mx-auto py-10 px-4">
     <div class="flex items-center gap-3 mb-8">
-      <a href="/reader" class="btn btn-ghost btn-sm gap-1">
+      <.link navigate={~p"/reader"} class="btn btn-ghost btn-sm gap-1">
         <.icon name="hero-arrow-left" class="w-4 h-4" /> Back
-      </a>
+      </.link>
       <h1 class="text-2xl font-bold">Search</h1>
     </div>
     <input
@@ -45,7 +45,10 @@
     <div class="space-y-3">
       <a
         :for={result <- @results}
-        href={safe_url(result.url) || if result.type == "note", do: "/vault", else: "/reader"}
+        href={
+          safe_url(result.url) ||
+            if(result.type == "note", do: ~p"/vault/note/#{result.id}", else: ~p"/reader")
+        }
         class="card bg-base-200 card-compact block hover:bg-base-300 transition-colors"
       >
         <div class="card-body">

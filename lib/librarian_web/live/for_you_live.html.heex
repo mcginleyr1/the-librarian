@@ -204,6 +204,10 @@
                 href={safe_url(entry.article.url)}
                 target="_blank"
                 rel="noopener noreferrer"
+                phx-click={
+                  JS.push("open", value: %{id: entry.article.id})
+                  |> JS.add_class("opacity-60", to: "##{dom_id}")
+                }
                 class="press block rounded-lg border border-base-300 overflow-hidden mb-3 hover:border-primary/40 transition-colors"
               >
                 <img

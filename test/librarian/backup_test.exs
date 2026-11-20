@@ -21,8 +21,9 @@ defmodule Librarian.BackupTest do
       assert Backup.slugify(nil) == "untitled"
     end
 
-    test "handles empty string" do
-      assert Backup.slugify("") == ""
+    test "falls back to untitled when nothing slug-safe remains" do
+      assert Backup.slugify("") == "untitled"
+      assert Backup.slugify("日本語") == "untitled"
     end
   end
 
@@ -111,6 +112,18 @@ defmodule Librarian.BackupTest do
       assert result =~ "clip_mode: full_article"
       assert result =~ "created_at: 2026-01-14"
       assert result =~ "Hello world"
+    end
+
+    test "escapes backslashes and newlines in frontmatter values" do
+      note = %Note{
+        id: 4,
+        title: "C:\\temp\nsecond: line",
+        body: "b",
+        inserted_at: ~U[2026-02-01 12:00:00Z],
+        tags: []
+      }
+
+      assert Backup.render_markdown(note, nil) =~ ~S(title: "C:\\temp\nsecond: line")
     end
 
     test "omits nil fields from frontmatter" do

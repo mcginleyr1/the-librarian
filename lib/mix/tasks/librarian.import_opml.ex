@@ -29,6 +29,7 @@ defmodule Mix.Tasks.Librarian.ImportOpml do
             categories =
               feeds
               |> Enum.map(& &1.category)
+              |> Enum.reject(&is_nil/1)
               |> Enum.uniq()
               |> length()
 
@@ -52,14 +53,14 @@ defmodule Mix.Tasks.Librarian.ImportOpml do
 
   defp extract_feeds(outlines) do
     Enum.flat_map(outlines, fn
-      {tag, attrs, children} when tag == "outline" ->
+      {tag, attrs, children} = outline when tag == "outline" ->
         case get_attr(attrs, "xmlUrl") do
           nil ->
             category = get_attr(attrs, "text") || get_attr(attrs, "title") || "Uncategorized"
             extract_feeds_with_category(children, category)
 
           _url ->
-            []
+            extract_feeds_with_category([outline], nil)
         end
 
       _ ->

@@ -1,6 +1,8 @@
 defmodule Librarian.ImportOpmlTest do
   use Librarian.DataCase, async: true
 
+  import ExUnit.CaptureIO
+
   alias Librarian.Reader
   alias Librarian.Reader.Feed
 
@@ -78,6 +80,24 @@ defmodule Librarian.ImportOpmlTest do
       import_feeds(feeds)
 
       assert Repo.aggregate(Feed, :count) == 3
+    end
+  end
+
+  describe "Release.run_opml_import/1" do
+    test "imports feeds that sit directly under body, without a category" do
+      opml = """
+      <opml version="2.0"><body>
+        <outline text="Loose" title="Loose" xmlUrl="https://loose.example/feed.xml" />
+        <outline text="Tech"><outline text="T" xmlUrl="https://tech.example/feed.xml" /></outline>
+      </body></opml>
+      """
+
+      capture_io(fn ->
+        assert %{imported: 2, categories: 1} = Librarian.Release.run_opml_import(opml)
+      end)
+
+      feed = Repo.get_by!(Feed, feed_url: "https://loose.example/feed.xml")
+      assert Reader.get_feed!(feed.id).category == nil
     end
   end
 

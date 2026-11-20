@@ -170,7 +170,9 @@ defmodule Librarian.Release do
         {"body", _attrs, outlines} = body
         feeds = extract_opml_feeds(outlines)
         {imported, skipped} = import_opml_feeds(feeds)
-        categories = feeds |> Enum.map(& &1.category) |> Enum.uniq() |> length()
+
+        categories =
+          feeds |> Enum.map(& &1.category) |> Enum.reject(&is_nil/1) |> Enum.uniq() |> length()
 
         IO.puts(
           "Imported #{imported} feeds across #{categories} categories (#{skipped} skipped as duplicates)"
@@ -247,14 +249,14 @@ defmodule Librarian.Release do
 
   defp extract_opml_feeds(outlines) do
     Enum.flat_map(outlines, fn
-      {"outline", attrs, children} ->
+      {"outline", attrs, children} = outline ->
         case get_opml_attr(attrs, "xmlUrl") do
           nil ->
             category = get_opml_attr(attrs, "text") || "Uncategorized"
             extract_opml_feeds_with_category(children, category)
 
           _ ->
-            []
+            extract_opml_feeds_with_category([outline], nil)
         end
 
       _ ->

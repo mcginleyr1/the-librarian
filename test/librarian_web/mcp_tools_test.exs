@@ -427,6 +427,9 @@ defmodule LibrarianWeb.McpToolsTest do
       assert {:error, "category is required"} =
                call(conn, "follow_sites", %{sites: ["a.example"]})
 
+      assert {:error, "category is required"} =
+               call(conn, "follow_sites", %{sites: ["a.example"], category: "   "})
+
       assert {:error, "sites must be a list of strings"} =
                call(conn, "follow_sites", %{sites: [1], category: "x"})
 

@@ -35,6 +35,13 @@ defmodule LibrarianWeb.ClipControllerTest do
     assert {:ok, "%PDF-1.4"} = Storage.get(key)
   end
 
+  test "a binary clip with invalid base64 is rejected", %{conn: conn} do
+    assert %{"status" => "error", "errors" => %{"body" => _}} =
+             conn
+             |> clip(%{title: "x", clip_mode: "pdf", body: "not base64!!"})
+             |> json_response(422)
+  end
+
   test "malformed notebook ids and tags are rejected, not crashed on", %{conn: conn} do
     assert %{"errors" => %{"notebook_id" => _}} =
              conn |> clip(%{title: "x", notebook_id: "abc"}) |> json_response(422)

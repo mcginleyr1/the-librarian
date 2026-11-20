@@ -8,9 +8,8 @@ defmodule LibrarianWeb.ClipController do
     body_raw = Map.get(params, "body", "")
 
     with {:ok, notebook_id} <- parse_notebook_id(params["notebook_id"]),
-         {:ok, tags} <- parse_tags(Map.get(params, "tags", [])) do
-      {storage_key, body_text} = store_binary(clip_mode, body_raw)
-
+         {:ok, tags} <- parse_tags(Map.get(params, "tags", [])),
+         {:ok, {storage_key, body_text}} <- store_binary(clip_mode, body_raw) do
       attrs = %{
         title: params["title"],
         source_url: params["source_url"],
@@ -45,13 +44,13 @@ defmodule LibrarianWeb.ClipController do
          {:ok, data} <- Base.decode64(body_raw, ignore: :whitespace) do
       key = Librarian.Storage.unique_key("clips", @binary_modes[clip_mode])
       :ok = Librarian.Storage.put(key, data)
-      {key, nil}
+      {:ok, {key, nil}}
     else
-      _ -> {nil, body_raw}
+      _ -> {:error, :body}
     end
   end
 
-  defp store_binary(_clip_mode, body_raw), do: {nil, body_raw}
+  defp store_binary(_clip_mode, body_raw), do: {:ok, {nil, body_raw}}
 
   # Clipping a page you read is the strongest endorsement there is, so it
   # counts as a like on the feed article it came from (and marks it read, as

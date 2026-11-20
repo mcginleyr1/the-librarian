@@ -48,6 +48,25 @@ defmodule LibrarianWeb.ForYouLiveTest do
     refute has_element?(view, "#dismiss-candidate-#{candidate.id}")
   end
 
+  test "saving an article stars it and marks it read", %{conn: conn} do
+    {:ok, feed} = Librarian.Reader.create_feed(%{title: "F", feed_url: "https://f.example/rss"})
+
+    article =
+      Repo.insert!(%Librarian.Reader.Article{
+        feed_id: feed.id,
+        guid: "save-me",
+        title: "Save me",
+        fetched_at: DateTime.utc_now(:second)
+      })
+
+    {:ok, view, _html} = live(conn, "/foryou")
+    render_hook(view, "feedback", %{"id" => to_string(article.id), "kind" => "save"})
+
+    read_state = Librarian.Reader.get_article!(article.id).read_state
+    assert read_state.starred
+    assert read_state.read_at
+  end
+
   test "pause toggle flips the setting", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/foryou")
     view |> element("#discover-open") |> render_click()

@@ -38,6 +38,20 @@ defmodule Librarian.TaggingTest do
     assert tagged.depth_score >= 0.0
   end
 
+  test "keywords match whole words only" do
+    substrings =
+      Tagging.tag_article(
+        article(%{title: "A paragraph about storage, vector maths and trust in prompts"})
+      )
+
+    words = Tagging.tag_article(article(%{title: "Using Ecto with a fine-tune of the LLM"}))
+
+    refute "databases" in substrings.topics
+    refute "systems-programming" in substrings.topics
+    assert "databases" in words.topics
+    assert "ai-ml" in words.topics
+  end
+
   test "tag_untagged only processes untagged rows" do
     article(%{title: "Postgres index internals and the query planner"})
     assert Tagging.tag_untagged() == 1

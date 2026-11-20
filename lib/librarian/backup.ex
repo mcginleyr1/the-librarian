@@ -128,7 +128,7 @@ defmodule Librarian.Backup do
   defp tags_line(tags), do: "tags: [#{Enum.map_join(tags, ", ", &yaml_value(&1.name))}]"
 
   defp yaml_value(nil), do: nil
-  defp yaml_value(str) when is_binary(str), do: ~s("#{String.replace(str, ~s("), ~s(\\"))}")
+  defp yaml_value(str) when is_binary(str), do: Jason.encode!(str)
 
   def slugify(nil), do: "untitled"
 
@@ -138,6 +138,10 @@ defmodule Librarian.Backup do
     |> String.replace(~r/[^a-z0-9\s-]/, "")
     |> String.replace(~r/[\s-]+/, "-")
     |> String.trim("-")
+    |> case do
+      "" -> "untitled"
+      slug -> slug
+    end
   end
 
   defp backup_note(note, settings) do
@@ -199,7 +203,7 @@ defmodule Librarian.Backup do
 
     case ExAws.Auth.headers(:put, url, :s3, config, headers, data) do
       {:ok, signed_headers} ->
-        case Req.put(url, headers: signed_headers, body: data) do
+        case Req.put(url, headers: signed_headers, body: data, redirect: false) do
           {:ok, %{status: status}} when status in 200..299 ->
             :ok
 

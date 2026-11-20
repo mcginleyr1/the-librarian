@@ -53,12 +53,30 @@ defmodule Librarian.Tagging do
   def judge(%Article{}), do: %{score: nil}
 
   defp derive_topics(text) do
-    @topic_keywords
-    |> Enum.map(fn {topic, words} -> {topic, Enum.count(words, &String.contains?(text, &1))} end)
+    topic_patterns()
+    |> Enum.map(fn {topic, patterns} ->
+      {topic, Enum.count(patterns, &Regex.match?(&1, text))}
+    end)
     |> Enum.filter(fn {_topic, hits} -> hits > 0 end)
     |> Enum.sort_by(fn {_topic, hits} -> -hits end)
     |> Enum.take(3)
     |> Enum.map(&elem(&1, 0))
+  end
+
+  defp topic_patterns do
+    case :persistent_term.get({__MODULE__, :topic_patterns}, nil) do
+      nil ->
+        patterns =
+          Map.new(@topic_keywords, fn {topic, words} ->
+            {topic, Enum.map(words, &Regex.compile!("\\b#{Regex.escape(&1)}\\b", "u"))}
+          end)
+
+        :persistent_term.put({__MODULE__, :topic_patterns}, patterns)
+        patterns
+
+      patterns ->
+        patterns
+    end
   end
 
   defp derive_content_type(text) do

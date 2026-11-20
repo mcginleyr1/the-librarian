@@ -39,6 +39,12 @@ defmodule Librarian.LinkPreviewTest do
     assert LinkPreview.for_article(article(%{content: "<div></div>", summary: nil})) == nil
   end
 
+  test "drops images with a non-web scheme" do
+    html = ~s(<img src="javascript:void0"><p>enough text to count here</p>)
+    preview = LinkPreview.for_article(article(%{content: html}))
+    assert preview.image == nil
+  end
+
   test "resolves relative image URLs against the article url" do
     preview =
       LinkPreview.for_article(

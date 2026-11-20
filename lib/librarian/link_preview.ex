@@ -71,6 +71,7 @@ defmodule Librarian.LinkPreview do
   defp resolve(url, base) do
     case URI.parse(url) do
       %URI{scheme: s} when s in ["http", "https", "data"] -> url
+      %URI{scheme: s} when is_binary(s) -> nil
       _ when is_binary(base) -> base |> URI.merge(url) |> to_string()
       _ -> nil
     end

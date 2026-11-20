@@ -350,9 +350,10 @@ defmodule LibrarianWeb.McpTools do
   def call("follow_sites", args) do
     with {:ok, sites} <- fetch(args, "sites", :strings, :required),
          {:ok, category} <- fetch(args, "category", :string, :required),
+         category = String.trim(category),
+         true <- category != "" || {:error, "category is required"},
          true <-
            length(sites) <= @max_follow || {:error, "at most #{@max_follow} sites at a time"} do
-      category = String.trim(category)
       {queued, skipped} = Discovery.follow_sites(sites, category)
       {:ok, %{category: category, queued: Enum.map(queued, & &1.domain), skipped: skipped}}
     end

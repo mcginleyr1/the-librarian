@@ -2,6 +2,9 @@ defmodule LibrarianWeb.SearchLive do
   use LibrarianWeb, :live_view
   alias Librarian.{Reader, Vault}
 
+  @filters %{"all" => :all, "articles" => :articles, "notes" => :notes}
+  @preview_scan_chars 4_000
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok, assign(socket, query: "", results: [], filter: :all)}
@@ -22,9 +25,14 @@ defmodule LibrarianWeb.SearchLive do
   end
 
   def handle_event("set_filter", %{"filter" => f}, socket) do
-    filter = String.to_existing_atom(f)
-    results = do_search(socket.assigns.query, filter)
-    {:noreply, assign(socket, filter: filter, results: results)}
+    case Map.fetch(@filters, f) do
+      {:ok, filter} ->
+        results = do_search(socket.assigns.query, filter)
+        {:noreply, assign(socket, filter: filter, results: results)}
+
+      :error ->
+        {:noreply, socket}
+    end
   end
 
   defp do_search("", _), do: []
@@ -51,6 +59,15 @@ defmodule LibrarianWeb.SearchLive do
     end)
   end
 
+  defp note_preview(nil), do: ""
+
+  defp note_preview(body) do
+    body
+    |> String.slice(0, @preview_scan_chars)
+    |> HtmlSanitizeEx.strip_tags()
+    |> String.slice(0, 200)
+  end
+
   defp search_notes(q) do
     Vault.search(q)
     |> Enum.map(fn n ->
@@ -60,7 +77,7 @@ defmodule LibrarianWeb.SearchLive do
         title: n.title || "(Untitled)",
         subtitle: n.notebook && n.notebook.name,
         url: nil,
-        preview: String.slice(n.body || "", 0, 200),
+        preview: note_preview(n.body),
         date: n.inserted_at
       }
     end)

@@ -31,7 +31,8 @@ defmodule LibrarianWeb.ForYouLive do
   def handle_event("feedback", %{"id" => id, "kind" => kind}, socket) do
     article_id = String.to_integer(id)
     Stream.record_interaction(article_id, kind)
-    if kind in ~w(like dislike done), do: Reader.mark_read(article_id)
+    if kind in ~w(like dislike done save), do: Reader.mark_read(article_id)
+    if kind == "save", do: Reader.mark_starred(article_id, true)
     count = max(socket.assigns.count - 1, 0)
 
     {:noreply,

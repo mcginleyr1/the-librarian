@@ -28,4 +28,22 @@ defmodule LibrarianWeb.SearchLiveTest do
     assert has_element?(view, "a", "Distributed Weekly")
     assert has_element?(view, "a", "Raft notes")
   end
+
+  test "note results link to the note, with tags stripped from the preview", %{conn: conn} do
+    {:ok, note} = Vault.create_note(%{title: "Clipped", body: "<p>zebra <b>stripes</b></p>"}, [])
+
+    {:ok, view, _html} = live(conn, ~p"/search?q=zebra")
+
+    assert has_element?(view, ~s(a[href="/vault/note/#{note.id}"]))
+    assert render(view) =~ "zebra stripes"
+    refute render(view) =~ "&lt;p&gt;"
+  end
+
+  test "unknown filters are ignored", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/search")
+
+    render_hook(view, "set_filter", %{"filter" => "nonexistent_atom_xyz"})
+
+    assert has_element?(view, "button.btn-primary", "All")
+  end
 end
